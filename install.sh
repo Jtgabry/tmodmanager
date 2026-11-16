@@ -30,7 +30,8 @@ if [ -d "$DIR/.git" ]; then
 else
   echo "Scarico tModManager in $DIR…"
   # Repository privato: git chiede le credenziali sul terminale
-  if [ -r /dev/tty ]; then git clone "$REPO" "$DIR" </dev/tty; else git clone "$REPO" "$DIR"; fi
+  # (/dev/tty può esistere senza essere apribile: cron, CI, ssh senza -t)
+  if { : </dev/tty; } 2>/dev/null; then git clone "$REPO" "$DIR" </dev/tty; else git clone "$REPO" "$DIR"; fi
 fi
 
 exec "$DIR/tmm" install "$@"

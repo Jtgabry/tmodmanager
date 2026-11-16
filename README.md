@@ -16,8 +16,17 @@ Laravel non tocca mai processi o file dei server: passa sempre dall'agent (HTTP 
 ## Installazione (Docker)
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Jtgabry/tmodmanager/main/install.sh | bash
+```
+
+oppure, clonando a mano:
+
+```bash
 git clone https://github.com/Jtgabry/tmodmanager.git && cd tmodmanager && ./install.sh
 ```
+
+Con `curl | bash` il progetto viene scaricato in `~/tmodmanager` (`TMM_DIR` per cambiarlo); le opzioni vanno dopo
+`bash -s --`, es. `… | bash -s -- --domain tmm.example.com`.
 
 L'installer controlla la macchina (Linux x86_64), installa Docker se manca (script ufficiale, chiede conferma e
 sudo), chiede dominio, porte dei server di gioco e chiave Steam (facoltativa), genera `.env` con i segreti, avvia i
