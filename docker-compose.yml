@@ -1,0 +1,64 @@
+# tModManager in Docker. Tutti i dati stanno in TMM_DATA_PATH (default ./data); la configurazione
+# è nel file .env accanto a questo (vedi .env.example; l'installer lo crea da solo).
+#
+#   docker compose pull && docker compose up -d     avvio con le immagini già pronte (GitHub)
+#   docker compose up -d --build                    avvio costruendo le immagini qui
+#   docker compose stop              spegnimento: i server salvano il mondo e al riavvio si riaccendono
+#
+name: tmodmanager
+
+x-data-volume: &data-volume "${TMM_DATA_PATH:-./data}:/srv/tmm-data"
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+    # Immagini pubblicate da .github/workflows/images.yml; con --build si costruiscono qui con lo stesso nome
+    image: ${TMM_IMAGE_REGISTRY:-ghcr.io/jtgabry}/tmodmanager-agent:${TMM_IMAGE_TAG:-latest}
+    # steamcmd e il server di tModLoader esistono solo per x86_64
+    platform: linux/amd64
+    restart: unless-stopped
+    # tini come processo 1: inoltra SIGTERM all'agent e raccoglie i processi di screen/.NET terminati
+    init: true
+    # L'agent manda "exit" ai server e aspetta che salvino (fino a AGENT_STOP_TIMEOUT, 180 s)
+    stop_grace_period: 200s
+    environment:
+      TMM_UID: ${TMM_UID:-1000}
+      TMM_GID: ${TMM_GID:-1000}
+      TMM_GAME_PORTS: ${TMM_GAME_PORTS:-7777-7787}
+      AGENT_TOKEN: ${AGENT_TOKEN:?AGENT_TOKEN mancante nel file .env}
+      STEAM_API_KEY: ${STEAM_API_KEY:-}
+      AGENT_STOP_TIMEOUT: ${AGENT_STOP_TIMEOUT:-180}
+      AGENT_TRASH_RETENTION_DAYS: ${AGENT_TRASH_RETENTION_DAYS:-30}
+    volumes:
+      - *data-volume
+    ports:
+      # Porte dei server di gioco (Terraria usa solo TCP)
+      - "${TMM_GAME_PORTS:-7777-7787}:${TMM_GAME_PORTS:-7777-7787}/tcp"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    image: ${TMM_IMAGE_REGISTRY:-ghcr.io/jtgabry}/tmodmanager-web:${TMM_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    user: "${TMM_UID:-1000}:${TMM_GID:-1000}"
+    depends_on:
+      - agent
+    environment:
+      APP_KEY: ${APP_KEY:?APP_KEY mancante nel file .env}
+      APP_URL: ${APP_URL:-http://localhost}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_LOCALE: ${APP_LOCALE:-en}
+      AGENT_TOKEN: ${AGENT_TOKEN:?AGENT_TOKEN mancante nel file .env}
+      TMM_SITE_ADDRESS: ${TMM_SITE_ADDRESS:-:80}
+      # Opzioni globali di Caddy, es. "email admin@example.com" per Let's Encrypt
+      CADDY_GLOBAL_OPTIONS: ${CADDY_GLOBAL_OPTIONS:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-false}
+    volumes:
+      - *data-volume
+    ports:
+      - "${TMM_HTTP_BIND:-80}:80"
+      - "${TMM_HTTPS_BIND:-443}:443"

@@ -1,0 +1,20 @@
+# Solo il codice entra nelle immagini: niente dati, dipendenze già installate o segreti
+.git
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+data
+agent/data
+agent/data.migrated-*
+agent/dist
+frontend/dist
+backend/vendor
+backend/storage/logs/*
+backend/storage/framework/*/*
+backend/storage/app/private/*
+backend/bootstrap/cache/*.php
+backend/database/*.sqlite
+**/.DS_Store
+.idea
+.vscode

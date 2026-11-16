@@ -1,0 +1,15 @@
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Dati (server, mod, tModLoader, database): vedi agent/src/paths.ts
+/data/
+
+# Configurazione di Docker (segreti)
+/.env
+
+# Backup creati da tmm
+/backups/
+# Stato dell installer (es. Docker installato da tmm)
+/.tmm-state

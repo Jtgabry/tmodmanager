@@ -1,0 +1,570 @@
+#!/usr/bin/env bash
+# tmm — installazione e gestione di tModManager (Docker).
+#
+#   ./tmm install [opzioni]   installa o reinstalla (Docker compreso, se manca)
+#   tmm status | start | stop | restart | logs [web|agent]
+#   tmm update                aggiorna codice e immagini (i server si riaccendono da soli)
+#   tmm backup [file]         copia di data/ e della configurazione (.tar.gz)
+#   tmm restore <file>        ripristina un backup (anche su un'altra macchina)
+#   tmm setup-code            codice per creare il primo amministratore
+#   tmm uninstall             rimuove container e immagini (e, se lo chiedi, i dati e Docker)
+#
+# Tutto ciò che tmm crea sta in questa cartella: .env (configurazione), data/ (dati), backups/.
+set -euo pipefail
+
+TMM_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+ENV_FILE="$TMM_DIR/.env"
+STATE_FILE="$TMM_DIR/.tmm-state"
+COMPOSE_FILE="$TMM_DIR/docker-compose.yml"
+ASSUME_YES=0
+
+# --- Output e domande ----------------------------------------------------------------------------
+
+if [ -t 1 ]; then
+  B=$'\e[1m'; DIM=$'\e[2m'; RED=$'\e[31m'; GREEN=$'\e[32m'; YELLOW=$'\e[33m'; R=$'\e[0m'
+else
+  B=''; DIM=''; RED=''; GREEN=''; YELLOW=''; R=''
+fi
+say()  { printf '%s\n' "$*"; }
+step() { printf '\n%s==> %s%s\n' "$B" "$*" "$R"; }
+ok()   { printf '%s✓%s %s\n' "$GREEN" "$R" "$*"; }
+warn() { printf '%s!%s %s\n' "$YELLOW" "$R" "$*" >&2; }
+die()  { printf '%sErrore:%s %s\n' "$RED" "$R" "$*" >&2; exit 1; }
+
+# Le domande leggono dal terminale anche quando lo script arriva da "curl | bash"
+has_tty() { [ -r /dev/tty ] && [ -w /dev/tty ] && { : </dev/tty; } 2>/dev/null; }
+
+# ask "Domanda" "predefinito" → risposta su stdout
+ask() {
+  local prompt="$1" default="${2-}" answer
+  if [ "$ASSUME_YES" = 1 ] || ! has_tty; then printf '%s' "$default"; return; fi
+  if [ -n "$default" ]; then printf '%s %s[%s]%s: ' "$prompt" "$DIM" "$default" "$R" >/dev/tty
+  else printf '%s: ' "$prompt" >/dev/tty; fi
+  IFS= read -r answer </dev/tty || answer=''
+  printf '%s' "${answer:-$default}"
+}
+
+# confirm "Domanda" s|n → 0 se sì
+confirm() {
+  local prompt="$1" default="${2:-s}" answer hint
+  if [ "$ASSUME_YES" = 1 ] || ! has_tty; then [ "$default" = s ]; return; fi
+  [ "$default" = s ] && hint='S/n' || hint='s/N'
+  printf '%s [%s]: ' "$prompt" "$hint" >/dev/tty
+  IFS= read -r answer </dev/tty || answer=''
+  answer="${answer:-$default}"
+  case "$answer" in [sSyY]*) return 0 ;; *) return 1 ;; esac
+}
+
+# --- Configurazione (.env) -----------------------------------------------------------------------
+
+env_get() {
+  [ -f "$ENV_FILE" ] || return 0
+  sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+}
+
+env_set() {
+  local key="$1" value="$2" tmp
+  tmp="$(mktemp "$TMM_DIR/.env.XXXXXX")"
+  if [ -f "$ENV_FILE" ] && grep -q "^$key=" "$ENV_FILE"; then
+    awk -v k="$key" -v v="$value" 'BEGIN { FS = OFS = "=" } $1 == k { print k "=" v; next } { print }' "$ENV_FILE" >"$tmp"
+  else
+    { [ -f "$ENV_FILE" ] && cat "$ENV_FILE"; printf '%s=%s\n' "$key" "$value"; } >"$tmp"
+  fi
+  chmod 600 "$tmp"
+  mv "$tmp" "$ENV_FILE"
+}
+
+data_dir() {
+  local path
+  path="$(env_get TMM_DATA_PATH)"
+  path="${path:-./data}"
+  case "$path" in /*) printf '%s' "$path" ;; *) printf '%s/%s' "$TMM_DIR" "${path#./}" ;; esac
+}
+
+random_hex() { openssl rand -hex "$1" 2>/dev/null || head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+random_b64() { openssl rand -base64 "$1" 2>/dev/null || head -c "$1" /dev/urandom | base64; }
+
+# --- Docker --------------------------------------------------------------------------------------
+
+DOCKER_MODE=''
+detect_docker() {
+  if docker info >/dev/null 2>&1; then DOCKER_MODE=direct
+  elif getent group docker | grep -qw "$(id -un)" && sg docker -c 'docker info' >/dev/null 2>&1; then DOCKER_MODE=sg
+  elif sudo -n docker info >/dev/null 2>&1 || { has_tty && sudo docker info >/dev/null 2>&1; }; then DOCKER_MODE=sudo
+  else return 1
+  fi
+}
+
+dk() {
+  [ -n "$DOCKER_MODE" ] || detect_docker || die "Docker non è disponibile (prova: ./tmm install)"
+  case "$DOCKER_MODE" in
+    direct) docker "$@" ;;
+    sg) sg docker -c "$(printf '%q ' docker "$@")" ;;
+    sudo) sudo docker "$@" ;;
+  esac
+}
+
+compose() {
+  local project
+  project="${TMM_PROJECT:-$(env_get TMM_PROJECT)}"
+  dk compose -p "${project:-tmodmanager}" --project-directory "$TMM_DIR" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
+}
+
+# --- Immagini: scaricate da GHCR o costruite qui --------------------------------------------------
+
+images_mode() { local m; m="$(env_get TMM_IMAGES)"; [ "$m" = build ] && printf build || printf registry; }
+image_ref() {
+  local registry tag
+  registry="$(env_get TMM_IMAGE_REGISTRY)"; tag="$(env_get TMM_IMAGE_TAG)"
+  printf '%s/tmodmanager-*:%s' "${registry:-ghcr.io/jtgabry}" "${tag:-latest}"
+}
+
+# Scarica le immagini; se non si può (non pubblicate, repo privata senza login, niente rete) le costruisce.
+# $1 = "pull-base": in modalità build aggiorna anche le immagini di base (per tmm update)
+get_images() {
+  if [ "$(images_mode)" = registry ]; then
+    local log
+    log="$(mktemp)"
+    if compose pull 2>"$log"; then
+      rm -f "$log"
+      ok "Immagini scaricate ($(image_ref))"
+      return
+    fi
+    warn "Immagini $(image_ref) non scaricabili: le costruisco qui (qualche minuto)."
+    if grep -qiE 'denied|unauthorized|authentication' "$log"; then
+      say "  Accesso negato: le immagini non sono ancora pubblicate, oppure la repository è privata. In quel caso serve"
+      say "  l'accesso a ghcr.io con un token GitHub (permesso read:packages):"
+      say "    docker login ghcr.io -u <utente GitHub>"
+      say "  oppure rendi pubblici i pacchetti su GitHub. Per costruire sempre qui: TMM_IMAGES=build in .env"
+    else
+      sed -n '1,3p' "$log" | sed 's/^/  /' >&2
+    fi
+    rm -f "$log"
+  fi
+  if [ "${1-}" = pull-base ]; then compose build --pull; else compose build; fi
+}
+
+# Avvia (o aggiorna) i container con le immagini già presenti
+start_containers() { compose up -d --no-build --remove-orphans; }
+
+ensure_docker() {
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    detect_docker || die "Docker è installato ma non risponde: sudo systemctl start docker"
+    ok "Docker $(dk version --format '{{.Server.Version}}' 2>/dev/null || echo '?') e Compose disponibili"
+    return
+  fi
+  if command -v docker >/dev/null 2>&1; then
+    warn "Docker è installato ma manca il plugin Compose v2 (il pacchetto docker-compose di Debian è la vecchia v1)."
+  fi
+  step "Installazione di Docker"
+  say "Serve Docker con Compose v2. Verrà installato con lo script ufficiale (https://get.docker.com),"
+  say "che aggiunge il repository di Docker e installa docker-ce e docker-compose-plugin. Serve sudo."
+  confirm "Installo Docker adesso?" s || die "Docker è necessario. Installalo e rilancia ./tmm install"
+  command -v curl >/dev/null 2>&1 || sudo apt-get install -y curl
+  curl -fsSL https://get.docker.com | sudo sh
+  sudo systemctl enable --now docker >/dev/null 2>&1 || true
+  printf 'docker_installed_by_tmm=1\n' >>"$STATE_FILE"
+  if [ "$(id -u)" != 0 ] && ! id -nG | grep -qw docker; then
+    sudo usermod -aG docker "$(id -un)"
+    ok "Utente $(id -un) aggiunto al gruppo docker (vale dal prossimo login; ora si usa sg/sudo)"
+  fi
+  detect_docker || die "Docker installato ma non raggiungibile"
+  ok "Docker installato"
+}
+
+# --- Rete ----------------------------------------------------------------------------------------
+
+port_busy() { ss -Hltn "sport = :$1" 2>/dev/null | grep -q .; }
+
+first_free_port() {
+  local port="$1"
+  while port_busy "$port"; do port=$((port + 1)); done
+  printf '%s' "$port"
+}
+
+host_ip() { hostname -I 2>/dev/null | awk '{print $1}'; }
+
+# "127.0.0.1:8080" o "8080" → indirizzo per curl
+local_url() {
+  local bind
+  bind="$(env_get TMM_HTTP_BIND)"
+  bind="${bind:-80}"
+  case "$bind" in *:*) printf 'http://%s' "$bind" ;; *) printf 'http://127.0.0.1:%s' "$bind" ;; esac
+}
+
+# --- install -------------------------------------------------------------------------------------
+
+check_system() {
+  [ "$(uname -s)" = Linux ] || die "Serve Linux (trovato $(uname -s))"
+  case "$(uname -m)" in
+    x86_64 | amd64) ;;
+    *) die "Serve un processore x86_64: steamcmd e il server di tModLoader non esistono per $(uname -m)" ;;
+  esac
+  command -v ss >/dev/null 2>&1 || die "Manca il comando ss (pacchetto iproute2)"
+  if [ "$(id -u)" = 0 ] && [ -z "${SUDO_USER:-}" ]; then
+    warn "Stai usando root: i file dei dati saranno di root. Meglio un utente normale con sudo."
+  fi
+}
+
+configure() {
+  step "Configurazione"
+  local domain email proxy=0 http_bind https_bind site app_url secure=false trusted='' ports steam
+  local owner_uid owner_gid
+  owner_uid="$(id -u "${SUDO_USER:-$(id -un)}")"
+  owner_gid="$(id -g "${SUDO_USER:-$(id -un)}")"
+
+  domain="${OPT_DOMAIN-}"
+  [ -n "$domain" ] || domain="$(ask "Dominio del pannello (es. tmm.example.com; vuoto = nessun dominio, accesso via IP)" "")"
+  domain="${domain#http://}"; domain="${domain#https://}"; domain="${domain%%/*}"
+
+  if [ -n "$domain" ]; then
+    if [ "${OPT_PROXY-}" = 1 ] || port_busy 80 || port_busy 443; then
+      if [ "${OPT_PROXY-}" != 1 ]; then
+        warn "Le porte 80/443 sono già usate da un altro programma (es. Apache o nginx)."
+        confirm "Uso la modalità proxy (il pannello ascolta su 127.0.0.1 e il server web esistente lo inoltra)?" s ||
+          die "Libera le porte 80 e 443 e rilancia ./tmm install"
+      fi
+      proxy=1
+      http_bind="127.0.0.1:$(first_free_port "${OPT_HTTP_PORT:-8080}")"
+      https_bind="127.0.0.1:$(first_free_port 8443)"
+      site=':80'
+      trusted='127.0.0.1,172.16.0.0/12,192.168.0.0/16,10.0.0.0/8'
+    else
+      http_bind=80
+      https_bind=443
+      site="$domain"
+      email="${OPT_EMAIL-}"
+      [ -n "$email" ] || email="$(ask "Email per i certificati Let's Encrypt (facoltativa)" "")"
+    fi
+    app_url="https://$domain"
+    secure=true
+  else
+    local port
+    port="$(first_free_port "${OPT_HTTP_PORT:-80}")"
+    [ "$port" = 80 ] || warn "La porta 80 è occupata: il pannello userà la $port"
+    http_bind="$port"
+    https_bind="127.0.0.1:$(first_free_port 8443)"
+    site=':80'
+    app_url="http://$(host_ip)$([ "$port" = 80 ] || printf ':%s' "$port")"
+  fi
+
+  ports="${OPT_PORTS-}"
+  [ -n "$ports" ] || ports="$(ask "Porte per i server di gioco (una per server)" "7777-7787")"
+  [[ "$ports" =~ ^[0-9]{4,5}(-[0-9]{4,5})?$ ]] || die "Intervallo di porte non valido: $ports (es. 7777-7787)"
+  local p busy=''
+  for p in $(seq "${ports%-*}" "${ports#*-}"); do port_busy "$p" && busy="$busy $p"; done
+  [ -z "$busy" ] || warn "Porte già in uso:$busy — i server del pannello non potranno usarle finché restano occupate"
+
+  steam="${OPT_STEAM_KEY-}"
+  [ -n "$steam" ] || steam="$(ask "Chiave Steam Web API (facoltativa: versioni delle mod e ricerca nel Workshop)" "")"
+
+  umask 077
+  cat >"$ENV_FILE" <<EOF
+# Creato da tmm il $(date -Iseconds). Vedi .env.example per la descrizione delle voci.
+APP_URL=$app_url
+TMM_SITE_ADDRESS=$site
+TMM_HTTP_BIND=$http_bind
+TMM_HTTPS_BIND=$https_bind
+TRUSTED_PROXIES=$trusted
+SESSION_SECURE_COOKIE=$secure
+CADDY_GLOBAL_OPTIONS=${email:+email $email}
+TMM_GAME_PORTS=$ports
+STEAM_API_KEY=$steam
+TMM_IMAGES=${OPT_IMAGES:-registry}
+TMM_IMAGE_REGISTRY=${TMM_IMAGE_REGISTRY:-ghcr.io/jtgabry}
+TMM_IMAGE_TAG=latest
+TMM_DATA_PATH=./data
+TMM_UID=$owner_uid
+TMM_GID=$owner_gid
+APP_KEY=base64:$(random_b64 32)
+AGENT_TOKEN=$(random_hex 32)
+EOF
+  umask 022
+  ok "Configurazione scritta in .env"
+  [ "$proxy" = 0 ] || printf 'proxy=1\n' >>"$STATE_FILE"
+}
+
+wait_healthy() {
+  local status
+  for _ in $(seq 1 90); do
+    status="$(compose ps web --format '{{.Health}}' 2>/dev/null || true)"
+    [ "$status" = healthy ] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+link_cli() {
+  local bin="$HOME/.local/bin"
+  [ "$(id -u)" = 0 ] && bin=/usr/local/bin
+  mkdir -p "$bin"
+  if [ ! -e "$bin/tmm" ] || [ "$(readlink -f "$bin/tmm")" = "$TMM_DIR/tmm" ]; then
+    ln -sf "$TMM_DIR/tmm" "$bin/tmm"
+    printf 'cli_link=%s\n' "$bin/tmm" >>"$STATE_FILE"
+    case ":$PATH:" in *":$bin:"*) ok "Comando tmm disponibile" ;; *) warn "Comando tmm in $bin (aggiungilo al PATH, o usa $TMM_DIR/tmm)" ;; esac
+  fi
+}
+
+print_proxy_help() {
+  local bind domain
+  bind="$(env_get TMM_HTTP_BIND)"
+  domain="$(env_get APP_URL)"; domain="${domain#https://}"
+  say ""
+  say "${B}Modalità proxy:${R} il pannello ascolta su $bind. Nel server web esistente (HTTPS su $domain):"
+  say ""
+  say "${B}Apache${R} (moduli: proxy proxy_http proxy_wstunnel headers), dentro il VirtualHost *:443:"
+  say "    ProxyPreserveHost On"
+  say "    RequestHeader set X-Forwarded-Proto \"https\""
+  say "    ProxyPass /ws/ ws://$bind/ws/"
+  say "    ProxyPass / http://$bind/"
+  say "    ProxyPassReverse / http://$bind/"
+  say "    ProxyTimeout 3600"
+  say ""
+  say "${B}nginx${R}, dentro il server { listen 443 ssl; … }:"
+  say "    location / {"
+  say "        proxy_pass http://$bind;"
+  say "        proxy_set_header Host \$host;"
+  say "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;"
+  say "        proxy_set_header X-Forwarded-Proto https;"
+  say "        proxy_http_version 1.1;"
+  say "        proxy_set_header Upgrade \$http_upgrade;"
+  say "        proxy_set_header Connection \$http_connection;"
+  say "        proxy_read_timeout 3600; client_max_body_size 0;"
+  say "    }"
+}
+
+cmd_install() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --domain) OPT_DOMAIN="$2"; shift ;;
+      --domain=*) OPT_DOMAIN="${1#*=}" ;;
+      --email) OPT_EMAIL="$2"; shift ;;
+      --email=*) OPT_EMAIL="${1#*=}" ;;
+      --ports) OPT_PORTS="$2"; shift ;;
+      --ports=*) OPT_PORTS="${1#*=}" ;;
+      --http-port) OPT_HTTP_PORT="$2"; shift ;;
+      --http-port=*) OPT_HTTP_PORT="${1#*=}" ;;
+      --proxy) OPT_PROXY=1 ;;
+      --build) OPT_IMAGES=build ;;
+      --steam-key) OPT_STEAM_KEY="$2"; shift ;;
+      --steam-key=*) OPT_STEAM_KEY="${1#*=}" ;;
+      -y | --yes) ASSUME_YES=1 ;;
+      -h | --help) usage_install; return ;;
+      *) die "Opzione sconosciuta: $1 (vedi ./tmm install --help)" ;;
+    esac
+    shift
+  done
+
+  step "Controllo della macchina"
+  check_system
+  ok "Linux $(uname -m)"
+  ensure_docker
+
+  if [ -f "$ENV_FILE" ] && [ -n "$(env_get APP_KEY)" ]; then
+    ok "Configurazione esistente (.env): la uso così com'è"
+  else
+    configure
+  fi
+
+  mkdir -p "$(data_dir)"
+
+  step "Immagini"
+  get_images
+  step "Avvio dei container"
+  start_containers
+  wait_healthy || die "Il sito non risponde. Guarda i log: tmm logs web"
+  ok "tModManager è avviato"
+
+  link_cli
+
+  local url code_url
+  url="$(env_get APP_URL)"
+  code_url="$(compose exec -T web php artisan setup:code --url 2>/dev/null | tr -d '\r' | grep -E '^https?://' || true)"
+  grep -q '^proxy=1' "$STATE_FILE" 2>/dev/null && print_proxy_help
+
+  step "Fatto"
+  if [ -n "$code_url" ]; then
+    say "Apri questo indirizzo per creare l'amministratore (il codice vale una volta sola):"
+    say ""
+    say "    ${B}$code_url${R}"
+  else
+    say "Pannello: ${B}$url${R}"
+  fi
+  say ""
+  say "Poi, da Gestione server: installa tModLoader e crea il primo server."
+  say "Porte dei server di gioco: $(env_get TMM_GAME_PORTS) (TCP) — aprile anche sul router/firewall del provider."
+  say "Gestione: tmm status · tmm logs · tmm update · tmm backup · tmm uninstall"
+}
+
+usage_install() {
+  cat <<'EOF'
+./tmm install [opzioni]
+
+  --domain DOMINIO     dominio del pannello (HTTPS automatico); senza, accesso via IP
+  --email EMAIL        email per Let's Encrypt
+  --proxy              dietro un server web esistente (Apache/nginx): il pannello ascolta su 127.0.0.1
+  --http-port PORTA    porta HTTP (senza dominio) o porta locale in modalità proxy
+  --ports A-B          porte dei server di gioco (default 7777-7787)
+  --steam-key CHIAVE   chiave Steam Web API
+  --build              costruisce le immagini qui invece di scaricarle da GitHub (ghcr.io)
+  -y, --yes            nessuna domanda: valori predefiniti
+
+Se .env esiste già, la configurazione non viene toccata: l'installazione riavvia solo i container.
+EOF
+}
+
+# --- Gestione ------------------------------------------------------------------------------------
+
+require_installed() { [ -f "$ENV_FILE" ] || die "tModManager non è installato qui ($TMM_DIR): ./tmm install"; }
+
+cmd_status() {
+  require_installed
+  compose ps
+  say ""
+  say "Pannello: $(env_get APP_URL)"
+  say "Dati:     $(data_dir) ($(du -sh "$(data_dir)" 2>/dev/null | cut -f1))"
+}
+
+cmd_update() {
+  require_installed
+  if [ -d "$TMM_DIR/.git" ]; then
+    step "Aggiornamento del codice"
+    git -C "$TMM_DIR" pull --ff-only || die "git pull non riuscito (modifiche locali?)"
+  fi
+  step "Immagini"
+  get_images pull-base
+  step "Riavvio dei container cambiati"
+  say "Se cambia l'agent, i server salvano, si spengono e si riaccendono da soli."
+  start_containers
+  wait_healthy && ok "Aggiornato" || warn "Il sito non risponde ancora: tmm logs web"
+  dk image prune -f >/dev/null 2>&1 || true
+}
+
+cmd_backup() {
+  require_installed
+  # $2 = "keep-stopped": a backup finito i container restano fermi (usato da uninstall)
+  local file="${1:-$TMM_DIR/backups/tmodmanager-$(date +%Y%m%d-%H%M%S).tar.gz}" data running
+  [ -n "$file" ] || file="$TMM_DIR/backups/tmodmanager-$(date +%Y%m%d-%H%M%S).tar.gz"
+  data="$(data_dir)"
+  mkdir -p "$(dirname "$file")"
+  running="$(compose ps -q 2>/dev/null || true)"
+  if [ -n "$running" ]; then
+    say "Per una copia coerente i container vengono fermati: i server salvano il mondo e si spengono."
+    [ "${2-}" = keep-stopped ] || { say "A backup finito si riaccendono da soli."; confirm "Procedo?" s || exit 0; }
+    compose stop
+  fi
+  step "Backup in $file"
+  # Cache, temporanei e steamcmd si riscaricano da soli: non servono nel backup
+  tar -czf "$file" -C "$TMM_DIR" .env -C "$data" \
+    --exclude=./cache --exclude=./tmp --exclude=./steamcmd \
+    --transform 's|^\./|data/|' .
+  chmod 600 "$file"
+  [ -z "$running" ] || [ "${2-}" = keep-stopped ] || compose start
+  ok "Backup creato: $file ($(du -h "$file" | cut -f1))"
+  warn "Il backup contiene la configurazione con i segreti (.env): conservalo in un posto sicuro."
+}
+
+cmd_restore() {
+  local file="${1-}" data tmp
+  [ -n "$file" ] && [ -f "$file" ] || die "Uso: tmm restore <file.tar.gz>"
+  file="$(readlink -f "$file")"
+  tar -tzf "$file" | grep -q '^data/servers.json$\|^data/database.sqlite$' || die "$file non sembra un backup di tModManager"
+  check_system
+  ensure_docker
+  data="$(data_dir)"
+  if [ -f "$ENV_FILE" ] && [ -n "$(compose ps -q 2>/dev/null || true)" ]; then compose stop; fi
+
+  if [ -d "$data" ] && [ -n "$(ls -A "$data" 2>/dev/null)" ]; then
+    local old
+    old="$data.before-restore-$(date +%Y%m%d-%H%M%S)"
+    confirm "La cartella dati non è vuota: la sposto in $old e ripristino il backup?" s || exit 1
+    mv "$data" "$old"
+  fi
+  step "Ripristino di $file"
+  tmp="$(mktemp -d "$TMM_DIR/.restore.XXXXXX")"
+  tar -xzf "$file" -C "$tmp"
+  mkdir -p "$(dirname "$data")"
+  mv "$tmp/data" "$data"
+  if [ ! -f "$ENV_FILE" ]; then
+    mv "$tmp/.env" "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+    ok "Configurazione ripristinata dal backup (APP_URL: $(env_get APP_URL)); modificala in .env se la macchina è diversa"
+  else
+    warn "Tengo il .env di questa macchina (quello del backup non viene usato)"
+  fi
+  rm -rf "$tmp"
+  # I file devono appartenere all'utente di questa macchina
+  env_set TMM_UID "$(id -u "${SUDO_USER:-$(id -un)}")"
+  env_set TMM_GID "$(id -g "${SUDO_USER:-$(id -un)}")"
+
+  step "Avvio"
+  get_images
+  start_containers
+  wait_healthy && ok "Ripristinato: $(env_get APP_URL)" || warn "Il sito non risponde ancora: tmm logs web"
+  link_cli
+}
+
+cmd_uninstall() {
+  require_installed
+  local data
+  data="$(data_dir)"
+  say "Vengono rimossi i container e le immagini di tModManager. I server vengono spenti salvando il mondo."
+  [ "$ASSUME_YES" = 1 ] || confirm "Continuo?" n || exit 0
+  if [ -d "$data" ] && confirm "Faccio prima un backup?" s; then cmd_backup "" keep-stopped; fi
+  step "Rimozione dei container"
+  compose down --rmi all --remove-orphans
+
+  if [ -d "$data" ]; then
+    say ""
+    say "Cartella dati: $data ($(du -sh "$data" 2>/dev/null | cut -f1)) — mondi, mod, configurazione dei server, database."
+    local answer
+    answer="$(ask "Per cancellarla DEFINITIVAMENTE scrivi \"elimina\" (invio = la tengo)" "")"
+    if [ "$answer" = elimina ]; then rm -rf "$data"; ok "Dati cancellati"; else ok "Dati tenuti in $data"; fi
+  fi
+
+  local link
+  link="$(sed -n 's/^cli_link=//p' "$STATE_FILE" 2>/dev/null | tail -n 1 || true)"
+  if [ -n "$link" ] && [ "$(readlink -f "$link" 2>/dev/null)" = "$TMM_DIR/tmm" ]; then rm -f "$link"; ok "Comando tmm rimosso"; fi
+
+  if grep -q '^docker_installed_by_tmm=1' "$STATE_FILE" 2>/dev/null &&
+    confirm "Docker era stato installato da tmm: lo rimuovo? (anche eventuali altri container della macchina)" n; then
+    sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras || true
+    sudo rm -f /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.sources /etc/apt/keyrings/docker.asc /etc/apt/keyrings/docker.gpg
+    if confirm "Cancello anche /var/lib/docker (immagini e volumi di TUTTI i container)?" n; then sudo rm -rf /var/lib/docker /var/lib/containerd; fi
+    ok "Docker rimosso"
+  fi
+  rm -f "$ENV_FILE" "$STATE_FILE"
+  say ""
+  say "Rimane solo il codice: per toglierlo  rm -rf $TMM_DIR"
+}
+
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+
+main() {
+  # -y/--yes vale per tutti i comandi: risposte predefinite, nessuna domanda
+  local args=() arg
+  for arg in "$@"; do
+    case "$arg" in -y | --yes) ASSUME_YES=1 ;; *) args+=("$arg") ;; esac
+  done
+  set -- "${args[@]+"${args[@]}"}"
+  local cmd="${1:-help}"
+  [ $# -eq 0 ] || shift
+  case "$cmd" in
+    install) cmd_install "$@" ;;
+    status) cmd_status ;;
+    start) require_installed; start_containers && wait_healthy && ok "Avviato" ;;
+    stop) require_installed; say "I server salvano il mondo e si spengono (fino a 3 minuti)…"; compose stop ;;
+    restart) require_installed; compose restart ;;
+    logs) require_installed; compose logs -f --tail=100 "$@" ;;
+    update) cmd_update ;;
+    backup) cmd_backup "$@" ;;
+    restore) cmd_restore "$@" ;;
+    setup-code) require_installed; compose exec -T web php artisan setup:code ;;
+    uninstall) cmd_uninstall ;;
+    compose) require_installed; compose "$@" ;;
+    help | -h | --help) usage ;;
+    *) die "Comando sconosciuto: $cmd (tmm help)" ;;
+  esac
+}
+
+main "$@"

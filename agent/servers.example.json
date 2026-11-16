@@ -1,0 +1,15 @@
+{
+  "servers": [
+    {
+      "id": "alfa",
+      "name": "Alfa",
+      "installDir": "/srv/tmm-data/tmodloader/tModLoader",
+      "saveDir": "/srv/tmm-data/servers/alfa/save",
+      "configFile": "/srv/tmm-data/servers/alfa/serverconfig.txt",
+      "screenSession": "tml-alfa",
+      "launchArgs": [
+        "-nosteam"
+      ]
+    }
+  ]
+}

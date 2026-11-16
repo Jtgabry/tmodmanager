@@ -1,0 +1,112 @@
+# Test e immagini Docker di tModManager.
+#
+# A ogni push su main (e sui tag v*): test di agent, backend e frontend, poi costruzione delle due
+# immagini e pubblicazione su GitHub Container Registry:
+#   ghcr.io/<proprietario>/tmodmanager-web     ghcr.io/<proprietario>/tmodmanager-agent
+# con i tag  latest (main) · sha-<commit> · <versione> (tag v1.2.3).
+# Sulle pull request solo i test.
+name: Test e immagini
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            agent/package-lock.json
+            frontend/package-lock.json
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_sqlite, intl, zip
+          coverage: none
+
+      - name: Agent
+        working-directory: agent
+        run: |
+          npm ci
+          npx tsc --noEmit -p .
+          npm test
+
+      - name: Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Backend
+        working-directory: backend
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          cp .env.example .env
+          php artisan key:generate
+          vendor/bin/pint --test
+          php artisan test
+
+  images:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        image: [web, agent]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # metadata-action converte il nome in minuscolo (obbligatorio per ghcr.io)
+          images: ghcr.io/${{ github.repository_owner }}/tmodmanager-${{ matrix.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/${{ matrix.image }}.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      # Si tengono solo le ultime versioni: lo spazio dei pacchetti privati su GitHub è limitato
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: tmodmanager-${{ matrix.image }}
+          package-type: container
+          min-versions-to-keep: 3
