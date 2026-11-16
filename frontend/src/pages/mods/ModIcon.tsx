@@ -29,7 +29,8 @@ export default function ModIcon({ serverId, mod, size = 80 }: { serverId: string
       loading="lazy"
       width={size}
       height={size}
-      referrerPolicy="no-referrer"
+      // Senza Referer Sanctum non riconosce la richiesta come del sito (401): no-referrer solo per Steam
+      referrerPolicy={isIcon ? undefined : 'no-referrer'}
       onError={() => setFailed(true)}
     />
   )

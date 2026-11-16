@@ -17,7 +17,7 @@ export default function PackCover({ serverId, packMods, size = 80 }: { serverId:
     return (
       <span className="pack-cover pack-cover-mosaic" style={style} aria-hidden="true">
         {cells.map((c, i) =>
-          c ? <img key={i} src={c.src} alt="" loading="lazy" referrerPolicy="no-referrer" className={c.icon ? 'pixel' : undefined} /> : <span key={i} />,
+          c ? <img key={i} src={c.src} alt="" loading="lazy" referrerPolicy={c.icon ? undefined : 'no-referrer'} className={c.icon ? 'pixel' : undefined} /> : <span key={i} />,
         )}
       </span>
     )
@@ -30,7 +30,7 @@ export default function PackCover({ serverId, packMods, size = 80 }: { serverId:
         src={images[0].src}
         alt=""
         loading="lazy"
-        referrerPolicy="no-referrer"
+        referrerPolicy={images[0].icon ? undefined : 'no-referrer'}
       />
     )
   }

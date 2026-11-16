@@ -5,6 +5,12 @@
 #   ghcr.io/<proprietario>/tmodmanager-web     ghcr.io/<proprietario>/tmodmanager-agent
 # con i tag  latest (main) · sha-<commit> · <versione> (tag v1.2.3).
 # Sulle pull request solo i test.
+#
+# Un'immagine viene ricostruita solo se cambiano i file da cui è fatta: ognuna ha anche il tag
+# src-<hash dei sorgenti>, e se quel tag esiste già i tag nuovi vengono aggiunti alla stessa immagine
+# (stesso digest). Così "tmm update" non ricrea l'agent, e non riavvia i server di gioco, quando cambia
+# solo il sito. Per ricostruire comunque (es. aggiornamenti dell'immagine di base): avvio manuale con
+# "rebuild".
 name: Test e immagini
 
 on:
@@ -13,6 +19,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Ricostruisci le immagini anche se i sorgenti non sono cambiati
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -82,6 +93,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # File che finiscono nell'immagine (vedi i COPY in docker/<immagine>.Dockerfile)
+      - id: src
+        env:
+          IMAGE: ${{ matrix.image }}
+          REBUILD: ${{ inputs.rebuild }}
+        run: |
+          case "$IMAGE" in
+            agent) paths='agent/package.json agent/package-lock.json agent/tsconfig.json agent/src
+                          docker/agent.Dockerfile docker/agent-entrypoint.sh .dockerignore' ;;
+            web)   paths='frontend backend docker/web.Dockerfile docker/php.ini docker/Caddyfile
+                          docker/web-entrypoint.sh .dockerignore' ;;
+          esac
+          hash=$(git ls-files -s -- $paths | sha256sum | cut -c1-16)
+          ref="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tmodmanager-$IMAGE:src-$hash"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          if [ "$REBUILD" != true ] && docker buildx imagetools inspect "$ref" >/dev/null 2>&1; then
+            echo "Sorgenti invariati: riuso $ref"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -93,13 +126,25 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      - uses: docker/build-push-action@v6
+      - if: steps.src.outputs.exists == 'true'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          REF: ${{ steps.src.outputs.ref }}
+        run: |
+          args=()
+          while IFS= read -r t; do [ -n "$t" ] && args+=(-t "$t"); done <<< "$TAGS"
+          docker buildx imagetools create "${args[@]}" "$REF"
+
+      - if: steps.src.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/${{ matrix.image }}.Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ steps.src.outputs.ref }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
