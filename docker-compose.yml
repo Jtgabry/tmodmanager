@@ -51,6 +51,8 @@ services:
       APP_URL: ${APP_URL:-http://localhost}
       APP_DEBUG: ${APP_DEBUG:-false}
       APP_LOCALE: ${APP_LOCALE:-en}
+      # Anche il nome del cookie di sessione (tmodmanager-session) deriva da qui
+      APP_NAME: ${APP_NAME:-tModManager}
       AGENT_TOKEN: ${AGENT_TOKEN:?AGENT_TOKEN mancante nel file .env}
       TMM_SITE_ADDRESS: ${TMM_SITE_ADDRESS:-:80}
       # Opzioni globali di Caddy, es. "email admin@example.com" per Let's Encrypt
