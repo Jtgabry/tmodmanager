@@ -8,7 +8,8 @@ import { paths } from './paths.js'
 import { socketsOnPort } from './procfs.js'
 import { loadServers, type RawServer, ServerDefinition, updateRegistry } from './registry.js'
 import { applyServerConfig, ConfigChanges, readConfigValues, readServerConfig } from './serverConfig.js'
-import { type Installation, listInstallations, serverWorldRelease } from './tml.js'
+import { findInstallation, type Installation, installationId, type Job, listInstallations, listReleases, serverWorldRelease, startJob } from './tml.js'
+import { gameLabel } from './games.js'
 import { moveToTrash } from './trash.js'
 
 /** Creazione, impostazioni e rimozione dei server (solo admin, lato Laravel). */
@@ -61,20 +62,54 @@ export const UpdateServerInput = Settings.partial().extend({
   config: ConfigChanges.optional(),
 })
 
-export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed'>
-
-/** Installazioni utilizzabili da un server (quelle installate): prima Terraria, poi tModLoader. */
-export async function knownInstallations(): Promise<InstallationChoice[]> {
-  return (await listInstallations())
-    .filter((i) => i.installed)
-    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'terraria' ? -1 : 1))
-    .map(({ path, kind, version, gameVersion, worldRelease, managed }) => ({ path, kind, version, gameVersion, worldRelease, managed }))
+export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed' | 'installed'> & {
+  /** Installazione in corso (es. avviata dalla creazione di un server). */
+  installing: boolean
 }
 
-async function findChoice(installDir: string): Promise<InstallationChoice> {
+/**
+ * Installazioni utilizzabili da un server: quelle installate più le due del pannello anche se non ancora
+ * installate (creando un server su una di queste viene installata da sola). Prima Terraria, poi tModLoader.
+ */
+export async function knownInstallations(): Promise<InstallationChoice[]> {
+  return (await listInstallations())
+    .filter((i) => i.installed || i.managed)
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'terraria' ? -1 : 1))
+    .map(({ path, kind, version, gameVersion, worldRelease, managed, installed, job }) => ({
+      path,
+      kind,
+      version,
+      gameVersion,
+      worldRelease,
+      managed,
+      installed,
+      installing: job !== null && job.phase !== 'done' && job.phase !== 'error',
+    }))
+}
+
+/** `allowMissing`: va bene anche un'installazione del pannello non ancora installata (creazione). */
+async function findChoice(installDir: string, allowMissing = false): Promise<InstallationChoice> {
   const found = (await knownInstallations()).find((i) => i.path === installDir)
-  if (!found) throw new ServerAdminError('Installazione sconosciuta o non ancora installata', 422, 'installDir')
+  if (!found || (!found.installed && !(allowMissing && found.managed))) {
+    throw new ServerAdminError('Installazione sconosciuta o non ancora installata', 422, 'installDir')
+  }
   return found
+}
+
+/**
+ * Installa l'ultima versione stabile di un'installazione del pannello che manca. Non fa fallire la
+ * creazione del server: se non riesce si restituisce il motivo (si riprova da Installazioni).
+ */
+async function installLatest(choice: InstallationChoice, manager: ServerManager): Promise<{ job: Job | null; error: string | null }> {
+  if (choice.installing) return { job: null, error: null }
+  try {
+    const release = (await listReleases(choice.kind)).find((r) => !r.prerelease)
+    if (!release) throw new Error(`nessuna versione stabile di ${gameLabel(choice.kind)} trovata`)
+    const job = await startJob(await findInstallation(installationId(choice.path)), { version: release.version }, false, manager)
+    return { job, error: null }
+  } catch (err) {
+    return { job: null, error: (err as Error).message }
+  }
 }
 
 async function assertPortFree(port: number, exceptId: string | null) {
@@ -110,10 +145,15 @@ export async function suggestPort(): Promise<number> {
   return min
 }
 
-export async function createServer(input: CreateServerInput) {
+/**
+ * Crea il server. Se il gioco scelto non è ancora installato (installazione del pannello), dopo la creazione
+ * parte l'installazione dell'ultima versione: il server si può accendere quando è finita.
+ * `manager` serve solo per quell'installazione.
+ */
+export async function createServer(input: CreateServerInput, manager?: ServerManager) {
   const servers = await loadServers()
   if (servers.some((s) => s.id === input.id)) throw new ServerAdminError(`Esiste già un server con id "${input.id}"`, 409, 'id')
-  const installation = await findChoice(input.installDir)
+  const installation = await findChoice(input.installDir, manager !== undefined)
   await assertPortFree(input.port, null)
   const source = input.copyModsFrom ? servers.find((s) => s.id === input.copyModsFrom) : null
   if (input.copyModsFrom && !source) throw new ServerAdminError('Server da cui copiare le mod non trovato', 422, 'copyModsFrom')
@@ -172,7 +212,14 @@ export async function createServer(input: CreateServerInput) {
       if (list.some((s) => s.id === input.id)) throw new ServerAdminError(`Esiste già un server con id "${input.id}"`, 409, 'id')
       return { servers: [...list, raw], result: undefined }
     })
-    return { id: input.id, saveDir: serverDir, configPath }
+    const install = !installation.installed && manager ? await installLatest(installation, manager) : null
+    return {
+      id: input.id,
+      saveDir: serverDir,
+      configPath,
+      /** Installazione partita per questo server (null se il gioco era già installato). */
+      install: install && { game: installation.kind, version: install.job?.toVersion ?? null, error: install.error },
+    }
   } catch (err) {
     // Creazione fallita: niente cartelle a metà
     await rm(serverDir, { recursive: true, force: true })

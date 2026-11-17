@@ -393,7 +393,7 @@ export async function startJob(
   }
   jobs.set(dir, job)
   // Per tutta la durata, niente avvii/spegnimenti dal pannello dei server di questa installazione
-  manager.blockInstall(dir, `Aggiornamento di ${label} in corso: riprova quando è finito`)
+  manager.blockInstall(dir, `${job.kind === 'install' ? 'Installazione' : 'Aggiornamento'} di ${label} in corso: riprova quando è finito`)
   runJob(job, installation.kind, servers, release, backup, restartServers, manager)
     .catch((err: Error) => {
       job.phase = 'error'

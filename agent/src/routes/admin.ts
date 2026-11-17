@@ -47,7 +47,7 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
 
   app.post('/admin/servers', async (req, reply) => {
     const input = CreateServerInput.parse(req.body)
-    return reply.code(201).send({ data: await createServer(input) })
+    return reply.code(201).send({ data: await createServer(input, manager) })
   })
 
   app.get<{ Params: { id: string } }>('/admin/servers/:id', async (req) => ({ data: await serverSettings(req.params.id) }))

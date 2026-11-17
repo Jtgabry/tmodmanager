@@ -14,6 +14,13 @@ export type NewServer = {
   copyModsFrom: string | null
 }
 
+export type CreatedServer = {
+  id: string
+  saveDir: string
+  /** Installazione del gioco avviata con la creazione (null se era già installato). */
+  install: { game: Game; version: string | null; error: string | null } | null
+}
+
 export type ServerSettingsInput = Partial<Pick<ServerSettings, 'name' | 'port' | 'maxPlayers' | 'motd' | 'installDir' | 'launchArgs'>> & {
   password?: string
   /** Chiavi di serverconfig.txt: null la toglie (vale il default di Terraria). */
@@ -64,7 +71,7 @@ export function useAdminServerActions() {
     ])
 
   const create = useMutation({
-    mutationFn: async (input: NewServer) => (await api.post<{ data: { id: string; saveDir: string } }>('/admin/servers', input, { timeout: 0 })).data.data,
+    mutationFn: async (input: NewServer) => (await api.post<{ data: CreatedServer }>('/admin/servers', input, { timeout: 0 })).data.data,
     onSuccess: refresh,
   })
   const update = useMutation({
@@ -122,4 +129,6 @@ export function compareVersions(a: string, b: string): number {
 
 /** "tModLoader 2026.09.3.1 (Terraria 1.4.4.9)", con il percorso se l'installazione non è gestita dal pannello. */
 export const choiceLabel = (c: InstallationChoice) =>
-  `${GAME_LABEL[c.kind]} ${c.version ?? '?'}${c.kind === 'tmodloader' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''}${c.managed ? '' : ` — ${c.path}`}`
+  !c.installed
+    ? `${GAME_LABEL[c.kind]} — ${c.installing ? 'installazione in corso' : 'da installare (ultima versione)'}`
+    : `${GAME_LABEL[c.kind]} ${c.version ?? '?'}${c.kind === 'tmodloader' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''}${c.managed ? '' : ` — ${c.path}`}`

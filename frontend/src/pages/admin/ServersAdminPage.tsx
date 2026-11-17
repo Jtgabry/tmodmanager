@@ -4,6 +4,7 @@ import StateBadge from '../../components/StateBadge'
 import {
   choiceLabel,
   compareVersions,
+  type CreatedServer,
   type NewServer,
   olderThanWorld,
   useAdminServerActions,
@@ -145,7 +146,7 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
   const [installDir, setInstallDir] = useState('')
   const [world, setWorld] = useState<NewServer['world']>({ name: '', size: 2, difficulty: 1, seed: '' })
   const [copyModsFrom, setCopyModsFrom] = useState('')
-  const [created, setCreated] = useState<{ id: string; saveDir: string } | null>(null)
+  const [created, setCreated] = useState<CreatedServer | null>(null)
   const errors = fieldErrors(create.error)
   const conflictField = (create.error as { response?: { data?: { details?: { field?: string } } } } | null)?.response?.data?.details?.field
 
@@ -180,6 +181,18 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
           Server creato in <span className="mono">{created.saveDir}</span>. Al primo avvio il mondo viene generato: può
           richiedere qualche minuto. Ricordati di dare i permessi agli utenti dalla pagina Utenti.
         </div>
+        {created.install && !created.install.error && (
+          <div className="alert alert-info">
+            Installazione di {GAME_LABEL[created.install.game]} {created.install.version ?? ''} in corso: il server si può
+            accendere quando è finita. L'avanzamento è nella sezione <strong>Installazioni</strong> qui sotto.
+          </div>
+        )}
+        {created.install?.error && (
+          <div className="alert alert-warning">
+            {GAME_LABEL[created.install.game]} non è stato installato: {created.install.error}. Installalo dalla sezione{' '}
+            <strong>Installazioni</strong> qui sotto prima di accendere il server.
+          </div>
+        )}
         <div className="btn-row">
           <Link className="btn btn-primary btn-sm" to={`/servers/${created.id}`}>
             Apri il server
@@ -326,11 +339,15 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
           </label>
         )}
       </div>
-      {defaults.data && !effectiveInstall ? (
-        <div className="alert alert-warning">
-          Nessun gioco installato: installa Terraria (o tModLoader) dalla sezione <strong>Installazioni</strong> qui sotto,
-          poi crea il server.
+      {chosen && !chosen.installed && (
+        <div className="alert alert-info">
+          {chosen.installing
+            ? `${GAME_LABEL[chosen.kind]} si sta già installando: il server si potrà accendere quando è finito.`
+            : `${GAME_LABEL[chosen.kind]} non è ancora installato su questa macchina: creando il server viene installata in automatico l'ultima versione (qualche minuto).`}
         </div>
+      )}
+      {defaults.data && !effectiveInstall ? (
+        <div className="alert alert-warning">Nessuna installazione disponibile.</div>
       ) : (
         <p className="muted small">
           {chosen?.kind === 'tmodloader'

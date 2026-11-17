@@ -98,7 +98,8 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
   const [target, setTarget] = useState(data.installDir)
   const [confirmRecreate, setConfirmRecreate] = useState(false)
   const [switched, setSwitched] = useState<InstallationChoice | null>(null)
-  const choices = defaults.data?.installations ?? []
+  // Per cambiare versione serve un'installazione già pronta (si installa da Gestione server → Installazioni)
+  const choices = (defaults.data?.installations ?? []).filter((c) => c.installed)
   const chosen = choices.find((c) => c.path === target)
   const changed = target !== data.installDir
   const tooOld = changed && olderThanWorld(chosen?.worldRelease, data.worldRelease)

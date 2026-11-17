@@ -222,7 +222,10 @@ export type TmlRelease = {
 }
 
 /** Installazione utilizzabile da un server (form di creazione e cambio di versione). */
-export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed'>
+export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed' | 'installed'> & {
+  /** Installazione in corso. */
+  installing: boolean
+}
 
 // --- Steam Workshop ----------------------------------------------------------------------------
 

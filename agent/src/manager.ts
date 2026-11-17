@@ -24,8 +24,8 @@ import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { listSessions, quitSession, type ScreenSession, sendLine, startSession } from './screen.js'
 import { readConfigPassword, readServerConfig } from './serverConfig.js'
-import { type Game, TERRARIA_ASSEMBLY, TERRARIA_BINARY } from './games.js'
-import { installedVersion, recordWorldRelease } from './tml.js'
+import { type Game, gameLabel, TERRARIA_ASSEMBLY, TERRARIA_BINARY } from './games.js'
+import { installedVersion, isInstalled, recordWorldRelease } from './tml.js'
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'stopping'
 type Operation = 'start' | 'stop' | 'restart'
@@ -230,6 +230,9 @@ export class ServerManager {
     if (running) throw new ConflictError(`Operazione "${running}" già in corso`)
     const blocked = this.blockedInstalls.get(server.installDir)
     if (blocked) throw new ConflictError(blocked)
+    if (op === 'start' && !(await isInstalled(server.installDir))) {
+      throw new ConflictError(`${gameLabel(server.game)} non è installato: installalo da Gestione server → Installazioni`)
+    }
 
     const { main, managed } = this.locate(server, await listProcesses(), await listSessions())
     if (op === 'start' && main) throw new ConflictError('Il server è già acceso')

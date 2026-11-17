@@ -185,3 +185,45 @@ test('serverconfig: chiavi avanzate lette, modificate e tolte; chiavi sconosciut
     config.dataDir = previous
   }
 })
+
+test('nuovo server su un gioco non ancora installato: proposto, creato, installazione avviata', async () => {
+  const previous = { dataDir: config.dataDir, terrariaApi: config.terrariaApi }
+  config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-autoinstall-'))
+  // terraria.org non raggiungibile: la creazione riesce comunque e riporta il motivo
+  config.terrariaApi = 'http://127.0.0.1:9'
+  try {
+    const choices = await knownInstallations()
+    assert.deepEqual(
+      choices.map((c) => [c.kind, c.installed, c.installing]),
+      [
+        ['terraria', false, false],
+        ['tmodloader', false, false],
+      ],
+    )
+    const input = {
+      id: 'nuovo',
+      name: 'Nuovo',
+      installDir: paths.terrariaInstall(),
+      port: 47_779,
+      maxPlayers: 8,
+      password: '',
+      motd: '',
+      world: { name: 'Mondo', size: 1 as const, difficulty: 0 as const, seed: '' },
+      copyModsFrom: null,
+      launchArgs: ['-nosteam'],
+    }
+    // Senza manager (nessuna installazione possibile) un gioco mancante non si accetta
+    await assert.rejects(createServer(input), ServerAdminError)
+
+    const created = await createServer(input, managerIn('stopped'))
+    assert.equal(created.install?.game, 'terraria')
+    assert.match(created.install?.error ?? '', /terraria\.org/)
+    const [server] = await loadServers()
+    assert.equal(server.game, 'terraria')
+
+    // Il cambio di versione invece vuole un'installazione già pronta
+    await assert.rejects(updateServer('nuovo', { installDir: paths.tmlInstall() }, managerIn('stopped')), ServerAdminError)
+  } finally {
+    Object.assign(config, previous)
+  }
+})

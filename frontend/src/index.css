@@ -912,6 +912,11 @@ input[type='checkbox'] {
   background: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
+.alert-info {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 .error-text {
   color: var(--danger);
   font-size: 0.85rem;
