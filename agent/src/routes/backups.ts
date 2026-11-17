@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs'
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import { BackupError, backupPath, backupSchedule, createBackup, deleteBackup, listBackups } from '../backups.js'
+import { BackupError, backupPath, backupSchedule, createBackup, deleteBackup, listBackups, restoreBackup } from '../backups.js'
 import { ConflictError, type ServerManager } from '../manager.js'
 import { findServer, type ServerDefinition } from '../registry.js'
 
@@ -42,6 +42,11 @@ export async function backupRoutes(app: FastifyInstance, { manager }: { manager:
       .header('Content-Length', size)
       .header('Content-Disposition', `attachment; filename="${req.params.name}"`)
       .send(createReadStream(path))
+  })
+
+  app.post<Req>('/servers/:id/backups/:name/restore', async (req, reply) => {
+    const s = await server(req.params.id, reply)
+    if (s) return { data: await restoreBackup(s, String(req.params.name), manager) }
   })
 
   app.delete<Req>('/servers/:id/backups/:name', async (req, reply) => {

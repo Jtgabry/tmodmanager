@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Backup dei mondi di un server (permesso "backups"): elenco con l'orario del backup automatico,
- * backup manuale, download dello .zip, eliminazione. I backup stanno nell'agent.
+ * backup manuale, download dello .zip, ripristino, eliminazione. I backup stanno nell'agent.
  */
 class ServerBackupController extends Controller
 {
@@ -44,6 +44,18 @@ class ServerBackupController extends Controller
         Gate::authorize('server', [$server, ServerAbility::Backups]);
 
         return $this->agent->download("/servers/{$server}/backups/{$backup}/download", $backup);
+    }
+
+    /**
+     * Ripristina un backup (server spento): il mondo attuale finisce nel cestino del server.
+     */
+    public function restore(Request $request, string $server, string $backup): JsonResponse
+    {
+        Gate::authorize('server', [$server, ServerAbility::Backups]);
+        $result = $this->agent->json('post', "/servers/{$server}/backups/{$backup}/restore", timeout: 300);
+        Log::info('Backup del mondo ripristinato', ['user' => $request->user()->email, 'server' => $server, 'backup' => $backup]);
+
+        return response()->json(['data' => $result]);
     }
 
     public function destroy(Request $request, string $server, string $backup): Response

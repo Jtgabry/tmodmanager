@@ -19,6 +19,8 @@ export type BackupSchedule = {
   next: string | null
 }
 
+export type RestoreResult = { world: string; restored: string[]; trashed: string[] }
+
 export type BackupResult = { backup: WorldBackup; saved: boolean; running: boolean }
 
 const key = (serverId: string) => ['servers', serverId, 'backups']
@@ -45,5 +47,11 @@ export function useBackupActions(serverId: string) {
     mutationFn: (name: string) => api.delete(`/servers/${serverId}/backups/${name}`),
     onSettled: refresh,
   })
-  return { create, remove }
+  const restore = useMutation({
+    mutationFn: async (name: string) =>
+      (await api.post<{ data: RestoreResult }>(`/servers/${serverId}/backups/${name}/restore`, null, { timeout: 0 })).data.data,
+    // Cambiano anche mondo, cestino e stato del server
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['servers', serverId] }),
+  })
+  return { create, remove, restore }
 }

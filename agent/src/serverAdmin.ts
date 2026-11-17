@@ -315,6 +315,26 @@ const worldFiles = (world: string) => {
   return WORLD_COMPANIONS.flatMap((suffix) => [`${base}.wld${suffix}`, `${base}.twld${suffix}`])
 }
 
+/** Sposta nel cestino del server i file di un mondo (.wld, .twld e backup .bak). Restituisce i nomi spostati. */
+export async function trashWorld(server: ServerDefinition, world: string, reason: 'deleted' | 'replaced' = 'deleted'): Promise<string[]> {
+  const inSave = !relative(server.saveDir, world).startsWith('..')
+  const trashed: string[] = []
+  for (const file of worldFiles(world)) {
+    if (!(await exists(file))) continue
+    await moveToTrash(server, file, {
+      kind: 'file',
+      name: basename(file),
+      root: inSave ? 'save' : 'worlds',
+      path: inSave ? relative(server.saveDir, file) : basename(file),
+      modName: null,
+      modVersion: null,
+      reason,
+    })
+    trashed.push(basename(file))
+  }
+  return trashed
+}
+
 /**
  * Ricrea il mondo da capo: i file del mondo attuale vanno nel cestino (recuperabili), e al prossimo
  * avvio il server ne genera uno nuovo con nome, dimensione, difficoltà e seed del serverconfig.
@@ -327,21 +347,7 @@ export async function recreateWorld(id: string, manager: ServerManager) {
 
   const { world } = await readServerConfig(server.configPath)
   if (!world) throw new ServerAdminError('Nel serverconfig non c\'è nessun mondo (chiave world)', 422)
-  const inSave = !relative(server.saveDir, world).startsWith('..')
-  const trashed: string[] = []
-  for (const file of worldFiles(world)) {
-    if (!(await exists(file))) continue
-    await moveToTrash(server, file, {
-      kind: 'file',
-      name: basename(file),
-      root: inSave ? 'save' : 'worlds',
-      path: inSave ? relative(server.saveDir, file) : basename(file),
-      modName: null,
-      modVersion: null,
-      reason: 'deleted',
-    })
-    trashed.push(basename(file))
-  }
+  const trashed = await trashWorld(server, world)
 
   // Senza autocreate il server non genererebbe il mondo mancante
   const text = await readFile(server.configPath, 'utf8')

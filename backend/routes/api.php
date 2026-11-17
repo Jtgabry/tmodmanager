@@ -118,6 +118,7 @@ Route::prefix('v1')
                 Route::get('/', 'index')->name('index');
                 Route::post('/', 'store')->name('store');
                 Route::get('/{backup}/download', 'download')->name('download');
+                Route::post('/{backup}/restore', 'restore')->name('restore');
                 Route::delete('/{backup}', 'destroy')->name('destroy');
             });
 

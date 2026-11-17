@@ -35,6 +35,7 @@ class ServerBackupTest extends TestCase
         $this->postJson(route('api.v1.servers.backups.store', 'alfa'))->assertForbidden();
         $this->get(route('api.v1.servers.backups.download', ['alfa', self::BACKUP]))->assertForbidden();
         $this->deleteJson(route('api.v1.servers.backups.destroy', ['alfa', self::BACKUP]))->assertForbidden();
+        $this->postJson(route('api.v1.servers.backups.restore', ['alfa', self::BACKUP]))->assertForbidden();
 
         Http::assertNothingSent();
     }
@@ -72,6 +73,28 @@ class ServerBackupTest extends TestCase
 
         $this->deleteJson(route('api.v1.servers.backups.destroy', ['alfa', self::BACKUP]))->assertNoContent();
         Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    }
+
+    public function test_restores_a_backup(): void
+    {
+        $this->actingAsMember([ServerAbility::Backups]);
+        Http::fake([self::AGENT_URL.'/servers/alfa/backups/'.self::BACKUP.'/restore' => Http::response(['data' => ['world' => 'Il_mio_Mondo', 'restored' => ['Il mio Mondo.wld'], 'trashed' => []]])]);
+
+        $this->postJson(route('api.v1.servers.backups.restore', ['alfa', self::BACKUP]))
+            ->assertOk()
+            ->assertJsonPath('data.restored.0', 'Il mio Mondo.wld');
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'POST');
+    }
+
+    public function test_restoring_a_running_server_reports_the_conflict(): void
+    {
+        $this->actingAsMember([ServerAbility::Backups]);
+        Http::fake([self::AGENT_URL.'/servers/alfa/backups/'.self::BACKUP.'/restore' => Http::response(['error' => 'conflict', 'message' => 'Spegni il server prima di ripristinare un backup'], 409)]);
+
+        $this->postJson(route('api.v1.servers.backups.restore', ['alfa', self::BACKUP]))
+            ->assertConflict()
+            ->assertJsonPath('message', 'Spegni il server prima di ripristinare un backup');
     }
 
     public function test_invalid_backup_names_never_reach_the_agent(): void

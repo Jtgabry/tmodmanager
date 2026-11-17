@@ -1,12 +1,15 @@
+import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { promisify } from 'node:util'
 import { config } from './config.js'
 import type { ServerManager } from './manager.js'
 import { paths } from './paths.js'
 import { loadServers, type ServerDefinition } from './registry.js'
-import { readServerConfig } from './serverConfig.js'
+import { applyServerConfig, readServerConfig } from './serverConfig.js'
+import { trashWorld } from './serverAdmin.js'
 import { readZipComment, writeZip } from './zip.js'
 
 /**
@@ -183,6 +186,63 @@ export async function backupPath(server: ServerDefinition, name: string): Promis
 export async function deleteBackup(server: ServerDefinition, name: string) {
   const { path } = await backupPath(server, name)
   await rm(path, { force: true })
+}
+
+const run = promisify(execFile)
+
+export type RestoreResult = { world: string; restored: string[]; trashed: string[] }
+
+/**
+ * Ripristina un backup (server spento): il mondo attuale (.wld, .twld e i loro .bak) va nel cestino del server,
+ * i file del backup prendono il suo posto nella stessa cartella e serverconfig.txt punta al mondo ripristinato.
+ */
+export async function restoreBackup(server: ServerDefinition, name: string, manager: ServerManager): Promise<RestoreResult> {
+  if (running.has(server.id)) throw new BackupError('C\'è già un backup o un ripristino in corso per questo server', 409)
+  running.add(server.id)
+  const work = join(paths.tmp(), `restore-${randomBytes(4).toString('hex')}`)
+  try {
+    const status = await manager.status(server)
+    if (status.state !== 'stopped' || status.operation) throw new BackupError('Spegni il server prima di ripristinare un backup', 409)
+    const { path } = await backupPath(server, name)
+
+    // -j: solo i nomi dei file, niente percorsi (nessun file può finire fuori dalla cartella)
+    await mkdir(work, { recursive: true })
+    await run('unzip', ['-qq', '-j', '-o', path, '-d', work], { maxBuffer: 1024 * 1024 }).catch(() => {
+      throw new BackupError('Il backup è danneggiato: impossibile estrarlo', 422)
+    })
+    const files = (await readdir(work)).filter((f) => /^[^/\\]+\.(wld|twld)$/i.test(f))
+    const worlds = files.filter((f) => /\.wld$/i.test(f))
+    if (worlds.length !== 1) throw new BackupError('Il backup non contiene un mondo (.wld)', 422)
+    const wld = worlds[0]
+    const base = wld.replace(/\.wld$/i, '')
+    // Il .twld va solo con il suo mondo
+    const restored = files.filter((f) => f === wld || f.toLowerCase() === `${base.toLowerCase()}.twld`)
+
+    const { world: current } = await readServerConfig(server.configPath)
+    const dir = current ? dirname(current) : join(server.saveDir, 'Worlds')
+    const target = join(dir, wld)
+    await mkdir(dir, { recursive: true })
+    const trashed = current ? await trashWorld(server, current, 'replaced') : []
+    // Un mondo con lo stesso nome del backup (diverso da quello attuale) non va sovrascritto senza lasciarne copia
+    if (target !== current) trashed.push(...(await trashWorld(server, target, 'replaced')))
+
+    for (const file of restored) {
+      const tmp = join(dir, `.${file}.${randomBytes(4).toString('hex')}.tmp`)
+      await copyFile(join(work, file), tmp)
+      await rename(tmp, join(dir, file))
+    }
+
+    if (target !== current) {
+      const text = await readFile(server.configPath, 'utf8').catch(() => '')
+      const tmp = `${server.configPath}.${randomBytes(4).toString('hex')}.tmp`
+      await writeFile(tmp, applyServerConfig(text, { world: target, worldname: base }))
+      await rename(tmp, server.configPath)
+    }
+    return { world: base, restored, trashed }
+  } finally {
+    running.delete(server.id)
+    await rm(work, { recursive: true, force: true })
+  }
 }
 
 /** Tiene solo gli ultimi config.backupKeep backup automatici. */

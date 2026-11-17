@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import PageActions from '../components/PageActions'
 import { errorMessage } from '../lib/api'
-import { backupDownloadUrl, type BackupResult, useBackupActions, useBackups } from '../lib/backups'
+import { backupDownloadUrl, type BackupResult, type WorldBackup, useBackupActions, useBackups } from '../lib/backups'
 import { useCurrentServer } from '../lib/currentServer'
 import { formatBytes, formatDate } from '../lib/format'
 
@@ -19,14 +19,26 @@ function ago(iso: string): string {
 export default function BackupsTab() {
   const server = useCurrentServer()
   const backups = useBackups(server.id)
-  const { create, remove } = useBackupActions(server.id)
+  const { create, remove, restore } = useBackupActions(server.id)
   const [confirm, setConfirm] = useState<string | null>(null)
+  const [confirmRestore, setConfirmRestore] = useState<WorldBackup | null>(null)
   const [done, setDone] = useState<BackupResult | null>(null)
+  const [restored, setRestored] = useState<{ backup: WorldBackup; trashed: string[] } | null>(null)
   const on = server.state !== 'stopped'
 
   const start = () => {
     setDone(null)
+    setRestored(null)
     create.mutate(undefined, { onSuccess: setDone })
+  }
+
+  const doRestore = (backup: WorldBackup) => {
+    setDone(null)
+    setRestored(null)
+    restore.mutate(backup.name, {
+      onSuccess: (r) => setRestored({ backup, trashed: r.trashed }),
+      onSettled: () => setConfirmRestore(null),
+    })
   }
 
   if (backups.isLoading) return <div className="spinner" />
@@ -60,7 +72,8 @@ export default function BackupsTab() {
         <p className="muted small">
           Ogni backup è uno .zip con il mondo{server.game === 'tmodloader' ? ' (.wld) e i dati delle mod (.twld)' : ' (.wld)'}.
           {on && ' Con il server acceso, prima del backup il mondo viene salvato.'} Dei backup automatici si tengono gli
-          ultimi {schedule.keep}; quelli fatti a mano restano finché non li elimini.
+          ultimi {schedule.keep}; quelli fatti a mano restano finché non li elimini. Per ripristinare un backup il server
+          dev'essere spento.
           {schedule.time && ` Orario del server: ${schedule.timeZone}.`}
         </p>
       </div>
@@ -73,6 +86,32 @@ export default function BackupsTab() {
         </div>
       )}
       {remove.isError && <div className="alert alert-error">{errorMessage(remove.error)}</div>}
+      {restore.isError && <div className="alert alert-error">{errorMessage(restore.error)}</div>}
+      {restored && (
+        <div className="alert alert-success">
+          Ripristinato il backup del {formatDate(restored.backup.createdAt)}.
+          {restored.trashed.length > 0 && ` Il mondo che c'era (${restored.trashed.join(', ')}) è nel cestino del server.`} Al
+          prossimo avvio il server apre il mondo ripristinato.
+        </div>
+      )}
+      {confirmRestore && (
+        <div className="alert alert-warning">
+          <p>
+            Ripristinare il backup del <strong>{formatDate(confirmRestore.createdAt)}</strong>? Il mondo attuale viene
+            sostituito: finisce nel cestino del server, da cui si può recuperare per 30 giorni.
+            {confirmRestore.files.length > 0 && ` Il backup contiene ${confirmRestore.files.join(', ')}.`}
+          </p>
+          {on && <p className="small"><strong>Spegni il server per ripristinare il backup.</strong></p>}
+          <div className="btn-row">
+            <button type="button" className="btn btn-warning btn-sm" disabled={on || restore.isPending} onClick={() => doRestore(confirmRestore)}>
+              {restore.isPending ? 'Ripristino…' : 'Conferma il ripristino'}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmRestore(null)}>
+              Annulla
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h2>Backup</h2>
@@ -106,6 +145,18 @@ export default function BackupsTab() {
                         <a className="btn btn-sm" href={backupDownloadUrl(server.id, b.name)} download>
                           Scarica
                         </a>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={on || restore.isPending}
+                          title={on ? 'Spegni il server per ripristinare un backup' : 'Rimette questo mondo al posto di quello attuale'}
+                          onClick={() => {
+                            setRestored(null)
+                            setConfirmRestore(b)
+                          }}
+                        >
+                          Ripristina
+                        </button>
                         {confirm === b.name ? (
                           <>
                             <button
