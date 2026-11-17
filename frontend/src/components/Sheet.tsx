@@ -12,10 +12,29 @@ const CLOSE_VELOCITY = 0.6
  * Finestra che su schermi stretti è una bottom sheet (sale dal basso, si chiude trascinandola giù
  * dalla maniglia o dal titolo) e su schermi larghi una modale centrata.
  *
- * Usa l'elemento <dialog> nativo: focus, Esc e sfondo li gestisce il browser. Il contenuto è montato
- * solo mentre è aperta, quindi a ogni apertura riparte da zero (form compresi).
+ * Usa l'elemento <dialog> nativo: focus, Esc e sfondo li gestisce il browser.
+ *
+ * Il contenuto è montato solo mentre è aperta, quindi a ogni apertura riparte da zero (form compresi);
+ * con `keepMounted` resta montato anche da chiusa, così un caricamento in corso non si interrompe.
+ * Durante l'animazione di chiusura titolo e contenuto restano quelli di quando era aperta, anche se
+ * il genitore li ha già tolti (es. `open={item !== null}` e contenuto `{item && …}`).
  */
-export default function Sheet({ open, title, onClose, children }: { open: boolean; title: ReactNode; onClose: () => void; children: ReactNode }) {
+export default function Sheet({
+  open,
+  title,
+  onClose,
+  wide = false,
+  keepMounted = false,
+  children,
+}: {
+  open: boolean
+  title: ReactNode
+  onClose: () => void
+  /** Modale più larga su desktop (su mobile la sheet occupa comunque tutta la larghezza). */
+  wide?: boolean
+  keepMounted?: boolean
+  children: ReactNode
+}) {
   const ref = useRef<HTMLDialogElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const drag = useRef<{ startY: number; y: number; t: number; velocity: number } | null>(null)
@@ -26,6 +45,12 @@ export default function Sheet({ open, title, onClose, children }: { open: boolea
     setWasOpen(open)
     setClosing(!open)
   }
+
+  // Ultimo titolo e contenuto mostrati da aperta, per l'animazione di chiusura
+  // (aggiornarli durante il render costa un render in più di Sheet, non del contenuto: gli elementi sono gli stessi)
+  const [last, setLast] = useState<{ title: ReactNode; children: ReactNode }>({ title, children })
+  if (open && (last.title !== title || last.children !== children)) setLast({ title, children })
+  const shown = open || !closing ? { title, children } : last
 
   useEffect(() => {
     const dialog = ref.current
@@ -72,7 +97,7 @@ export default function Sheet({ open, title, onClose, children }: { open: boolea
   return (
     <dialog
       ref={ref}
-      className={closing ? 'dialog sheet sheet-closing' : 'dialog sheet'}
+      className={['dialog', 'sheet', wide && 'dialog-wide', closing && 'sheet-closing'].filter(Boolean).join(' ')}
       // Esc: si chiude passando dal genitore, così parte l'animazione
       onCancel={(e) => {
         e.preventDefault()
@@ -84,14 +109,14 @@ export default function Sheet({ open, title, onClose, children }: { open: boolea
       <div className="dialog-panel sheet-panel" ref={panelRef}>
         <header className="dialog-header sheet-header" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
           <span className="sheet-handle" aria-hidden="true" />
-          <h2>{title}</h2>
+          <h2>{shown.title}</h2>
           <button type="button" className="icon-btn" aria-label="Chiudi" onClick={onClose}>
             <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
           </button>
         </header>
-        <div className="dialog-body sheet-body">{(open || closing) && children}</div>
+        <div className="dialog-body sheet-body">{keepMounted ? children : (open || closing) && shown.children}</div>
       </div>
     </dialog>
   )

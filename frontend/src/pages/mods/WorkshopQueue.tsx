@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../../auth/AuthContext'
-import Dialog from '../../components/Dialog'
+import Sheet from '../../components/Sheet'
 import { errorMessage } from '../../lib/api'
 import { usePowerAction } from '../../lib/servers'
 import type { ApplyPendingResult, Server, UpdateJob } from '../../lib/types'
@@ -132,9 +132,9 @@ export default function WorkshopQueue({ server }: { server: Server }) {
       {dismiss.error ? <div className="alert alert-error">{errorMessage(dismiss.error)}</div> : null}
       {power.error ? <div className="alert alert-error">{errorMessage(power.error)}</div> : null}
 
-      <Dialog open={showJob} title="Download dal Workshop" wide onClose={() => setShowJob(false)}>
+      <Sheet open={showJob} title="Download dal Workshop" wide onClose={() => setShowJob(false)}>
         {job.data && <JobView job={job.data} />}
-      </Dialog>
+      </Sheet>
     </div>
   )
 }

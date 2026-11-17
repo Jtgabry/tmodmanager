@@ -1519,6 +1519,17 @@ h2 {
 
 /* --- Sheet: bottom sheet su schermi stretti, modale centrata su quelli larghi ----------------- */
 
+/* Con una sheet aperta la pagina sotto non scorre (il gutter resta, così il layout non si sposta) */
+html:has(.sheet[open]) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* Arrivati in fondo (o in cima) al contenuto della sheet, lo scroll non passa alla pagina */
+.sheet-body {
+  overscroll-behavior: contain;
+}
+
 /* L'aspetto sta sul pannello (che si trascina e si anima), la <dialog> resta solo un contenitore */
 .sheet {
   background: transparent;

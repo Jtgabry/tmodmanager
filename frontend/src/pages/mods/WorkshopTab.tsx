@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import Dialog from '../../components/Dialog'
+import Sheet from '../../components/Sheet'
 import OverflowActions, { type OverflowAction } from '../../components/OverflowActions'
 import PageActions from '../../components/PageActions'
 import { errorMessage } from '../../lib/api'
@@ -205,7 +205,7 @@ export default function WorkshopTab() {
         </div>
       )}
 
-      <Dialog open={detailsItem !== undefined} title={detailsItem?.title ?? ''} wide onClose={() => setDetails(null)}>
+      <Sheet open={detailsItem !== undefined} title={detailsItem?.title ?? ''} wide onClose={() => setDetails(null)}>
         {detailsItem && (
           <WorkshopDetails
             serverId={server.id}
@@ -216,7 +216,7 @@ export default function WorkshopTab() {
             onInstall={() => onInstall(detailsItem.id)}
           />
         )}
-      </Dialog>
+      </Sheet>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { type FormEvent, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import Dialog from '../../components/Dialog'
+import Sheet from '../../components/Sheet'
 import OverflowActions, { type OverflowAction } from '../../components/OverflowActions'
 import PageActions from '../../components/PageActions'
 import { errorMessage } from '../../lib/api'
@@ -125,17 +125,17 @@ export default function ModpacksTab() {
         </div>
       )}
 
-      <Dialog open={dialog === 'new'} title="Nuovo modpack" onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'new'} title="Nuovo modpack" onClose={() => setDialog(null)}>
         {dialog === 'new' && <NewPackForm serverId={server.id} onCancel={() => setDialog(null)} onCreated={(id) => navigate(id)} />}
-      </Dialog>
+      </Sheet>
 
-      <Dialog open={dialog === 'import'} title="Importa da tModLoader" wide onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'import'} title="Importa da tModLoader" wide onClose={() => setDialog(null)}>
         {dialog === 'import' && <ModpackImport serverId={server.id} inDialog onClose={() => setDialog(null)} />}
-      </Dialog>
+      </Sheet>
 
       <ExportPackSheet serverId={server.id} pack={exporting} onClose={() => setExporting(null)} />
 
-      <Dialog open={deleting !== null} title="Eliminare il modpack?" onClose={() => setDeleting(null)}>
+      <Sheet open={deleting !== null} title="Eliminare il modpack?" onClose={() => setDeleting(null)}>
         {deleting && (
           <div className="stack">
             <p>
@@ -152,7 +152,7 @@ export default function ModpacksTab() {
             </div>
           </div>
         )}
-      </Dialog>
+      </Sheet>
     </div>
   )
 }

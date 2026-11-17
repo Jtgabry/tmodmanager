@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import Dialog from '../../components/Dialog'
+import Sheet from '../../components/Sheet'
 import { errorMessage } from '../../lib/api'
 import { activationNotice, dependencyClosure } from '../../lib/modpacks'
 import { useModpackActivation } from '../../lib/mods'
@@ -46,7 +46,7 @@ export function usePackActivation({ serverId, pack, packs, byName, onResult }: A
   const dialog = (
     // I clic nella finestra non devono arrivare alla card (che si aprirebbe)
     <span onClick={(e) => e.stopPropagation()}>
-      <Dialog open={confirming} title={`Attivare solo «${pack.name}»?`} onClose={() => setConfirming(false)}>
+      <Sheet open={confirming} title={`Attivare solo «${pack.name}»?`} onClose={() => setConfirming(false)}>
         <div className="stack">
           <p>Restano abilitate solo le mod di questo pack e le loro dipendenze.</p>
           {toDisable.length > 0 && (
@@ -65,7 +65,7 @@ export function usePackActivation({ serverId, pack, packs, byName, onResult }: A
             </button>
           </div>
         </div>
-      </Dialog>
+      </Sheet>
     </span>
   )
 

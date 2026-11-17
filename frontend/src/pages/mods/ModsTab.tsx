@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import Dialog from '../../components/Dialog'
+import Sheet from '../../components/Sheet'
 import PageActions from '../../components/PageActions'
 import { errorMessage } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
@@ -152,15 +152,15 @@ export default function ModsTab() {
         />
       )}
 
-      <Dialog open={dialog === 'upload'} title="Carica mod" onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'upload'} title="Carica mod" keepMounted onClose={() => setDialog(null)}>
         <UploadZone queue={queue} />
-      </Dialog>
+      </Sheet>
 
-      <Dialog open={dialog === 'archive'} title="Archivio delle versioni" wide onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'archive'} title="Archivio delle versioni" wide onClose={() => setDialog(null)}>
         {dialog === 'archive' && <VersionArchive serverId={server.id} />}
-      </Dialog>
+      </Sheet>
 
-      <Dialog open={dialog === 'updates'} title="Aggiornamenti dal Workshop" wide onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'updates'} title="Aggiornamenti dal Workshop" wide keepMounted onClose={() => setDialog(null)}>
         <WorkshopUpdates
           serverId={server.id}
           report={updates.data}
@@ -171,7 +171,7 @@ export default function ModsTab() {
           startError={start.error}
           onUpdate={(names) => start.mutate(names)}
         />
-      </Dialog>
+      </Sheet>
 
       {dragging && dialog !== 'upload' && (
         <div className="drop-overlay" aria-hidden="true">

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import Dialog from '../../components/Dialog'
+import Sheet from '../../components/Sheet'
 import { errorMessage } from '../../lib/api'
 import { formatBytes, formatDate } from '../../lib/format'
 import { conflictDetails, modDownloadUrl, useDeleteMod, useToggleMod, workshopCategories } from '../../lib/mods'
@@ -207,7 +207,7 @@ export default function ModGrid({
         </div>
       )}
 
-      <Dialog
+      <Sheet
         open={pending !== null}
         title={pending?.kind === 'disable' ? 'Disabilitare anche le mod dipendenti?' : 'Eliminare la mod?'}
         onClose={() => setPending(null)}
@@ -239,9 +239,9 @@ export default function ModGrid({
             </div>
           </div>
         )}
-      </Dialog>
+      </Sheet>
 
-      <Dialog open={detailsMod !== undefined} title={detailsMod ? titleOf(detailsMod) : ''} wide onClose={() => setDetails(null)}>
+      <Sheet open={detailsMod !== undefined} title={detailsMod ? titleOf(detailsMod) : ''} wide onClose={() => setDetails(null)}>
         {detailsMod && (
           <ModDetails
             mod={detailsMod}
@@ -252,7 +252,7 @@ export default function ModGrid({
             nameOf={nameOf}
           />
         )}
-      </Dialog>
+      </Sheet>
     </div>
   )
 }

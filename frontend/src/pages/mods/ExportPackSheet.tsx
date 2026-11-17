@@ -7,12 +7,9 @@ type Format = 'zip' | 'json'
 
 /** Esportazione di un modpack: cartella di tModLoader in .zip (predefinita) o solo l'elenco in .json. */
 export default function ExportPackSheet({ serverId, pack, onClose }: { serverId: string; pack: Modpack | null; onClose: () => void }) {
-  // L'ultimo pack mostrato: resta visibile anche durante l'animazione di chiusura
-  const [shown, setShown] = useState(pack)
-  if (pack && pack !== shown) setShown(pack)
   return (
     <Sheet open={pack !== null} title="Esporta il modpack" onClose={onClose}>
-      {shown && <ExportForm serverId={serverId} pack={shown} onClose={onClose} />}
+      {pack && <ExportForm serverId={serverId} pack={pack} onClose={onClose} />}
     </Sheet>
   )
 }

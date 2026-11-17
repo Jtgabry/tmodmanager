@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import Dialog from '../../components/Dialog'
+import Sheet from '../../components/Sheet'
 import OverflowActions, { type OverflowAction } from '../../components/OverflowActions'
 import { errorMessage } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
@@ -108,9 +108,9 @@ export default function ModpackPage() {
         />
       )}
 
-      <Dialog open={versionsOf !== null} title={versionsOf ? `Versioni di ${nameOf(versionsOf)}` : ''} wide onClose={() => setVersionsOf(null)}>
+      <Sheet open={versionsOf !== null} title={versionsOf ? `Versioni di ${nameOf(versionsOf)}` : ''} wide onClose={() => setVersionsOf(null)}>
         {versionsOf && <VersionArchive serverId={server.id} focus={versionsOf} />}
-      </Dialog>
+      </Sheet>
     </div>
   )
 }
@@ -374,7 +374,7 @@ function PackHero(props: {
         </div>
       )}
 
-      <Dialog open={confirmDelete} title="Eliminare il modpack?" onClose={() => setConfirmDelete(false)}>
+      <Sheet open={confirmDelete} title="Eliminare il modpack?" onClose={() => setConfirmDelete(false)}>
         <div className="stack">
           <p>
             <strong>{pack.name}</strong> verrà eliminato. Le mod restano installate così come sono.
@@ -389,7 +389,7 @@ function PackHero(props: {
             </button>
           </div>
         </div>
-      </Dialog>
+      </Sheet>
     </section>
   )
 }
