@@ -71,6 +71,9 @@ Due container (`docker/`), entrambi con la cartella dati montata in `/srv/tmm-da
   le porte `TMM_GAME_PORTS` sono pubblicate e il pannello propone solo quelle. Parte come root solo per creare
   l'utente `TMM_UID` (serve a screen), poi passa a quell'utente: i file in `data/` restano del proprietario.
   `docker compose stop` → i server salvano e si spengono (`stop_grace_period: 200s`), al riavvio si riaccendono.
+  Ogni giorno alle `AGENT_BACKUP_TIME` (default `04:00`, ora locale: `TMM_TZ` o `/etc/localtime` dell'host) fa il
+  backup dei mondi di tutti i server in `data/servers/<id>/backups/` (`<Mondo>_backup_<YmdHis>.zip`), tenendo gli
+  ultimi `AGENT_BACKUP_KEEP` (14) automatici; niente cron da configurare.
 
 Dietro un proxy già presente (es. Apache sulla 443): `TMM_SITE_ADDRESS=:80`, `TMM_HTTP_BIND=127.0.0.1:8080`,
 `TRUSTED_PROXIES=127.0.0.1,172.16.0.0/12`, e nel proxy `ProxyPass / http://127.0.0.1:8080/` (più

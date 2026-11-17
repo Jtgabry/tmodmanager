@@ -31,8 +31,14 @@ services:
       STEAM_API_KEY: ${STEAM_API_KEY:-}
       AGENT_STOP_TIMEOUT: ${AGENT_STOP_TIMEOUT:-180}
       AGENT_TRASH_RETENTION_DAYS: ${AGENT_TRASH_RETENTION_DAYS:-30}
+      # Backup giornaliero dei mondi: ora (HH:MM, "off" per disattivarlo) e quanti automatici tenere per server
+      AGENT_BACKUP_TIME: ${AGENT_BACKUP_TIME:-04:00}
+      AGENT_BACKUP_KEEP: ${AGENT_BACKUP_KEEP:-14}
+      # Fuso orario (es. Europe/Rome; tmm lo prende dall'host). Vuoto = quello di /etc/localtime dell'host
+      TMM_TZ: ${TMM_TZ:-}
     volumes:
       - *data-volume
+      - /etc/localtime:/etc/localtime:ro
     ports:
       # Porte dei server di gioco (Terraria usa solo TCP)
       - "${TMM_GAME_PORTS:-7777-7787}:${TMM_GAME_PORTS:-7777-7787}/tcp"

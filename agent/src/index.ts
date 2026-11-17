@@ -7,7 +7,9 @@ import { ServerManager } from './manager.js'
 import { handleShutdown, resumeServers } from './lifecycle.js'
 import { migrateLegacyData } from './migrate.js'
 import { registryPath } from './registry.js'
+import { scheduleDailyBackups } from './backups.js'
 import { adminRoutes } from './routes/admin.js'
+import { backupRoutes } from './routes/backups.js'
 import { fileRoutes } from './routes/files.js'
 import { modRoutes } from './routes/mods.js'
 import { serverRoutes } from './routes/servers.js'
@@ -79,6 +81,7 @@ await app.register(serverRoutes, { manager })
 await app.register(modRoutes)
 await app.register(fileRoutes)
 await app.register(trashRoutes)
+await app.register(backupRoutes, { manager })
 await app.register(workshopRoutes)
 await app.register(adminRoutes, { manager })
 
@@ -89,6 +92,9 @@ const purge = () =>
     .catch((err) => app.log.error(err))
 void purge()
 setInterval(purge, 60 * 60 * 1000).unref()
+
+// Backup dei mondi di tutti i server ogni giorno a config.backupTime (fatto qui: niente cron da configurare)
+scheduleDailyBackups(manager, { info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) })
 
 handleShutdown(manager, () => app.close(), { info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) })
 

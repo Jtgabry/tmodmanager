@@ -5,6 +5,9 @@
 set -eu
 
 uid="${TMM_UID:-1000}"
+
+# Fuso orario (backup giornalieri all'ora locale): TMM_TZ dal .env, altrimenti /etc/localtime dell'host
+if [ -n "${TMM_TZ:-}" ] && [ -f "/usr/share/zoneinfo/$TMM_TZ" ]; then export TZ="$TMM_TZ"; fi
 gid="${TMM_GID:-1000}"
 
 if [ "$(id -u)" = "0" ]; then

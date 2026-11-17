@@ -13,4 +13,5 @@ enum ServerAbility: string
     case Power = 'power';
     case Mods = 'mods';
     case Files = 'files';
+    case Backups = 'backups';
 }

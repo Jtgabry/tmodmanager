@@ -22,6 +22,7 @@ import { config } from './config.js'
  *   │   ├── modpacks.json
  *   │   ├── mods-state.json      impronta delle mod all'avvio (avviso "riavvio necessario")
  *   │   ├── archive/<Mod>/<versione>.tmod
+ *   │   ├── backups/             backup dei mondi (<Mondo>_backup_<YmdHis>.zip)
  *   │   └── trash/<elemento>/
  *   ├── cache/                   download del Workshop, screenrc
  *   └── tmp/
@@ -59,4 +60,5 @@ export const paths = {
   modsState: (id: string) => join(config.dataDir, 'servers', id, 'mods-state.json'),
   archive: (id: string) => join(config.dataDir, 'servers', id, 'archive'),
   trash: (id: string) => join(config.dataDir, 'servers', id, 'trash'),
+  backups: (id: string) => join(config.dataDir, 'servers', id, 'backups'),
 }

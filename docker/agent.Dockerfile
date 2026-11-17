@@ -12,12 +12,15 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
 # screen: console dei server · unzip: release di tModLoader · curl: download di .NET (script di tModLoader)
+# tzdata: fuso orario (backup giornaliero dei mondi all'ora locale). /etc/localtime arriva dall'host (compose):
+# si toglie il link a UTC dell'immagine, altrimenti il mount finirebbe sul file di UTC
 # lib32*: steamcmd è a 32 bit · libicu/libssl: runtime .NET · procps: ps per il debug
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      screen unzip tar ca-certificates curl procps \
+      screen unzip tar ca-certificates curl procps tzdata \
       lib32gcc-s1 lib32stdc++6 libicu72 libssl3 \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && rm -f /etc/localtime /etc/timezone
 
 WORKDIR /app/agent
 COPY --from=build /app/agent/node_modules ./node_modules

@@ -15,6 +15,7 @@ const TITLES: Record<string, string> = {
   workshop: 'Workshop',
   modpacks: 'Modpack',
   files: 'File',
+  backups: 'Backup',
   trash: 'Cestino',
   settings: 'Impostazioni',
 }

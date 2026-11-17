@@ -5,6 +5,7 @@ import PowerButtons from './PowerButtons'
 import StateBadge from './StateBadge'
 import {
   IconAdmin,
+  IconBackup,
   IconConsole,
   IconFiles,
   IconInvites,
@@ -83,6 +84,11 @@ function ServerNav({ serverId, server }: { serverId: string; server: Server | un
         {can(serverId, 'files') && (
           <NavItem to={`${base}/files`} icon={<IconFiles />}>
             File
+          </NavItem>
+        )}
+        {can(serverId, 'backups') && (
+          <NavItem to={`${base}/backups`} icon={<IconBackup />}>
+            Backup
           </NavItem>
         )}
         {(can(serverId, 'files') || can(serverId, 'mods')) && (

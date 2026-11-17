@@ -37,6 +37,10 @@ export const config = {
    * pubblicate dal container: una porta fuori intervallo non sarebbe raggiungibile dall'esterno.
    */
   gamePorts: parsePortRange(process.env.TMM_GAME_PORTS),
+  /** Ora del backup automatico giornaliero dei mondi (HH:MM, ora locale del container: TZ), "off" per disattivarlo. */
+  backupTime: process.env.AGENT_BACKUP_TIME ?? '04:00',
+  /** Backup automatici tenuti per server (i più vecchi si cancellano; quelli fatti a mano restano). */
+  backupKeep: Number(process.env.AGENT_BACKUP_KEEP ?? 14),
   /** Giorni dopo cui gli elementi del cestino vengono cancellati definitivamente. */
   trashRetentionDays: Number(process.env.AGENT_TRASH_RETENTION_DAYS ?? 30),
   /** Repository GitHub da cui scaricare le versioni di tModLoader. */

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\Auth\CurrentUserController;
 use App\Http\Controllers\Api\V1\Auth\RegistrationController;
 use App\Http\Controllers\Api\V1\Auth\SessionController;
 use App\Http\Controllers\Api\V1\Auth\SetupController;
+use App\Http\Controllers\Api\V1\ServerBackupController;
 use App\Http\Controllers\Api\V1\ServerConsoleController;
 use App\Http\Controllers\Api\V1\ServerConsoleTicketController;
 use App\Http\Controllers\Api\V1\ServerController;
@@ -36,6 +37,7 @@ Route::prefix('v1')
         'item' => '[0-9]{13}-[0-9a-f]{8}',
         'installation' => '[0-9a-f]{8}',
         'version' => '[0-9]{1,9}(\.[0-9]{1,9}){0,3}',
+        'backup' => '[A-Za-z_-]{1,64}_backup_[0-9]{14}\.zip',
     ])
     ->group(function () {
         Route::middleware('throttle:10,1')->group(function () {
@@ -111,6 +113,13 @@ Route::prefix('v1')
             });
             Route::get('/servers/{server}/files/content', [ServerFileContentController::class, 'show'])->name('servers.files.content.show');
             Route::put('/servers/{server}/files/content', [ServerFileContentController::class, 'update'])->name('servers.files.content.update');
+
+            Route::controller(ServerBackupController::class)->prefix('/servers/{server}/backups')->name('servers.backups.')->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('/', 'store')->name('store');
+                Route::get('/{backup}/download', 'download')->name('download');
+                Route::delete('/{backup}', 'destroy')->name('destroy');
+            });
 
             Route::controller(ServerTrashController::class)->prefix('/servers/{server}/trash')->name('servers.trash.')->group(function () {
                 Route::get('/', 'index')->name('index');

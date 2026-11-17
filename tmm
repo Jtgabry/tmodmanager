@@ -84,6 +84,22 @@ data_dir() {
 random_hex() { openssl rand -hex "$1" 2>/dev/null || head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 random_b64() { openssl rand -base64 "$1" 2>/dev/null || head -c "$1" /dev/urandom | base64; }
 
+# Fuso orario della macchina (es. Europe/Rome), per i backup giornalieri all'ora locale
+host_timezone() {
+  local tz=''
+  tz="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
+  [ -n "$tz" ] || tz="$(cat /etc/timezone 2>/dev/null || true)"
+  [ -n "$tz" ] || tz="$(readlink -f /etc/localtime 2>/dev/null | sed -n 's|^.*/zoneinfo/||p')"
+  printf '%s' "${tz:-UTC}"
+}
+
+# Imposta TMM_TZ nel .env se manca (installazioni fatte prima che esistesse)
+ensure_timezone() {
+  [ -n "$(env_get TMM_TZ)" ] && return
+  env_set TMM_TZ "$(host_timezone)"
+  ok "Fuso orario: $(env_get TMM_TZ)"
+}
+
 # --- Docker --------------------------------------------------------------------------------------
 
 DOCKER_MODE=''
@@ -367,6 +383,7 @@ cmd_install() {
   fi
 
   mkdir -p "$(data_dir)"
+  ensure_timezone
 
   step "Immagini"
   get_images
@@ -431,6 +448,7 @@ cmd_update() {
     step "Aggiornamento del codice"
     git -C "$TMM_DIR" pull --ff-only || die "git pull non riuscito (modifiche locali?)"
   fi
+  ensure_timezone
   step "Immagini"
   get_images pull-base
   step "Riavvio dei container cambiati"
@@ -496,6 +514,7 @@ cmd_restore() {
   # I file devono appartenere all'utente di questa macchina
   env_set TMM_UID "$(id -u "${SUDO_USER:-$(id -un)}")"
   env_set TMM_GID "$(id -g "${SUDO_USER:-$(id -un)}")"
+  ensure_timezone
 
   step "Avvio"
   get_images

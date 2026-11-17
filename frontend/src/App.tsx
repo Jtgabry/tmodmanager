@@ -16,6 +16,7 @@ import SetupPage from './pages/SetupPage'
 import ServerPage, { ServerOverview } from './pages/ServerPage'
 import ServersPage from './pages/ServersPage'
 import TrashTab from './pages/TrashTab'
+import BackupsTab from './pages/BackupsTab'
 import UpdatePrompt from './components/UpdatePrompt'
 import ServersAdminPage from './pages/admin/ServersAdminPage'
 import { ServerSettingsTab } from './pages/settings/ServerSettings'
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="modpacks" element={<ModpacksTab />} />
               <Route path="modpacks/:packId" element={<ModpackPage />} />
               <Route path="files" element={<FilesTab />} />
+              <Route path="backups" element={<BackupsTab />} />
               <Route path="trash" element={<TrashTab />} />
               <Route path="settings" element={<RequireAdmin><ServerSettingsTab /></RequireAdmin>} />
             </Route>

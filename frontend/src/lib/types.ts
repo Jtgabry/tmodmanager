@@ -1,5 +1,5 @@
-export type ServerAbility = 'view' | 'console' | 'power' | 'mods' | 'files'
-export const SERVER_ABILITIES: ServerAbility[] = ['view', 'console', 'power', 'mods', 'files']
+export type ServerAbility = 'view' | 'console' | 'power' | 'mods' | 'files' | 'backups'
+export const SERVER_ABILITIES: ServerAbility[] = ['view', 'console', 'power', 'mods', 'files', 'backups']
 
 export type User = {
   id: number

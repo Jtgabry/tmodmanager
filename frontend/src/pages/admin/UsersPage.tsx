@@ -12,6 +12,7 @@ const ABILITY_LABELS: Record<ServerAbility, string> = {
   power: 'Avvio/stop',
   mods: 'Mod',
   files: 'File',
+  backups: 'Backup',
 }
 
 const USERS_KEY = ['admin', 'users']
