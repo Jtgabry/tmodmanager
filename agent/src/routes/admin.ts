@@ -5,7 +5,8 @@ import type { ServerManager } from '../manager.js'
 import {
   CreateServerInput,
   createServer,
-  knownInstallDirs,
+  knownInstallations,
+  recreateWorld,
   removeServer,
   ServerAdminError,
   serverSettings,
@@ -13,9 +14,10 @@ import {
   UpdateServerInput,
   updateServer,
 } from '../serverAdmin.js'
+import { GAMES } from '../games.js'
 import { findInstallation, listInstallations, listReleases, startJob, TmlError } from '../tml.js'
 
-/** Operazioni da amministratore: server (creazione, impostazioni, rimozione) e installazioni di tModLoader. */
+/** Operazioni da amministratore: server (creazione, impostazioni, rimozione) e installazioni di Terraria e tModLoader. */
 export async function adminRoutes(app: FastifyInstance, { manager }: { manager: ServerManager }) {
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ServerAdminError) {
@@ -40,7 +42,7 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
   // --- Server ---------------------------------------------------------------------------------
 
   app.get('/admin/servers/defaults', async () => ({
-    data: { port: await suggestPort(), installDirs: await knownInstallDirs(), ports: config.gamePorts },
+    data: { port: await suggestPort(), installations: await knownInstallations(), ports: config.gamePorts },
   }))
 
   app.post('/admin/servers', async (req, reply) => {
@@ -52,18 +54,22 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
 
   app.patch<{ Params: { id: string } }>('/admin/servers/:id', async (req) => {
     const input = UpdateServerInput.parse(req.body)
-    return { data: await updateServer(req.params.id, input) }
+    return { data: await updateServer(req.params.id, input, manager) }
   })
+
+  app.post<{ Params: { id: string } }>('/admin/servers/:id/world/recreate', async (req) => ({ data: await recreateWorld(req.params.id, manager) }))
 
   app.delete<{ Params: { id: string } }>('/admin/servers/:id', async (req) => ({ data: await removeServer(req.params.id, manager) }))
 
-  // --- tModLoader -----------------------------------------------------------------------------
+  // --- Installazioni (Terraria e tModLoader) ---------------------------------------------------
 
   app.get('/admin/installations', async () => ({ data: await listInstallations() }))
 
-  app.get<{ Querystring: { refresh?: string } }>('/admin/tml/releases', async (req) => ({
-    data: await listReleases(req.query.refresh === '1'),
-  }))
+  app.get<{ Params: { game: string }; Querystring: { refresh?: string } }>('/admin/releases/:game', async (req, reply) => {
+    const game = z.enum(GAMES).safeParse(req.params.game)
+    if (!game.success) return reply.code(404).send({ error: 'not_found', message: 'Gioco sconosciuto' })
+    return { data: await listReleases(game.data, req.query.refresh === '1') }
+  })
 
   const JobInput = z.union([
     z.object({ version: z.string().regex(/^[\d.]{3,32}$/), restartServers: z.boolean().default(true) }),

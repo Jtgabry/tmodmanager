@@ -20,7 +20,7 @@ class ServerController extends Controller
     public function __construct(private readonly AgentClient $agent) {}
 
     /**
-     * Valori suggeriti per il form di creazione (prima porta libera, installazioni di tModLoader).
+     * Valori suggeriti per il form di creazione (prima porta libera, installazioni di Terraria e tModLoader).
      */
     public function defaults(): JsonResponse
     {
@@ -49,6 +49,18 @@ class ServerController extends Controller
             'server' => $server,
             'fields' => array_keys($payload),
         ]);
+
+        return response()->json(['data' => $result]);
+    }
+
+    /**
+     * Ricrea il mondo da capo (server spento): il mondo attuale va nel cestino del server e al prossimo
+     * avvio ne viene generato uno nuovo con le impostazioni del serverconfig.
+     */
+    public function recreateWorld(Request $request, string $server): JsonResponse
+    {
+        $result = $this->agent->json('post', "/admin/servers/{$server}/world/recreate", timeout: 60);
+        Log::info('Mondo ricreato', ['user' => $request->user()->email, 'server' => $server]);
 
         return response()->json(['data' => $result]);
     }

@@ -17,7 +17,7 @@ class ServerResource extends JsonResource
      *     id: string, name: string, state: string, operation: ?string, managed: bool,
      *     pid: ?int, subworlds: int, uptimeSeconds: ?int, cpuPercent: ?float, memoryBytes: ?int,
      *     players: array{online: int, max: int}, world: ?string, port: int, hasPassword: bool,
-     *     tmlVersion: ?string, restartRequired: bool, lastError: ?array{operation: string, message: string, at: string}
+     *     game: string, version: ?string, tmlVersion: ?string, restartRequired: bool, lastError: ?array{operation: string, message: string, at: string}
      * }
      */
     public function toArray(Request $request): array
@@ -39,6 +39,9 @@ class ServerResource extends JsonResource
             'world' => $server['world'],
             'port' => $server['port'],
             'hasPassword' => $server['hasPassword'],
+            // Server registrati prima del vanilla (o agent non aggiornato): tModLoader
+            'game' => $server['game'] ?? 'tmodloader',
+            'version' => $server['version'] ?? $server['tmlVersion'],
             'tmlVersion' => $server['tmlVersion'],
             'restartRequired' => $server['restartRequired'] ?? false,
             'lastError' => $server['lastError'],

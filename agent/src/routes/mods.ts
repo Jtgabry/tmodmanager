@@ -16,6 +16,7 @@ import {
 } from '../modpacks.js'
 import { deleteMod, disableMods, enableMods, listMods, MOD_NAME, ModError, modPath, uploadMod, withServerLock } from '../mods.js'
 import { importFromFolder, importUpload, listImportable } from '../modpackImport.js'
+import { modsOnlyForTmodloader } from './modsOnly.js'
 import { findServer, type ServerDefinition } from '../registry.js'
 import { readModIcon } from '../tmod.js'
 import { workshopIds } from '../workshop.js'
@@ -25,6 +26,7 @@ type Params = { Params: { id: string; name?: string; packId?: string; version?: 
 const truthy = (v: unknown) => v === true || v === 'true' || v === '1'
 
 export async function modRoutes(app: FastifyInstance) {
+  modsOnlyForTmodloader(app)
   // I .tmod arrivano come flusso binario: niente buffer in memoria
   app.addContentTypeParser('application/octet-stream', (_req, payload, done) => done(null, payload))
 

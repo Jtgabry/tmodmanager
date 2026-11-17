@@ -66,7 +66,7 @@ function ServerNav({ serverId, server }: { serverId: string; server: Server | un
             Console
           </NavItem>
         )}
-        {can(serverId, 'mods') && (
+        {can(serverId, 'mods') && server?.game === 'tmodloader' && (
           <>
             <NavItem to={`${base}/mods`} icon={<IconMods />}>
               Mod

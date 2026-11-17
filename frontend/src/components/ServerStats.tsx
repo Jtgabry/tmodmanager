@@ -1,5 +1,5 @@
 import { formatBytes, formatDuration } from '../lib/format'
-import type { Server } from '../lib/types'
+import { GAME_LABEL, type Server } from '../lib/types'
 
 /** `tiles`: ogni valore in un riquadro a sé (pagina Panoramica). */
 export default function ServerStats({ server, tiles = false }: { server: Server; tiles?: boolean }) {
@@ -31,13 +31,15 @@ export default function ServerStats({ server, tiles = false }: { server: Server;
         <dd>{server.port}</dd>
       </div>
       <div>
-        <dt>tModLoader</dt>
-        <dd>{server.tmlVersion ?? '—'}</dd>
+        <dt>{GAME_LABEL[server.game]}</dt>
+        <dd>{server.version ?? '—'}</dd>
       </div>
-      <div>
-        <dt>Subworld</dt>
-        <dd>{on ? server.subworlds : '—'}</dd>
-      </div>
+      {server.game === 'tmodloader' && (
+        <div>
+          <dt>Subworld</dt>
+          <dd>{on ? server.subworlds : '—'}</dd>
+        </div>
+      )}
     </dl>
   )
 }

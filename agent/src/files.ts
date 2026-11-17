@@ -27,7 +27,7 @@ export type FileRoot = { id: string; label: string; path: string; limited: boole
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 const MAX_TEXT_BYTES = 1024 * 1024
 
-/** Cartelle navigabili di un server: SaveData, mondi (se fuori da SaveData), installazione di tModLoader. */
+/** Cartelle navigabili di un server: SaveData, mondi (se fuori da SaveData), installazione del gioco. */
 export async function fileRoots(server: ServerDefinition): Promise<FileRoot[]> {
   const roots: FileRoot[] = [{ id: 'save', label: 'SaveData', path: server.saveDir, limited: false }]
   const { world } = await readServerConfig(server.configPath)
@@ -35,7 +35,8 @@ export async function fileRoots(server: ServerDefinition): Promise<FileRoot[]> {
     const worlds = dirname(world)
     if (!isInside(server.saveDir, worlds)) roots.push({ id: 'worlds', label: 'Mondi', path: worlds, limited: false })
   }
-  roots.push({ id: 'tml', label: 'tModLoader (config e log)', path: server.installDir, limited: true })
+  const game = server.game === 'terraria' ? 'Terraria' : 'tModLoader'
+  roots.push({ id: 'tml', label: `${game} (config e log)`, path: server.installDir, limited: true })
   // serverconfig.txt nella cartella del server (server creati dal pannello)
   const configDir = dirname(server.configPath)
   if (!isInside(server.saveDir, configDir) && !isInside(server.installDir, configDir)) {

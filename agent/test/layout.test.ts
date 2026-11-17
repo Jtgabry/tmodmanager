@@ -15,23 +15,27 @@ test('i percorsi stanno tutti sotto la cartella dati', () => {
     assert.equal(paths.serverSave('alfa'), '/srv/tmm/servers/alfa/save')
     assert.equal(paths.trash('alfa'), '/srv/tmm/servers/alfa/trash')
     assert.equal(paths.tmlInstall(), '/srv/tmm/tmodloader/tModLoader')
+    assert.equal(paths.terrariaInstall(), '/srv/tmm/terraria/Terraria')
     assert.equal(paths.steamcmd(), '/srv/tmm/steamcmd/steamcmd.sh')
   } finally {
     config.dataDir = previous
   }
 })
 
-test('macchina nuova: compare l\'installazione predefinita, da installare', async () => {
+test('macchina nuova: compaiono le installazioni predefinite di Terraria e tModLoader, da installare', async () => {
   const previous = config.dataDir
   config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-layout-'))
   try {
     const list = await listInstallations()
-    assert.equal(list.length, 1)
-    assert.equal(list[0].path, paths.tmlInstall())
-    assert.equal(list[0].managed, true)
-    assert.equal(list[0].installed, false)
+    assert.deepEqual(
+      list.map((i) => [i.path, i.kind, i.managed, i.installed]),
+      [
+        [paths.terrariaInstall(), 'terraria', true, false],
+        [paths.tmlInstall(), 'tmodloader', true, false],
+      ],
+    )
 
-    // Installazione esterna in uso e predefinita assente: si vede solo quella esterna
+    // Installazione esterna in uso: si aggiunge alle predefinite
     const external = join(config.dataDir, 'esterna')
     await mkdir(external)
     await writeFile(join(external, 'start-tModLoaderServer.sh'), '')
@@ -40,10 +44,10 @@ test('macchina nuova: compare l\'installazione predefinita, da installare', asyn
       JSON.stringify({ servers: [{ id: 'a', name: 'A', installDir: external, saveDir: join(config.dataDir, 'a') }] }),
     )
     const withServer = await listInstallations()
-    assert.deepEqual(
-      withServer.map((i) => [i.path, i.installed]),
-      [[external, true]],
-    )
+    const ext = withServer.find((i) => i.path === external)
+    assert.equal(ext?.installed, true)
+    assert.equal(ext?.kind, 'tmodloader')
+    assert.deepEqual(ext?.servers.map((s) => s.id), ['a'])
   } finally {
     config.dataDir = previous
   }

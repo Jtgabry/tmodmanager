@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { access, cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import { z } from 'zod'
 import { config } from './config.js'
 import type { ServerManager } from './manager.js'
@@ -8,7 +8,8 @@ import { paths } from './paths.js'
 import { socketsOnPort } from './procfs.js'
 import { loadServers, type RawServer, ServerDefinition, updateRegistry } from './registry.js'
 import { applyServerConfig, readServerConfig } from './serverConfig.js'
-import { listInstallations } from './tml.js'
+import { type Installation, listInstallations, serverWorldRelease } from './tml.js'
+import { moveToTrash } from './trash.js'
 
 /** Creazione, impostazioni e rimozione dei server (solo admin, lato Laravel). */
 
@@ -54,11 +55,24 @@ export type CreateServerInput = z.infer<typeof CreateServerInput>
 
 export const UpdateServerInput = Settings.partial().extend({
   launchArgs: z.array(z.string().max(200)).max(20).optional(),
+  /** Cambio di versione: un'altra installazione (anche dell'altro gioco). Il server deve essere spento. */
+  installDir: z.string().min(1).optional(),
 })
 
-/** Installazioni di tModLoader utilizzabili per un nuovo server (quelle installate). */
-export async function knownInstallDirs(): Promise<string[]> {
-  return (await listInstallations()).filter((i) => i.installed).map((i) => i.path)
+export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed'>
+
+/** Installazioni utilizzabili da un server (quelle installate): prima Terraria, poi tModLoader. */
+export async function knownInstallations(): Promise<InstallationChoice[]> {
+  return (await listInstallations())
+    .filter((i) => i.installed)
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'terraria' ? -1 : 1))
+    .map(({ path, kind, version, gameVersion, worldRelease, managed }) => ({ path, kind, version, gameVersion, worldRelease, managed }))
+}
+
+async function findChoice(installDir: string): Promise<InstallationChoice> {
+  const found = (await knownInstallations()).find((i) => i.path === installDir)
+  if (!found) throw new ServerAdminError('Installazione sconosciuta o non ancora installata', 422, 'installDir')
+  return found
 }
 
 async function assertPortFree(port: number, exceptId: string | null) {
@@ -97,9 +111,7 @@ export async function suggestPort(): Promise<number> {
 export async function createServer(input: CreateServerInput) {
   const servers = await loadServers()
   if (servers.some((s) => s.id === input.id)) throw new ServerAdminError(`Esiste già un server con id "${input.id}"`, 409, 'id')
-  if (!(await knownInstallDirs()).includes(input.installDir)) {
-    throw new ServerAdminError('Installazione di tModLoader sconosciuta o non ancora installata', 422, 'installDir')
-  }
+  const installation = await findChoice(input.installDir)
   await assertPortFree(input.port, null)
   const source = input.copyModsFrom ? servers.find((s) => s.id === input.copyModsFrom) : null
   if (input.copyModsFrom && !source) throw new ServerAdminError('Server da cui copiare le mod non trovato', 422, 'copyModsFrom')
@@ -147,6 +159,7 @@ export async function createServer(input: CreateServerInput) {
     const raw: RawServer = {
       id: input.id,
       name: input.name,
+      game: installation.kind,
       installDir: input.installDir,
       saveDir,
       configFile: configPath,
@@ -172,7 +185,10 @@ export async function serverSettings(id: string) {
   return {
     id: server.id,
     name: server.name,
+    game: server.game,
     installDir: server.installDir,
+    /** Versione del mondo attuale (null se non ancora generato). */
+    worldRelease: await serverWorldRelease(server),
     saveDir: server.saveDir,
     configPath: server.configPath,
     launchArgs: server.launchArgs,
@@ -186,10 +202,21 @@ export async function serverSettings(id: string) {
 }
 
 /** Modifica nome/argomenti (registry) e porta/giocatori/password/motd (serverconfig.txt). Valgono al prossimo avvio. */
-export async function updateServer(id: string, input: z.infer<typeof UpdateServerInput>) {
+export async function updateServer(id: string, input: z.infer<typeof UpdateServerInput>, manager: ServerManager) {
   const server = (await loadServers()).find((s) => s.id === id)
   if (!server) throw new ServerAdminError('Server non trovato', 404)
   if (input.port !== undefined) await assertPortFree(input.port, id)
+
+  // Cambio di versione (anche Terraria ↔ tModLoader): stesso mondo, nella stessa cartella Worlds/
+  let switchTo: InstallationChoice | null = null
+  if (input.installDir !== undefined && input.installDir !== server.installDir) {
+    switchTo = await findChoice(input.installDir)
+    const status = await manager.status(server)
+    if (status.state !== 'stopped' || status.operation) {
+      throw new ServerAdminError('Spegni il server prima di cambiare versione', 409, 'installDir')
+    }
+    if (switchTo.kind === 'tmodloader') await mkdir(join(server.saveDir, 'Mods'), { recursive: true })
+  }
 
   const changes: Record<string, string | null> = {}
   if (input.port !== undefined) changes.port = String(input.port)
@@ -203,17 +230,68 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
     await rename(tmp, server.configPath)
   }
 
-  if (input.name !== undefined || input.launchArgs !== undefined) {
+  if (input.name !== undefined || input.launchArgs !== undefined || switchTo) {
     await updateRegistry(async (list) => ({
       servers: list.map((s) =>
         s.id === id
-          ? { ...s, ...(input.name !== undefined && { name: input.name }), ...(input.launchArgs !== undefined && { launchArgs: input.launchArgs }) }
+          ? {
+              ...s,
+              ...(input.name !== undefined && { name: input.name }),
+              ...(input.launchArgs !== undefined && { launchArgs: input.launchArgs }),
+              ...(switchTo && { game: switchTo.kind, installDir: switchTo.path }),
+            }
           : s,
       ),
       result: undefined,
     }))
   }
   return serverSettings(id)
+}
+
+/** File di un mondo: il .wld più i dati di tModLoader (.twld) e i backup che Terraria tiene accanto. */
+const WORLD_COMPANIONS = ['', '.bak', '.bak2']
+const worldFiles = (world: string) => {
+  const base = world.replace(/\.wld$/i, '')
+  return WORLD_COMPANIONS.flatMap((suffix) => [`${base}.wld${suffix}`, `${base}.twld${suffix}`])
+}
+
+/**
+ * Ricrea il mondo da capo: i file del mondo attuale vanno nel cestino (recuperabili), e al prossimo
+ * avvio il server ne genera uno nuovo con nome, dimensione, difficoltà e seed del serverconfig.
+ */
+export async function recreateWorld(id: string, manager: ServerManager) {
+  const server = (await loadServers()).find((s) => s.id === id)
+  if (!server) throw new ServerAdminError('Server non trovato', 404)
+  const status = await manager.status(server)
+  if (status.state !== 'stopped' || status.operation) throw new ServerAdminError('Spegni il server prima di ricreare il mondo', 409)
+
+  const { world } = await readServerConfig(server.configPath)
+  if (!world) throw new ServerAdminError('Nel serverconfig non c\'è nessun mondo (chiave world)', 422)
+  const inSave = !relative(server.saveDir, world).startsWith('..')
+  const trashed: string[] = []
+  for (const file of worldFiles(world)) {
+    if (!(await exists(file))) continue
+    await moveToTrash(server, file, {
+      kind: 'file',
+      name: basename(file),
+      root: inSave ? 'save' : 'worlds',
+      path: inSave ? relative(server.saveDir, file) : basename(file),
+      modName: null,
+      modVersion: null,
+      reason: 'deleted',
+    })
+    trashed.push(basename(file))
+  }
+
+  // Senza autocreate il server non genererebbe il mondo mancante
+  const text = await readFile(server.configPath, 'utf8')
+  if (!/^\s*autocreate\s*=\s*[123]\s*$/im.test(text)) {
+    const tmp = `${server.configPath}.${randomBytes(4).toString('hex')}.tmp`
+    await writeFile(tmp, applyServerConfig(text, { autocreate: '2', worldname: basename(world).replace(/\.wld$/i, '') }))
+    await rename(tmp, server.configPath)
+  }
+  await mkdir(dirname(world), { recursive: true })
+  return { trashed }
 }
 
 /**

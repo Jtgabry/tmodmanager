@@ -23,8 +23,9 @@ import { modsFingerprint } from './mods.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { listSessions, quitSession, type ScreenSession, sendLine, startSession } from './screen.js'
-import { readServerConfig } from './serverConfig.js'
-import { installedVersion } from './tml.js'
+import { readConfigPassword, readServerConfig } from './serverConfig.js'
+import { type Game, TERRARIA_ASSEMBLY, TERRARIA_BINARY } from './games.js'
+import { installedVersion, recordWorldRelease } from './tml.js'
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'stopping'
 type Operation = 'start' | 'stop' | 'restart'
@@ -48,6 +49,10 @@ export type ServerStatus = {
   world: string | null
   port: number
   hasPassword: boolean
+  game: Game
+  /** Versione installata del gioco (Terraria o tModLoader). */
+  version: string | null
+  /** Solo per i server tModLoader (compatibilità: = version). */
   tmlVersion: string | null
   /** Mod cambiate (caricate, abilitate, rimosse…) dopo l'avvio: serve un riavvio per applicarle. */
   restartRequired: boolean
@@ -55,9 +60,23 @@ export type ServerStatus = {
   lastError: { operation: Operation; message: string; at: string } | null
 }
 
-/** Processo principale di tModLoader per quel server: si riconosce dal -tmlsavedirectory, i subworld hanno -subworld. */
-const isTmlServer = (p: ProcessInfo, saveDir: string) =>
-  p.args.some((a) => a.endsWith('tModLoader.dll')) && p.args.includes('-server') && p.args.includes(saveDir)
+/**
+ * Processi del server. tModLoader: si riconosce dal -tmlsavedirectory, i subworld hanno -subworld.
+ * Vanilla: dall'eseguibile e dal -config (unico per server).
+ */
+export const isServerProcess = (p: ProcessInfo, server: ServerDefinition) =>
+  server.game === 'terraria'
+    ? // Solo l'eseguibile (o "mono TerrariaServer.exe"): anche la riga di comando di screen contiene il binario e il -config
+      p.args.slice(0, 2).some((a) => a.endsWith(TERRARIA_BINARY) || a.endsWith(TERRARIA_ASSEMBLY)) &&
+      !p.args[0]?.toLowerCase().endsWith('screen') &&
+      p.args.includes(server.configPath)
+    : p.args.some((a) => a.endsWith('tModLoader.dll')) && p.args.includes('-server') && p.args.includes(server.saveDir)
+
+/** Domande del server vanilla a cui si risponde da soli durante l'avvio (riga incompleta in fondo alla console). */
+const STARTUP_PROMPTS: [RegExp, (server: ServerDefinition) => Promise<string>][] = [
+  [/Server password \(press enter for none\):\s*$/, (server) => readConfigPassword(server.configPath)],
+  [/forward port\? \(y\/n\):\s*$/, async () => 'n'],
+]
 
 export class ServerManager {
   private operations = new Map<string, Operation>()
@@ -92,7 +111,7 @@ export class ServerManager {
 
   private locate(server: ServerDefinition, procs: ProcessInfo[], sessions: ScreenSession[]) {
     const session = sessions.find((s) => s.name === server.screenSession) ?? null
-    const ours = procs.filter((p) => isTmlServer(p, server.saveDir))
+    const ours = procs.filter((p) => isServerProcess(p, server))
     const main = ours.find((p) => !p.args.includes('-subworld')) ?? null
     const subworlds = ours.filter((p) => p.args.includes('-subworld'))
     const managed = Boolean(main && session && isAncestor(procs, session.pid, main.pid))
@@ -128,6 +147,7 @@ export class ServerManager {
     const phase = this.phases.get(server.id)
     if (phase === 'stopping') state = 'stopping'
     if (phase === 'starting' && state === 'stopped') state = 'starting'
+    const version = await installedVersion(server.installDir)
 
     return {
       id: server.id,
@@ -144,8 +164,10 @@ export class ServerManager {
       world: settings.worldName,
       port: settings.port,
       hasPassword: settings.hasPassword,
-      tmlVersion: await this.tmlVersion(server),
-      restartRequired: state === 'running' && main ? await this.modsChangedSinceStart(server, main.pid) : false,
+      game: server.game,
+      version,
+      tmlVersion: server.game === 'tmodloader' ? version : null,
+      restartRequired: server.game === 'tmodloader' && state === 'running' && main ? await this.modsChangedSinceStart(server, main.pid) : false,
       screenSession: server.screenSession,
       lastError: this.errors.get(server.id) ?? null,
     }
@@ -182,10 +204,6 @@ export class ServerManager {
       this.cpuSamples.set(p.pid, { ticks: p.cpuTicks, uptime })
     }
     return elapsed > 0 ? Math.round((used / elapsed) * 1000) / 10 : 0
-  }
-
-  private tmlVersion(server: ServerDefinition) {
-    return installedVersion(server.installDir)
   }
 
   // --- Operazioni -------------------------------------------------------------
@@ -260,24 +278,22 @@ export class ServerManager {
     if (leftover) await quitSession(leftover)
 
     const logFile = await rotateConsoleLog(server)
-    await startSession(server.screenSession, server.installDir, logFile, paths.screenrc(), [
-      'bash',
-      './start-tModLoaderServer.sh',
-      ...server.launchArgs,
-      '-tmlsavedirectory',
-      server.saveDir,
-      '-config',
-      server.configPath,
-    ])
+    const command =
+      server.game === 'terraria'
+        ? [`./${TERRARIA_BINARY}`, ...server.launchArgs.filter((a) => a !== '-nosteam'), '-config', server.configPath, '-noupnp']
+        : ['bash', './start-tModLoaderServer.sh', ...server.launchArgs, '-tmlsavedirectory', server.saveDir, '-config', server.configPath]
+    await startSession(server.screenSession, server.installDir, logFile, paths.screenrc(), command)
 
     const session = (await listSessions()).find((s) => s.name === server.screenSession)
     if (session) await markSession(server, session)
 
     const settings = await readServerConfig(server.configPath)
     const deadline = Date.now() + config.startTimeout * 1000
+    let answeredAt = -1
     while (Date.now() < deadline) {
       await sleep(1000)
       const { main, session: alive } = this.locate(server, await listProcesses(), await listSessions())
+      if (server.game === 'terraria' && alive) answeredAt = await this.answerPrompts(server, alive, answeredAt)
       // Al primo avvio lo script di tModLoader scarica .NET prima di lanciare il server: finché la
       // sessione screen è viva l'avvio è in corso anche se il processo del server non c'è ancora
       if (!main && !alive) throw new Error(`Il server si è chiuso durante l'avvio (vedi ${logFile})`)
@@ -297,9 +313,31 @@ export class ServerManager {
     const deadline = Date.now() + config.stopTimeout * 1000
     while (Date.now() < deadline) {
       await sleep(1000)
-      if (!this.locate(server, await listProcesses(), await listSessions()).main) return
+      if (!this.locate(server, await listProcesses(), await listSessions()).main) {
+        // Il mondo è appena stato salvato: si annota la sua versione per l'installazione
+        await recordWorldRelease(server).catch(() => undefined)
+        return
+      }
     }
     throw new Error(`Il server non si è chiuso entro ${config.stopTimeout}s dopo "exit"`)
+  }
+
+  /**
+   * Il server vanilla chiede password e port forwarding quando non li trova nella configurazione:
+   * si risponde (la password del serverconfig, se c'è; niente UPnP).
+   * Restituisce la posizione del log fino a cui si è già risposto.
+   */
+  private async answerPrompts(server: ServerDefinition, session: ScreenSession, answeredAt: number): Promise<number> {
+    const { data, offset } = await readConsole(server)
+    if (offset === answeredAt) return answeredAt
+    const tail = data.slice(data.lastIndexOf('\n') + 1)
+    for (const [prompt, answer] of STARTUP_PROMPTS) {
+      if (prompt.test(tail)) {
+        await sendLine(session, await answer(server))
+        return offset
+      }
+    }
+    return answeredAt
   }
 
   // --- Spegnimento dell'agent -------------------------------------------------

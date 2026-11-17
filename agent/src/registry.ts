@@ -3,10 +3,11 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { z } from 'zod'
 import { config } from './config.js'
+import { GAMES } from './games.js'
 import { paths } from './paths.js'
 
 /**
- * Definizione di un server tModLoader.
+ * Definizione di un server (Terraria vanilla o tModLoader).
  * Il registry (data/servers.json) è la fonte di verità: Laravel lo legge tramite l'agent.
  */
 export const ServerDefinition = z
@@ -14,15 +15,17 @@ export const ServerDefinition = z
     /** Identificativo usato negli URL: minuscole, numeri e trattini. */
     id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/),
     name: z.string().min(1).max(64),
-    /** Cartella di installazione di tModLoader (contiene start-tModLoaderServer.sh). */
+    /** Gioco: deve corrispondere all'installazione. I server registrati prima del vanilla sono tModLoader. */
+    game: z.enum(GAMES).default('tmodloader'),
+    /** Cartella di installazione (TerrariaServer.bin.x86_64 oppure start-tModLoaderServer.sh). */
     installDir: z.string().refine(isAbsolute, 'deve essere un percorso assoluto'),
-    /** Passato come -tmlsavedirectory: contiene Mods/, ModConfigs/, Worlds/… Identifica univocamente il server. */
+    /** tModLoader: passato come -tmlsavedirectory (Mods/, ModConfigs/, Worlds/…). I mondi stanno in Worlds/ per entrambi i giochi. */
     saveDir: z.string().refine(isAbsolute, 'deve essere un percorso assoluto'),
     /** serverconfig.txt, relativo a installDir oppure assoluto. */
     configFile: z.string().min(1).default('serverconfig.txt'),
     /** Nome della sessione screen; default "tml-<id>". */
     screenSession: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
-    /** Argomenti extra per start-tModLoaderServer.sh. */
+    /** Argomenti extra per il server (-nosteam vale solo per tModLoader e col vanilla viene ignorato). */
     launchArgs: z.array(z.string()).default(['-nosteam']),
   })
   .transform((s) => ({

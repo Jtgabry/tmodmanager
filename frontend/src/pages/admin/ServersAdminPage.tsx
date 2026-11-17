@@ -1,11 +1,21 @@
 import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 import StateBadge from '../../components/StateBadge'
-import { type NewServer, useAdminServerActions, useInstallations, useReleases, useServerDefaults, useServerSettings } from '../../lib/admin'
+import {
+  compareVersions,
+  type NewServer,
+  olderThanWorld,
+  useAdminServerActions,
+  useInstallations,
+  useReleases,
+  useServerDefaults,
+  useServerSettings,
+  worldVersionLabel,
+} from '../../lib/admin'
 import { errorMessage, fieldErrors } from '../../lib/api'
 import { formatBytes, formatDate } from '../../lib/format'
 import { useServers } from '../../lib/servers'
-import type { Installation, Server } from '../../lib/types'
+import { GAME_LABEL, type Installation, type InstallationChoice, type Server, type ServerSettings } from '../../lib/types'
 
 export default function ServersAdminPage() {
   const [creating, setCreating] = useState(false)
@@ -35,7 +45,7 @@ export default function ServersAdminPage() {
         </div>
       </div>
 
-      <TmodloaderSection servers={servers.data ?? []} />
+      <InstallationsSection servers={servers.data ?? []} />
     </section>
   )
 }
@@ -67,7 +77,7 @@ function ServerRow({ server }: { server: Server }) {
           <div className="muted small">
             id <span className="mono">{server.id}</span> · porta {server.port} · max {server.players.max} giocatori ·{' '}
             {server.hasPassword ? 'con password' : <span className="error-text">senza password</span>}
-            {server.tmlVersion && ` · tModLoader ${server.tmlVersion}`}
+            {` · ${GAME_LABEL[server.game]} ${server.version ?? ''}`}
           </div>
         </div>
         <div className="btn-row">
@@ -117,7 +127,129 @@ function SettingsForm({ serverId, running, onDone }: { serverId: string; running
   const settings = useServerSettings(serverId)
   if (settings.isLoading) return <div className="spinner" />
   if (settings.error || !settings.data) return <div className="alert alert-error">{errorMessage(settings.error)}</div>
-  return <SettingsFields key={settings.dataUpdatedAt} data={settings.data} running={running} onDone={onDone} />
+  return (
+    <>
+      <SettingsFields key={settings.dataUpdatedAt} data={settings.data} running={running} onDone={onDone} />
+      <VersionSwitch key={settings.data.id} data={settings.data} running={running} />
+    </>
+  )
+}
+
+const choiceLabel = (c: InstallationChoice) =>
+  `${GAME_LABEL[c.kind]} ${c.version ?? '?'}${c.kind === 'tmodloader' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''}${c.managed ? '' : ` — ${c.path}`}`
+
+/**
+ * Cambio di versione del server, anche tra Terraria vanilla e tModLoader: il mondo resta lo stesso.
+ * Se la versione scelta è più vecchia di quella che ha salvato il mondo si avvisa (e si propone di
+ * ricrearlo), ma il cambio resta permesso.
+ */
+function VersionSwitch({ data, running }: { data: ServerSettings; running: boolean }) {
+  const defaults = useServerDefaults(true)
+  const { update, recreateWorld } = useAdminServerActions()
+  const [target, setTarget] = useState(data.installDir)
+  const [confirmRecreate, setConfirmRecreate] = useState(false)
+  const [switched, setSwitched] = useState<InstallationChoice | null>(null)
+  const choices = defaults.data?.installations ?? []
+  const chosen = choices.find((c) => c.path === target)
+  const changed = target !== data.installDir
+  const tooOld = changed && olderThanWorld(chosen?.worldRelease, data.worldRelease)
+
+  const apply = () =>
+    update.mutate({ id: data.id, installDir: target }, { onSuccess: () => setSwitched(chosen ?? null) })
+
+  return (
+    <div className="pack-form">
+      <h4>Versione</h4>
+      <div className="form-inline">
+        <label className="field">
+          <span>Gioco e versione</span>
+          <select value={target} onChange={(e) => setTarget(e.target.value)} disabled={!defaults.data}>
+            {!choices.some((c) => c.path === data.installDir) && (
+              <option value={data.installDir}>
+                {GAME_LABEL[data.game]} — {data.installDir}
+              </option>
+            )}
+            {choices.map((c) => (
+              <option key={c.path} value={c.path}>
+                {choiceLabel(c)}
+                {c.path === data.installDir ? ' — attuale' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className={tooOld ? 'btn btn-warning btn-sm' : 'btn btn-primary btn-sm'}
+          disabled={!changed || running || update.isPending}
+          title={running ? 'Spegni il server per cambiare versione' : undefined}
+          onClick={apply}
+        >
+          {tooOld ? 'Cambia comunque' : 'Cambia versione'}
+        </button>
+      </div>
+      <p className="muted small">
+        Il mondo resta lo stesso. Con tModLoader compaiono le sezioni Mod, Workshop e Modpack; tornando a Terraria
+        vanilla le mod restano sul disco. I giocatori devono usare lo stesso gioco e la stessa versione del server.
+        {running && <strong> Spegni il server per cambiare versione.</strong>}
+      </p>
+
+      {tooOld && data.worldRelease !== null && (
+        <div className="alert alert-warning">
+          <p>
+            Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}, più
+            recente di quella usata da {chosen ? choiceLabel(chosen) : 'questa versione'}
+            {chosen?.worldRelease ? ` (${worldVersionLabel(chosen.worldRelease)})` : ''}. Il server potrebbe non riuscire ad
+            aprirlo o andare in crash.
+          </p>
+          <p className="small">
+            Puoi ricreare il mondo da capo (quello attuale va nel cestino del server e resta recuperabile) oppure provare
+            comunque ad aprirlo con questa versione.
+          </p>
+          <div className="btn-row">
+            {confirmRecreate ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  disabled={recreateWorld.isPending || running}
+                  onClick={() => recreateWorld.mutate(data.id, { onSettled: () => setConfirmRecreate(false) })}
+                >
+                  Conferma: ricrea il mondo
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmRecreate(false)}>
+                  Annulla
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-danger-outline btn-sm"
+                disabled={running}
+                title={running ? 'Spegni il server prima di ricreare il mondo' : undefined}
+                onClick={() => setConfirmRecreate(true)}
+              >
+                Ricrea il mondo da capo
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {recreateWorld.isSuccess && (
+        <div className="alert alert-success">
+          Mondo spostato nel cestino ({recreateWorld.data.trashed.join(', ') || 'nessun file'}). Al prossimo avvio ne
+          verrà generato uno nuovo con nome, dimensione, difficoltà e seed della configurazione.
+        </div>
+      )}
+      {recreateWorld.isError && <div className="alert alert-error">{errorMessage(recreateWorld.error)}</div>}
+      {update.isError && <div className="alert alert-error">{errorMessage(update.error)}</div>}
+      {switched && (
+        <div className="alert alert-success">
+          Ora il server usa {choiceLabel(switched)}: vale dal prossimo avvio.
+          {switched.kind === 'tmodloader' && ' Nella barra laterale del server ci sono le sezioni Mod, Workshop e Modpack.'}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function SettingsFields({
@@ -247,7 +379,10 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
   const conflictField = (create.error as { response?: { data?: { details?: { field?: string } } } } | null)?.response?.data?.details?.field
 
   const effectivePort = port === '' ? (defaults.data?.port ?? 7777) : port
-  const effectiveInstall = installDir || defaults.data?.installDirs[0] || ''
+  const choices = defaults.data?.installations ?? []
+  // Di default i server nascono vanilla (Terraria); tModLoader si sceglie qui o dopo, dalle impostazioni
+  const effectiveInstall = installDir || choices.find((c) => c.kind === 'terraria')?.path || choices[0]?.path || ''
+  const chosen = choices.find((c) => c.path === effectiveInstall)
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -261,7 +396,7 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
         password,
         motd,
         world: { ...world, name: world.name || name },
-        copyModsFrom: copyModsFrom || null,
+        copyModsFrom: chosen?.kind === 'tmodloader' ? copyModsFrom || null : null,
       },
       { onSuccess: setCreated },
     )
@@ -394,26 +529,26 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
         </label>
       </div>
 
-      <h3>Mod e tModLoader</h3>
+      <h3>Versione</h3>
       <div className="form-inline">
         <label className="field">
-          <span>Copia mod e loro configurazioni da</span>
-          <select value={copyModsFrom} onChange={(e) => setCopyModsFrom(e.target.value)}>
-            <option value="">Nessuno (server senza mod)</option>
-            {servers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
+          <span>Gioco e versione</span>
+          <select value={effectiveInstall} onChange={(e) => setInstallDir(e.target.value)} disabled={!choices.length}>
+            {choices.map((c) => (
+              <option key={c.path} value={c.path}>
+                {choiceLabel(c)}
               </option>
             ))}
           </select>
         </label>
-        {(defaults.data?.installDirs.length ?? 0) > 1 && (
+        {chosen?.kind === 'tmodloader' && (
           <label className="field">
-            <span>Installazione di tModLoader</span>
-            <select value={effectiveInstall} onChange={(e) => setInstallDir(e.target.value)}>
-              {defaults.data?.installDirs.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+            <span>Copia mod e loro configurazioni da</span>
+            <select value={copyModsFrom} onChange={(e) => setCopyModsFrom(e.target.value)}>
+              <option value="">Nessuno (server senza mod)</option>
+              {servers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </select>
@@ -422,13 +557,16 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
       </div>
       {defaults.data && !effectiveInstall ? (
         <div className="alert alert-warning">
-          tModLoader non è ancora installato: installalo dalla sezione <strong>tModLoader</strong> qui sotto, poi crea il
-          server.
+          Nessun gioco installato: installa Terraria (o tModLoader) dalla sezione <strong>Installazioni</strong> qui sotto,
+          poi crea il server.
         </div>
       ) : (
         <p className="muted small">
-          Il server userà l'installazione di tModLoader <span className="mono">{effectiveInstall || '—'}</span> (la stessa
-          degli altri server: aggiornandola si aggiornano tutti). Il mondo viene generato al primo avvio.
+          {chosen?.kind === 'tmodloader'
+            ? 'Server tModLoader: avrà le sezioni Mod, Workshop e Modpack.'
+            : 'Server Terraria vanilla: per usare le mod potrai passare a tModLoader dalle impostazioni del server, con lo stesso mondo.'}{' '}
+          L'installazione è condivisa con gli altri server che la usano: aggiornandola si aggiornano tutti. Il mondo viene
+          generato al primo avvio.
         </p>
       )}
 
@@ -445,14 +583,17 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
   )
 }
 
-// --- tModLoader ----------------------------------------------------------------------------------
+// --- Installazioni (Terraria e tModLoader) -------------------------------------------------------
 
-function TmodloaderSection({ servers }: { servers: Server[] }) {
+function InstallationsSection({ servers }: { servers: Server[] }) {
   const installations = useInstallations()
 
   return (
     <div className="card">
-      <h2>tModLoader</h2>
+      <h2>Installazioni</h2>
+      <p className="muted small">
+        Terraria vanilla e tModLoader. Ogni server usa una di queste installazioni (si sceglie dalle sue impostazioni).
+      </p>
       {installations.isLoading && <div className="spinner" />}
       {installations.error && <div className="alert alert-error">{errorMessage(installations.error)}</div>}
       <div className="stack">
@@ -471,19 +612,30 @@ const PHASES: Record<string, string> = {
   starting: 'Riavvio dei server',
 }
 
+const OTHER_VERSION = '__other'
+
 function InstallationCard({ installation, servers }: { installation: Installation; servers: Server[] }) {
-  const releases = useReleases()
-  const { updateTml } = useAdminServerActions()
+  const releases = useReleases(installation.kind)
+  const { updateTml, recreateWorld } = useAdminServerActions()
   const [version, setVersion] = useState('')
+  const [customVersion, setCustomVersion] = useState('')
   const [restartServers, setRestartServers] = useState(true)
   const [confirm, setConfirm] = useState<{ version: string } | { backup: string; label: string } | null>(null)
   const job = installation.job
   const running = job !== null && job.phase !== 'done' && job.phase !== 'error'
+  const label = GAME_LABEL[installation.kind]
+  const isTerraria = installation.kind === 'terraria'
 
   const latestStable = releases.data?.find((r) => !r.prerelease)
-  const selected = version || latestStable?.version || ''
+  const selected = version === OTHER_VERSION ? customVersion.trim() : version || latestStable?.version || ''
   const affected = servers.filter((s) => installation.servers.some((x) => x.id === s.id) && s.state !== 'stopped')
   const players = affected.reduce((sum, s) => sum + s.players.online, 0)
+  const updateAvailable =
+    latestStable && installation.installed && installation.version && compareVersions(latestStable.version, installation.version) > 0
+
+  // Mondi salvati con una versione più recente di quella che si sta per installare
+  const confirmRelease = confirm && 'version' in confirm ? releases.data?.find((r) => r.version === confirm.version) : undefined
+  const newerWorlds = installation.servers.filter((s) => olderThanWorld(confirmRelease?.worldRelease, s.worldRelease))
 
   const start = () => {
     if (!confirm) return
@@ -497,15 +649,18 @@ function InstallationCard({ installation, servers }: { installation: Installatio
     <article className="pack">
       <header>
         <div>
-          <strong className="mono">{installation.path}</strong>
+          <strong>{label}</strong> <span className="muted small mono">{installation.path}</span>
           <div className="muted small">
             {installation.installed ? (
               <>
                 Versione installata: <strong>{installation.version ?? 'sconosciuta'}</strong>
-                {installation.servers.length > 0 ? ` · usata da ${installation.servers.map((s) => s.name).join(', ')}` : ' · nessun server la usa ancora'}
+                {!isTerraria && installation.gameVersion && ` (basata su Terraria ${installation.gameVersion})`}
+                {installation.servers.length > 0 ? ` · usata da ${installation.servers.map((s) => s.name).join(', ')}` : ' · nessun server la usa'}
               </>
+            ) : isTerraria ? (
+              'Terraria non è ancora installato: scegli una versione e installala per creare server vanilla.'
             ) : (
-              'tModLoader non è ancora installato: scegli una versione e installala per poter creare i server.'
+              'tModLoader non è ancora installato: installalo per creare server con le mod (o farci passare quelli vanilla).'
             )}
           </div>
         </div>
@@ -532,16 +687,25 @@ function InstallationCard({ installation, servers }: { installation: Installatio
           <div className="form-inline">
             <label className="field">
               <span>Versione da installare</span>
-              <select value={selected} onChange={(e) => setVersion(e.target.value)} disabled={!releases.data}>
-                {releases.data?.map((r) => (
+              <select value={version || selected} onChange={(e) => setVersion(e.target.value)} disabled={!releases.data && !isTerraria}>
+                {releases.data?.map((r, index) => (
                   <option key={r.version} value={r.version}>
                     {r.version}
                     {r.prerelease ? ' (beta)' : ''}
-                    {installation.installed && r.version === installation.version ? ' — installata' : ''} · {formatDate(r.publishedAt)}
+                    {isTerraria && index === 0 ? ' (ultima)' : ''}
+                    {installation.installed && r.version === installation.version ? ' — installata' : ''}
+                    {r.publishedAt ? ` · ${formatDate(r.publishedAt)}` : ''}
                   </option>
                 ))}
+                {isTerraria && <option value={OTHER_VERSION}>Altra versione…</option>}
               </select>
             </label>
+            {version === OTHER_VERSION && (
+              <label className="field">
+                <span>Versione (es. 1.4.4.9)</span>
+                <input pattern="1(\.\d){3,5}" placeholder="1.4.4.9" value={customVersion} onChange={(e) => setCustomVersion(e.target.value)} />
+              </label>
+            )}
             {installation.servers.length > 0 && (
               <label className="checkbox">
                 <input type="checkbox" checked={restartServers} onChange={(e) => setRestartServers(e.target.checked)} />
@@ -551,19 +715,26 @@ function InstallationCard({ installation, servers }: { installation: Installatio
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              disabled={!selected || (installation.installed && selected === installation.version) || updateTml.isPending}
+              disabled={
+                !selected ||
+                (version === OTHER_VERSION && !/^1(\.\d){3,5}$/.test(selected)) ||
+                (installation.installed && selected === installation.version) ||
+                updateTml.isPending
+              }
               onClick={() => setConfirm({ version: selected })}
             >
               {installation.installed ? 'Aggiorna' : 'Installa'}
             </button>
           </div>
-          {releases.error && <p className="error-text">Release non disponibili: {errorMessage(releases.error)}</p>}
-          {latestStable && installation.installed && installation.version && latestStable.version !== installation.version && (
+          {releases.error && <p className="error-text">Versioni non disponibili: {errorMessage(releases.error)}</p>}
+          {updateAvailable && (
             <p className="small">
-              È disponibile la versione stabile <strong>{latestStable.version}</strong>.{' '}
+              È disponibile la versione {isTerraria ? '' : 'stabile '}
+              <strong>{latestStable.version}</strong>.{' '}
               <a href={latestStable.url} target="_blank" rel="noreferrer">
                 Note di rilascio
               </a>
+              {isTerraria && ' I giocatori devono aggiornare Terraria alla stessa versione per entrare.'}
             </p>
           )}
 
@@ -599,8 +770,8 @@ function InstallationCard({ installation, servers }: { installation: Installatio
           <p>
             {'version' in confirm
               ? installation.installed
-                ? `Aggiornare tModLoader alla versione ${confirm.version}?`
-                : `Installare tModLoader ${confirm.version}?`
+                ? `Aggiornare ${label} alla versione ${confirm.version}?`
+                : `Installare ${label} ${confirm.version}?`
               : `Tornare alla versione ${confirm.label}?`}{' '}
             {!installation.installed ? null : affected.length > 0 ? (
               <>
@@ -612,14 +783,47 @@ function InstallationCard({ installation, servers }: { installation: Installatio
               'Nessun server acceso.'
             )}
           </p>
+          {newerWorlds.length > 0 && confirmRelease?.worldRelease && (
+            <div className="small">
+              <p>
+                <strong>Attenzione:</strong> questi mondi sono stati salvati con una versione più recente di{' '}
+                {worldVersionLabel(confirmRelease.worldRelease)} e potrebbero non aprirsi o far andare in crash il server.
+                Puoi ricrearli da capo (il mondo attuale va nel cestino) oppure installare comunque.
+              </p>
+              <ul className="upload-list">
+                {newerWorlds.map((w) => {
+                  const on = servers.some((s) => s.id === w.id && s.state !== 'stopped')
+                  return (
+                    <li key={w.id} className="upload-row">
+                      <span>
+                        <strong>{w.name}</strong> — {worldVersionLabel(w.worldRelease ?? 0)}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-danger-outline btn-sm"
+                        disabled={on || recreateWorld.isPending}
+                        title={on ? 'Spegni il server prima di ricreare il mondo' : 'Il mondo attuale va nel cestino del server'}
+                        onClick={() => recreateWorld.mutate(w.id)}
+                      >
+                        Ricrea il mondo da capo
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+              {recreateWorld.isError && <p className="error-text">{errorMessage(recreateWorld.error)}</p>}
+            </div>
+          )}
           <p className="small">
             {installation.installed &&
-              'Mondi e mod non vengono toccati; le mod potrebbero richiedere un aggiornamento per la nuova versione.'}
-            {'version' in confirm && ` Download di circa ${formatBytes(releases.data?.find((r) => r.version === confirm.version)?.size ?? 0)}.`}
+              (isTerraria
+                ? 'I mondi non vengono toccati. I giocatori devono usare la stessa versione di Terraria del server.'
+                : 'Mondi e mod non vengono toccati; le mod potrebbero richiedere un aggiornamento per la nuova versione.')}
+            {'version' in confirm && confirmRelease?.size ? ` Download di circa ${formatBytes(confirmRelease.size)}.` : ''}
           </p>
           <div className="btn-row">
             <button type="button" className="btn btn-warning btn-sm" disabled={updateTml.isPending} onClick={start}>
-              Conferma
+              {newerWorlds.length > 0 ? 'Installa comunque' : 'Conferma'}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>
               Annulla

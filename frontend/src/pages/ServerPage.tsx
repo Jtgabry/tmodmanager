@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, useLocation, useParams } from 'react-router-dom'
+import { Navigate, Outlet, useLocation, useParams } from 'react-router-dom'
 import ServerStats from '../components/ServerStats'
 import { errorMessage } from '../lib/api'
 import { formatDate } from '../lib/format'
@@ -16,6 +16,8 @@ const TITLES: Record<string, string> = {
   trash: 'Cestino',
 }
 
+const MOD_SECTIONS = ['mods', 'workshop', 'modpacks']
+
 /**
  * Contenitore delle pagine di un server. Nome, stato e pulsanti di accensione
  * stanno nella sidebar (vedi Layout); qui solo titolo della pagina e avvisi.
@@ -30,6 +32,8 @@ export default function ServerPage() {
   if (error || !server) return <div className="alert alert-error">{errorMessage(error)}</div>
 
   const section = pathname.split('/')[3] ?? ''
+  // Mod, Workshop e modpack solo per tModLoader (es. dopo il passaggio a vanilla con la pagina aperta)
+  if (server.game !== 'tmodloader' && MOD_SECTIONS.includes(section)) return <Navigate to={`/servers/${server.id}`} replace />
   const title = TITLES[section] ?? 'Panoramica'
 
   return (

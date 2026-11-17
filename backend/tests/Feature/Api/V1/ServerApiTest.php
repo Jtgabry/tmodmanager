@@ -62,7 +62,23 @@ class ServerApiTest extends TestCase
 
         $this->getJson(route('api.v1.servers.show', 'alfa'))
             ->assertOk()
-            ->assertJsonPath('data.tmlVersion', '2026.09.3.1');
+            ->assertJsonPath('data.tmlVersion', '2026.09.3.1')
+            ->assertJsonPath('data.game', 'tmodloader')
+            ->assertJsonPath('data.version', '2026.09.3.1');
+    }
+
+    public function test_show_returns_a_vanilla_server(): void
+    {
+        $this->actingAsUser();
+        Http::fake([self::AGENT_URL.'/servers/alfa' => Http::response(['data' => $this->agentServer([
+            'game' => 'terraria', 'version' => '1.4.5.8', 'tmlVersion' => null,
+        ])])]);
+
+        $this->getJson(route('api.v1.servers.show', 'alfa'))
+            ->assertOk()
+            ->assertJsonPath('data.game', 'terraria')
+            ->assertJsonPath('data.version', '1.4.5.8')
+            ->assertJsonPath('data.tmlVersion', null);
     }
 
     public function test_show_returns_not_found_when_the_agent_does_not_know_the_server(): void

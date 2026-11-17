@@ -127,9 +127,10 @@ Route::prefix('v1')
 
                 Route::get('/servers/defaults', [AdminServerController::class, 'defaults'])->name('servers.defaults');
                 Route::apiResource('servers', AdminServerController::class)->only(['store', 'show', 'update', 'destroy']);
+                Route::post('/servers/{server}/world/recreate', [AdminServerController::class, 'recreateWorld'])->name('servers.world.recreate');
 
                 Route::get('/installations', [InstallationController::class, 'index'])->name('installations.index');
-                Route::get('/tmodloader/releases', [InstallationController::class, 'releases'])->name('tmodloader.releases');
+                Route::get('/releases/{game}', [InstallationController::class, 'releases'])->whereIn('game', ['terraria', 'tmodloader'])->name('releases');
                 Route::post('/installations/{installation}/update', [InstallationController::class, 'update'])->name('installations.update');
             });
         });

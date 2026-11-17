@@ -46,6 +46,16 @@ export async function readServerConfig(path: string): Promise<ServerSettings> {
   }
 }
 
+/** Password impostata in serverconfig.txt ('' se nessuna). Non va mai restituita da un'API. */
+export async function readConfigPassword(path: string): Promise<string> {
+  const text = await readFile(path, 'utf8').catch(() => '')
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (line.toLowerCase().startsWith('password=')) return line.slice('password='.length).trim()
+  }
+  return ''
+}
+
 /** Versione di tModLoader dalla prima riga del log ("Starting tModLoader server 1.4.4.9+2026.09.3.1|…"). */
 export function parseTmlVersion(logHead: string): string | null {
   return logHead.match(/Starting tModLoader server [\d.]+\+v?([\d.]+)/)?.[1] ?? null

@@ -11,6 +11,7 @@ import { config } from './config.js'
  *   ├── pending-enable.json      mod del Workshop in attesa di essere abilitate
  *   ├── resume-servers.json      server da riaccendere dopo uno spegnimento dell'agent
  *   ├── database.sqlite          database del sito (Laravel)
+ *   ├── terraria/Terraria/       dedicated server di Terraria vanilla (+ Terraria-v<versione>: backup)
  *   ├── tmodloader/tModLoader/   installazione di tModLoader (+ tModLoader-v<versione>: backup)
  *   ├── steamcmd/                steamcmd (scaricato al primo uso)
  *   ├── servers/<id>/
@@ -38,6 +39,8 @@ export const paths = {
   screenrc: () => join(config.dataDir, 'cache', 'screenrc'),
   workshopDownloads: () => join(config.dataDir, 'cache', 'workshop'),
 
+  /** Installazione di Terraria vanilla gestita dal pannello. */
+  terrariaInstall: () => join(config.dataDir, 'terraria', 'Terraria'),
   /** Installazione di tModLoader gestita dal pannello. */
   tmlInstall: () => join(config.dataDir, 'tmodloader', 'tModLoader'),
   steamcmdDir: () => join(config.dataDir, 'steamcmd'),

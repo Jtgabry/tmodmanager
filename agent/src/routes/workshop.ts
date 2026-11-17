@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { MOD_NAME } from '../mods.js'
+import { modsOnlyForTmodloader } from './modsOnly.js'
 import { findServer, type ServerDefinition } from '../registry.js'
 import {
   applyPending,
@@ -31,6 +32,7 @@ const truthy = (v: unknown) => v === true || v === 'true' || v === '1'
 
 /** Mod dello Steam Workshop: aggiornamenti, collegamenti, ricerca, installazione e mod in attesa di abilitazione. */
 export async function workshopRoutes(app: FastifyInstance) {
+  modsOnlyForTmodloader(app)
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof WorkshopError) {
       const error = { 404: 'not_found', 409: 'conflict', 422: 'invalid', 502: 'upstream', 503: 'unavailable' }[err.status]

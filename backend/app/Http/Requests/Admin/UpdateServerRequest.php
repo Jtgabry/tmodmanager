@@ -18,6 +18,8 @@ class UpdateServerRequest extends FormRequest
             // Assente = invariata; stringa vuota = nessuna password
             'password' => ['sometimes', 'nullable', 'string', 'max:64', 'regex:/^[^\r\n\x00]*$/'],
             'motd' => ['sometimes', 'nullable', 'string', 'max:200', 'regex:/^[^\r\n\x00]*$/'],
+            // Cambio di versione: un'altra installazione, anche dell'altro gioco (Terraria ↔ tModLoader)
+            'installDir' => ['sometimes', 'string', 'max:255'],
         ];
     }
 

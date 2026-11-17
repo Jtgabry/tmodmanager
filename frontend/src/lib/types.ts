@@ -14,6 +14,9 @@ export type User = {
 }
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'stopping'
+/** Terraria vanilla o tModLoader (mod, Workshop e modpack solo con tModLoader). */
+export type Game = 'terraria' | 'tmodloader'
+export const GAME_LABEL: Record<Game, string> = { terraria: 'Terraria', tmodloader: 'tModLoader' }
 export type PowerAction = 'start' | 'stop' | 'restart'
 
 export type Server = {
@@ -31,6 +34,9 @@ export type Server = {
   world: string | null
   port: number
   hasPassword: boolean
+  game: Game
+  /** Versione installata del gioco (Terraria o tModLoader). */
+  version: string | null
   tmlVersion: string | null
   /** Mod cambiate dopo l'avvio: servono un riavvio per essere applicate. */
   restartRequired: boolean
@@ -156,7 +162,10 @@ export type ModpackImportResult = {
 export type ServerSettings = {
   id: string
   name: string
+  game: Game
   installDir: string
+  /** Versione del mondo attuale (null se non ancora generato). */
+  worldRelease: number | null
   saveDir: string
   configPath: string
   launchArgs: string[]
@@ -185,12 +194,17 @@ export type TmlJob = {
 export type Installation = {
   id: string
   path: string
+  kind: Game
   /** L'installazione predefinita del pannello (nella cartella dati). */
   managed: boolean
-  /** false = tModLoader non ancora installato in questa cartella. */
+  /** false = gioco non ancora installato in questa cartella. */
   installed: boolean
   version: string | null
-  servers: { id: string; name: string }[]
+  /** Versione di Terraria (per tModLoader: quella su cui è basato). */
+  gameVersion: string | null
+  /** Versione dei mondi che sa aprire; null se non nota. */
+  worldRelease: number | null
+  servers: { id: string; name: string; worldRelease: number | null }[]
   backups: { path: string; version: string | null; modifiedAt: string }[]
   job: TmlJob | null
 }
@@ -198,10 +212,15 @@ export type Installation = {
 export type TmlRelease = {
   version: string
   prerelease: boolean
-  publishedAt: string
+  publishedAt: string | null
   url: string
-  size: number
+  size: number | null
+  /** Versione dei mondi salvati da questa versione, se nota. */
+  worldRelease: number | null
 }
+
+/** Installazione utilizzabile da un server (form di creazione e cambio di versione). */
+export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed'>
 
 // --- Steam Workshop ----------------------------------------------------------------------------
 

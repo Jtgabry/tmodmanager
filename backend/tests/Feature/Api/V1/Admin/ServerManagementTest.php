@@ -35,6 +35,7 @@ class ServerManagementTest extends TestCase
         $this->postJson(route('api.v1.admin.servers.store'), $this->validServer())->assertForbidden();
         $this->patchJson(route('api.v1.admin.servers.update', 'alfa'), ['port' => 7778])->assertForbidden();
         $this->deleteJson(route('api.v1.admin.servers.destroy', 'alfa'))->assertForbidden();
+        $this->postJson(route('api.v1.admin.servers.world.recreate', 'alfa'))->assertForbidden();
 
         Http::assertNothingSent();
     }
@@ -94,6 +95,39 @@ class ServerManagementTest extends TestCase
 
         Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
             && $request->data() === ['maxPlayers' => 10, 'password' => '']);
+    }
+
+    public function test_switches_the_server_to_another_installation(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+        Http::fake([self::AGENT_URL.'/admin/servers/alfa' => Http::response(['data' => ['game' => 'tmodloader']])]);
+
+        $this->patchJson(route('api.v1.admin.servers.update', 'alfa'), ['installDir' => '/srv/tmm-data/tmodloader/tModLoader'])
+            ->assertOk()
+            ->assertJsonPath('data.game', 'tmodloader');
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && $request->data() === ['installDir' => '/srv/tmm-data/tmodloader/tModLoader']);
+    }
+
+    public function test_recreates_the_world(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+        Http::fake([self::AGENT_URL.'/admin/servers/alfa/world/recreate' => Http::response(['data' => ['trashed' => ['Alfa.wld']]])]);
+
+        $this->postJson(route('api.v1.admin.servers.world.recreate', 'alfa'))
+            ->assertOk()
+            ->assertJsonPath('data.trashed.0', 'Alfa.wld');
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'POST');
+    }
+
+    public function test_the_world_of_a_running_server_is_not_recreated(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+        Http::fake([self::AGENT_URL.'/admin/servers/alfa/world/recreate' => Http::response(['error' => 'conflict', 'message' => 'Spegni il server prima di ricreare il mondo'], 409)]);
+
+        $this->postJson(route('api.v1.admin.servers.world.recreate', 'alfa'))->assertConflict();
     }
 
     public function test_removing_a_server_drops_its_permissions(): void

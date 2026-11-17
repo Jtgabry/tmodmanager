@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import type { Installation, ServerSettings, TmlRelease } from './types'
+import type { Game, Installation, InstallationChoice, ServerSettings, TmlRelease } from './types'
 
 export type NewServer = {
   id: string
@@ -14,7 +14,7 @@ export type NewServer = {
   copyModsFrom: string | null
 }
 
-export type ServerSettingsInput = Partial<Pick<ServerSettings, 'name' | 'port' | 'maxPlayers' | 'motd'>> & { password?: string }
+export type ServerSettingsInput = Partial<Pick<ServerSettings, 'name' | 'port' | 'maxPlayers' | 'motd' | 'installDir'>> & { password?: string }
 
 const busy = (list: Installation[] | undefined) => list?.some((i) => i.job && !['done', 'error'].includes(i.job.phase))
 
@@ -27,10 +27,10 @@ export function useInstallations() {
   })
 }
 
-export function useReleases() {
+export function useReleases(game: Game) {
   return useQuery({
-    queryKey: ['admin', 'tml-releases'],
-    queryFn: async () => (await api.get<{ data: TmlRelease[] }>('/admin/tmodloader/releases')).data.data,
+    queryKey: ['admin', 'releases', game],
+    queryFn: async () => (await api.get<{ data: TmlRelease[] }>(`/admin/releases/${game}`)).data.data,
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -38,7 +38,7 @@ export function useReleases() {
 export function useServerDefaults(enabled: boolean) {
   return useQuery({
     queryKey: ['admin', 'server-defaults'],
-    queryFn: async () => (await api.get<{ data: { port: number; installDirs: string[]; ports: { min: number; max: number } | null } }>('/admin/servers/defaults')).data.data,
+    queryFn: async () => (await api.get<{ data: { port: number; installations: InstallationChoice[]; ports: { min: number; max: number } | null } }>('/admin/servers/defaults')).data.data,
     enabled,
   })
 }
@@ -72,10 +72,46 @@ export function useAdminServerActions() {
     mutationFn: async (id: string) => (await api.delete<{ data: { saveDir: string } }>(`/admin/servers/${id}`)).data.data,
     onSuccess: refresh,
   })
+  const recreateWorld = useMutation({
+    mutationFn: async (id: string) => (await api.post<{ data: { trashed: string[] } }>(`/admin/servers/${id}/world/recreate`)).data.data,
+    onSuccess: refresh,
+  })
   const updateTml = useMutation({
     mutationFn: async ({ id, ...body }: { id: string; restartServers: boolean } & ({ version: string } | { backup: string })) =>
       (await api.post(`/admin/installations/${id}/update`, body)).data,
     onSettled: refresh,
   })
-  return { create, update, remove, updateTml }
+  return { create, update, remove, recreateWorld, updateTml }
+}
+
+/** Versione del mondo (primi byte del .wld) → versione di Terraria che lo ha salvato (tabella di TEdit). */
+const WORLD_VERSIONS: [number, string][] = [
+  [279, '1.4.4.9'],
+  [315, '1.4.5.0–1.4.5.2'],
+  [316, '1.4.5.3'],
+  [317, '1.4.5.4'],
+  [318, '1.4.5.5'],
+  [319, '1.4.5.6'],
+  [325, '1.4.5.7'],
+  [326, '1.4.5.8'],
+]
+
+export function worldVersionLabel(release: number): string {
+  const known = WORLD_VERSIONS.find(([r]) => r === release)
+  return known ? `Terraria ${known[1]}` : `versione del mondo ${release}`
+}
+
+/** La versione di destinazione è più vecchia di quella che ha salvato il mondo (se entrambe note). */
+export const olderThanWorld = (target: number | null | undefined, world: number | null | undefined) =>
+  target !== null && target !== undefined && world !== null && world !== undefined && target < world
+
+/** Confronto tra versioni "1.4.5.8" / "2026.09.3.1" (numerico per parti). */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (d !== 0) return d
+  }
+  return 0
 }

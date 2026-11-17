@@ -38,13 +38,25 @@ class InstallationTest extends TestCase
         Sanctum::actingAs(User::factory()->admin()->create());
         Http::fake([
             self::AGENT_URL.'/admin/installations' => Http::response(['data' => [['id' => 'abcdef12', 'version' => '2026.09.3.1']]]),
-            self::AGENT_URL.'/admin/tml/releases*' => Http::response(['data' => [['version' => '2026.10.2.3', 'prerelease' => true]]]),
+            self::AGENT_URL.'/admin/releases/tmodloader*' => Http::response(['data' => [['version' => '2026.10.2.3', 'prerelease' => true]]]),
+            self::AGENT_URL.'/admin/releases/terraria*' => Http::response(['data' => [['version' => '1.4.5.8', 'worldRelease' => 326]]]),
         ]);
 
         $this->getJson(route('api.v1.admin.installations.index'))->assertOk()->assertJsonPath('data.0.version', '2026.09.3.1');
-        $this->getJson(route('api.v1.admin.tmodloader.releases', ['refresh' => 1]))->assertOk()->assertJsonPath('data.0.prerelease', true);
+        $this->getJson(route('api.v1.admin.releases', ['game' => 'tmodloader', 'refresh' => 1]))->assertOk()->assertJsonPath('data.0.prerelease', true);
+        $this->getJson(route('api.v1.admin.releases', 'terraria'))->assertOk()->assertJsonPath('data.0.worldRelease', 326);
 
-        Http::assertSent(fn (Request $request): bool => $request->url() === self::AGENT_URL.'/admin/tml/releases?refresh=1');
+        Http::assertSent(fn (Request $request): bool => $request->url() === self::AGENT_URL.'/admin/releases/tmodloader?refresh=1');
+        Http::assertSent(fn (Request $request): bool => $request->url() === self::AGENT_URL.'/admin/releases/terraria');
+    }
+
+    public function test_releases_of_an_unknown_game_are_not_found(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+
+        $this->getJson('/api/v1/admin/releases/minecraft')->assertNotFound();
+
+        Http::assertNothingSent();
     }
 
     public function test_starts_an_update(): void
