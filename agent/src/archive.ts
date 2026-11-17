@@ -114,6 +114,11 @@ export async function hasArchivedVersion(server: ServerDefinition, name: string,
   return (await archivedInfo(versionPath(server, name, version)))?.info.name === name
 }
 
+/** Percorso del .tmod di una versione archiviata (null se non c'è o non è valida). */
+export async function archivedVersionPath(server: ServerDefinition, name: string, version: string): Promise<string | null> {
+  return (await hasArchivedVersion(server, name, version)) ? versionPath(server, name, version) : null
+}
+
 /** rename, con ripiego su copia+cancellazione tra filesystem diversi. */
 async function moveFile(from: string, to: string) {
   try {

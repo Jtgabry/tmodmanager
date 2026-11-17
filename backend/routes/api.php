@@ -99,6 +99,7 @@ Route::prefix('v1')
             Route::post('/servers/{server}/modpacks', [ServerModpackController::class, 'store'])->name('servers.modpacks.store');
             Route::put('/servers/{server}/modpacks/{modpack}', [ServerModpackController::class, 'update'])->name('servers.modpacks.update');
             Route::delete('/servers/{server}/modpacks/{modpack}', [ServerModpackController::class, 'destroy'])->name('servers.modpacks.destroy');
+            Route::get('/servers/{server}/modpacks/{modpack}/export', [ServerModpackController::class, 'export'])->name('servers.modpacks.export');
             Route::post('/servers/{server}/modpacks/{modpack}/activation', [ServerModpackActivationController::class, 'store'])->name('servers.modpacks.activate');
             Route::delete('/servers/{server}/modpacks/{modpack}/activation', [ServerModpackActivationController::class, 'destroy'])->name('servers.modpacks.deactivate');
 

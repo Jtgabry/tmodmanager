@@ -9,6 +9,7 @@ use App\Services\Agent\AgentClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ServerModpackController extends Controller
 {
@@ -42,5 +43,15 @@ class ServerModpackController extends Controller
         $this->agent->json('delete', "/servers/{$server}/modpacks/{$modpack}");
 
         return response()->noContent();
+    }
+
+    /**
+     * Il pack come cartella di tModLoader (Mods/ + ModConfigs/) in .zip; il nome lo decide l'agent.
+     */
+    public function export(string $server, string $modpack): StreamedResponse
+    {
+        Gate::authorize('server', [$server, ServerAbility::Mods]);
+
+        return $this->agent->download("/servers/{$server}/modpacks/{$modpack}/export");
     }
 }

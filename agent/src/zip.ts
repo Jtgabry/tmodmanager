@@ -16,6 +16,7 @@ const MAX_SIZE = 0xffffffff
 const VERSION = 20
 const UTF8 = 0x0800
 const DEFLATE = 8
+const STORE = 0
 
 /** Data e ora nel formato MS-DOS usato dagli zip (ora locale, risoluzione 2 secondi). */
 function dosDateTime(date: Date) {
@@ -26,7 +27,8 @@ function dosDateTime(date: Date) {
   }
 }
 
-export type ZipEntry = { name: string; path: string }
+/** `store`: il file va nell'archivio così com'è (per file già compressi, come i .tmod). */
+export type ZipEntry = { name: string; path: string; store?: boolean }
 
 /** Crea `target` con i file indicati (nome nell'archivio → file su disco) e un commento facoltativo. */
 export async function writeZip(target: string, entries: ZipEntry[], comment = '') {
@@ -37,7 +39,8 @@ export async function writeZip(target: string, entries: ZipEntry[], comment = ''
     for (const entry of entries) {
       const data = await readFile(entry.path)
       if (data.length > MAX_SIZE) throw new Error(`${entry.name} è troppo grande per uno zip (oltre 4 GB)`)
-      const compressed = await deflate(data, { level: 6 })
+      const method = entry.store ? STORE : DEFLATE
+      const compressed = entry.store ? data : await deflate(data, { level: 6 })
       const crc = crc32(data)
       const name = Buffer.from(entry.name, 'utf8')
       const { time, date } = dosDateTime((await stat(entry.path)).mtime)
@@ -46,7 +49,7 @@ export async function writeZip(target: string, entries: ZipEntry[], comment = ''
       local.writeUInt32LE(LOCAL_HEADER, 0)
       local.writeUInt16LE(VERSION, 4)
       local.writeUInt16LE(UTF8, 6)
-      local.writeUInt16LE(DEFLATE, 8)
+      local.writeUInt16LE(method, 8)
       local.writeUInt16LE(time, 10)
       local.writeUInt16LE(date, 12)
       local.writeUInt32LE(crc, 14)
@@ -62,7 +65,7 @@ export async function writeZip(target: string, entries: ZipEntry[], comment = ''
       header.writeUInt16LE((3 << 8) | VERSION, 4) // creato su Unix: i permessi qui sotto valgono
       header.writeUInt16LE(VERSION, 6)
       header.writeUInt16LE(UTF8, 8)
-      header.writeUInt16LE(DEFLATE, 10)
+      header.writeUInt16LE(method, 10)
       header.writeUInt16LE(time, 12)
       header.writeUInt16LE(date, 14)
       header.writeUInt32LE(crc, 16)

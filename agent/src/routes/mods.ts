@@ -15,6 +15,7 @@ import {
   updateModpack,
 } from '../modpacks.js'
 import { deleteMod, disableMods, enableMods, listMods, MOD_NAME, ModError, modPath, uploadMod, withServerLock } from '../mods.js'
+import { exportModpackZip } from '../modpackExport.js'
 import { importFromFolder, importUpload, listImportable } from '../modpackImport.js'
 import { modsOnlyForTmodloader } from './modsOnly.js'
 import { findServer, type ServerDefinition } from '../registry.js'
@@ -185,6 +186,21 @@ export async function modRoutes(app: FastifyInstance) {
     if (!s) return
     await withServerLock(s, () => deleteModpack(s, String(req.params.packId)))
     return reply.code(204).send()
+  })
+
+  // Cartella del pack per tModLoader (Mods/ + ModConfigs/) in .zip, creata al momento e poi cancellata
+  app.get<Params>('/servers/:id/modpacks/:packId/export', async (req, reply) => {
+    const s = await server(req.params.id, reply)
+    if (!s) return
+    const zip = await withServerLock(s, () => exportModpackZip(s, String(req.params.packId)))
+    const stream = createReadStream(zip.path)
+    stream.on('close', () => void zip.cleanup())
+    const ascii = zip.filename.replace(/[^\x20-\x7e]|"/g, '_')
+    return reply
+      .header('Content-Type', 'application/zip')
+      .header('Content-Length', zip.size)
+      .header('Content-Disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(zip.filename)}`)
+      .send(stream)
   })
 
   // --- Importazione dei modpack di tModLoader --------------------------------------------------

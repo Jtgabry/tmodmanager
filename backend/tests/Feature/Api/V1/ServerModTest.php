@@ -35,6 +35,7 @@ class ServerModTest extends TestCase
         $this->postJson(route('api.v1.servers.mods.store', 'alfa'), ['file' => UploadedFile::fake()->create('X.tmod', 10)])->assertForbidden();
         $this->patchJson(route('api.v1.servers.mods.update', ['alfa', 'CalamityMod']), ['enabled' => false])->assertForbidden();
         $this->getJson(route('api.v1.servers.modpacks.index', 'alfa'))->assertForbidden();
+        $this->get(route('api.v1.servers.modpacks.export', ['alfa', 'abcd1234']))->assertForbidden();
 
         Http::assertNothingSent();
     }
@@ -222,6 +223,20 @@ class ServerModTest extends TestCase
 
         $response->assertOk()->assertHeader('Content-Disposition', 'attachment; filename=FourLeafClover.tmod');
         $this->assertSame('BYTES-DELLA-MOD', $response->streamedContent());
+    }
+
+    public function test_modpack_export_streams_the_zip_with_the_agent_filename(): void
+    {
+        $this->actingAsMember([ServerAbility::Mods]);
+        Http::fake([self::AGENT_URL.'/servers/alfa/modpacks/abcd1234/export' => Http::response('PK-ZIP', 200, [
+            'Content-Type' => 'application/zip',
+            'Content-Disposition' => 'attachment; filename="Boss.zip"',
+        ])]);
+
+        $response = $this->get(route('api.v1.servers.modpacks.export', ['alfa', 'abcd1234']));
+
+        $response->assertOk()->assertHeader('Content-Disposition', 'attachment; filename="Boss.zip"');
+        $this->assertSame('PK-ZIP', $response->streamedContent());
     }
 
     public function test_modpack_crud_and_activation(): void

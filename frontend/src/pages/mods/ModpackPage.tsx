@@ -6,11 +6,12 @@ import { errorMessage } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
 import { formatBytes, formatDate } from '../../lib/format'
 import { activeJobItem } from '../../lib/jobs'
-import { dependencyClosure, exportPack, freeName, PACK_STATE, packModsOf, packSize } from '../../lib/modpacks'
+import { dependencyClosure, freeName, PACK_STATE, packModsOf, packSize } from '../../lib/modpacks'
 import { useArchive, useDeleteModpack, useModpacks, useMods, useSaveModpack } from '../../lib/mods'
 import type { ArchiveEntry, Mod, Modpack } from '../../lib/types'
 import { useCancelJobItem, useInstallByName, useUpdateJob } from '../../lib/workshop'
 import CardJobProgress from './CardJobProgress'
+import ExportPackSheet from './ExportPackSheet'
 import ModIcon, { ModInitials } from './ModIcon'
 import PackCover from './PackCover'
 import { usePackActivation } from './usePackActivation'
@@ -146,6 +147,7 @@ function PackHero(props: {
   // Testo in modifica (null = si mostra quello salvato)
   const [draft, setDraft] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [activationError, setActivationError] = useState<string | null>(null)
 
@@ -266,12 +268,12 @@ function PackHero(props: {
       priority: 1,
       end: true,
       group: 'copy',
-      label: 'Esporta (.json)',
+      label: 'Esporta',
       icon: exportIcon,
       disabled: pack.mods.length === 0,
-      onSelect: () => exportPack(pack),
+      onSelect: () => setExporting(true),
       inline: (
-        <button type="button" className="btn btn-sm" disabled={pack.mods.length === 0} title="Elenco delle mod in .json (importabile)" onClick={() => exportPack(pack)}>
+        <button type="button" className="btn btn-sm" disabled={pack.mods.length === 0} title="Cartella del modpack (.zip) o elenco delle mod (.json)" onClick={() => setExporting(true)}>
           Esporta
         </button>
       ),
@@ -362,6 +364,7 @@ function PackHero(props: {
         <OverflowActions actions={actions} menuLabel="Altre azioni per il modpack" />
         {activation.dialog}
       </div>
+      <ExportPackSheet serverId={props.serverId} pack={exporting ? pack : null} onClose={() => setExporting(false)} />
 
       {(notice || activationError || duplicate.error) && (
         <div className="pack-hero-notice">

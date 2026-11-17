@@ -103,7 +103,7 @@ export async function packsPinning(server: ServerDefinition, name: string, versi
   return (await load(server)).filter((p) => p.mods.includes(name) && p.versions[name] === version).map((p) => p.name)
 }
 
-async function find(server: ServerDefinition, id: string): Promise<Modpack> {
+export async function findModpack(server: ServerDefinition, id: string): Promise<Modpack> {
   const pack = (await load(server)).find((p) => p.id === id)
   if (!pack) throw new ModError('Modpack non trovato', 404)
   return pack
@@ -167,7 +167,7 @@ async function setActive(server: ServerDefinition, id: string, active: boolean):
  * altri pack segnati come disattivi.
  */
 export async function enableModpack(server: ServerDefinition, id: string, { exclusive = false } = {}) {
-  const pack = await find(server, id)
+  const pack = await findModpack(server, id)
   const { mods } = await listMods(server)
   const { missing, unavailable, toSwitch } = await resolvePack(server, pack, new Map(mods.map((m) => [m.name, m.version])))
   // Prima i controlli: se manca qualcosa il pack e le mod restano come sono

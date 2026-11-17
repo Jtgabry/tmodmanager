@@ -1517,6 +1517,174 @@ h2 {
   margin: 0;
 }
 
+/* --- Sheet: bottom sheet su schermi stretti, modale centrata su quelli larghi ----------------- */
+
+/* L'aspetto sta sul pannello (che si trascina e si anima), la <dialog> resta solo un contenitore */
+.sheet {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.sheet-panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.6);
+  animation: sheet-pop-in 0.18s ease-out;
+}
+
+.sheet::backdrop {
+  animation: sheet-fade-in 0.18s ease-out;
+}
+
+.sheet-closing .sheet-panel {
+  animation: sheet-pop-out 0.18s ease-in forwards;
+}
+
+.sheet-closing::backdrop {
+  animation: sheet-fade-out 0.18s ease-in forwards;
+}
+
+.sheet-handle {
+  display: none;
+}
+
+@keyframes sheet-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+
+@keyframes sheet-pop-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
+@keyframes sheet-slide-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-slide-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 599px) {
+  .sheet {
+    width: 100%;
+    max-width: 100%;
+    margin: auto 0 0;
+    max-height: 90dvh;
+  }
+
+  .sheet-panel {
+    max-height: 90dvh;
+    border-bottom: 0;
+    border-radius: 16px 16px 0 0;
+    animation-name: sheet-slide-in;
+    animation-duration: 0.24s;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+    transition: transform 0.2s ease;
+  }
+
+  .sheet-closing .sheet-panel {
+    animation-name: sheet-slide-out;
+  }
+
+  .sheet-dragging {
+    transition: none;
+  }
+
+  /* Il titolo fa da maniglia: trascinandolo giù la sheet si chiude */
+  .sheet-header {
+    position: relative;
+    padding-top: 1.1rem;
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .sheet-handle {
+    display: block;
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+
+  .sheet-body {
+    padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + 1rem));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel,
+  .sheet::backdrop {
+    animation-duration: 1ms !important;
+    transition: none;
+  }
+}
+
+/* Scelte a scheda (radio con titolo e spiegazione) */
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev-2));
+}
+
+.choice input {
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+}
+
+.choice strong {
+  display: block;
+}
+
+.choice .small {
+  display: block;
+  margin-top: 0.15rem;
+}
+
 /* --- Lista delle mod a griglia ------------------------------------------------------------ */
 
 .mods-toolbar {

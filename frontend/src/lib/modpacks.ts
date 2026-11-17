@@ -12,15 +12,28 @@ export const packModsOf = (pack: Modpack, byName: Map<string, Mod>) => pack.mods
 /** Dimensione totale delle mod installate del pack. */
 export const packSize = (pack: Modpack, byName: Map<string, Mod>) => pack.mods.reduce((sum, name) => sum + (byName.get(name)?.size ?? 0), 0)
 
+/** Avvia il download di un file dato il suo indirizzo (o un blob). */
+function download(href: string, filename?: string) {
+  const a = document.createElement('a')
+  a.href = href
+  a.download = filename ?? ''
+  a.click()
+}
+
 /** Scarica l'elenco delle mod come .json (lo stesso formato che «Importa da tModLoader» accetta). */
-export function exportPack(pack: Modpack) {
+export function downloadPackJson(pack: Modpack) {
   const blob = new Blob([`${JSON.stringify(pack.mods, null, 2)}\n`], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${pack.name.replace(/[\\/:*?"<>|]+/g, '_')}.json`
-  a.click()
+  download(url, `${pack.name.replace(/[\\/:*?"<>|]+/g, '_')}.json`)
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/**
+ * Scarica la cartella del pack per tModLoader in .zip (Mods/ con i .tmod ed enabled.json, ModConfigs/).
+ * Lo zip lo prepara il server al momento: il nome del file arriva da lì.
+ */
+export function downloadPackZip(serverId: string, pack: Modpack) {
+  download(`/api/v1/servers/${serverId}/modpacks/${pack.id}/export`)
 }
 
 /** Un nome libero tra quelli dei pack esistenti: «Nome», poi «Nome (2)», «Nome (3)»… */

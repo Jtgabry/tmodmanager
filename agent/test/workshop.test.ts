@@ -272,3 +272,44 @@ test('«attiva solo questo»: restano abilitate solo le mod del pack e le loro d
     config.dataDir = previous
   }
 })
+
+test('esportazione del modpack: cartella di tModLoader in .zip, con versioni bloccate e configurazioni', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { readFile } = await import('node:fs/promises')
+  const { createModpack } = await import('../src/modpacks.ts')
+  const { exportModpackZip, packFolderName } = await import('../src/modpackExport.ts')
+  const root = await mkdtemp(join(tmpdir(), 'tmm-export-'))
+  const previous = config.dataDir
+  config.dataDir = join(root, 'data')
+  try {
+    const server = { id: 'prova', saveDir: join(root, 'save') } as ServerDefinition
+    await mkdir(join(server.saveDir, 'Mods'), { recursive: true })
+    await mkdir(join(server.saveDir, 'ModConfigs'), { recursive: true })
+    await writeFile(join(server.saveDir, 'Mods', 'Wikithis.tmod'), tmod('Wikithis', '2.0', '2026.6.3.4'))
+    await writeFile(join(server.saveDir, 'Mods', 'Altra.tmod'), tmod('Altra', '1.0', '2026.6.3.4'))
+    // Aggiornamento: la 2.0 va nell'archivio, il pack la tiene bloccata
+    const update = join(root, 'up.tmod')
+    await writeFile(update, tmod('Wikithis', '2.1', '2026.6.3.4'))
+    await installModFile(server, update, await readModInfo(update), false)
+    await writeFile(join(server.saveDir, 'ModConfigs', 'Wikithis_ClientConfig.json'), '{"a":1}')
+    await writeFile(join(server.saveDir, 'ModConfigs', 'Altra_ServerConfig.json'), '{"b":2}')
+
+    const pack = await createModpack(server, { name: 'Il mio: pack?', description: '', mods: ['Wikithis'], versions: { Wikithis: '2.0' } })
+    assert.equal(packFolderName(pack.name), 'Il mio_ pack_')
+    const zip = await exportModpackZip(server, pack.id)
+    assert.equal(zip.filename, 'Il mio_ pack_.zip')
+    const listing = execFileSync('unzip', ['-Z1', zip.path], { encoding: 'utf8' }).trim().split('\n')
+    assert.deepEqual(listing, ['Il mio_ pack_/Mods/Wikithis.tmod', 'Il mio_ pack_/Mods/enabled.json', 'Il mio_ pack_/ModConfigs/Wikithis_ClientConfig.json'])
+    execFileSync('unzip', ['-tq', zip.path])
+    const out = join(root, 'out')
+    execFileSync('unzip', ['-q', zip.path, '-d', out])
+    assert.deepEqual(JSON.parse(await readFile(join(out, 'Il mio_ pack_', 'Mods', 'enabled.json'), 'utf8')), ['Wikithis'])
+    assert.equal((await readModInfo(join(out, 'Il mio_ pack_', 'Mods', 'Wikithis.tmod'))).version, '2.0')
+    await zip.cleanup()
+
+    const empty = await createModpack(server, { name: 'Vuoto', description: '', mods: [], versions: {} })
+    await assert.rejects(exportModpackZip(server, empty.id), /vuoto/)
+  } finally {
+    config.dataDir = previous
+  }
+})

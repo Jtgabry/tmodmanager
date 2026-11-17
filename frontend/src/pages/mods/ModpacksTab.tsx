@@ -6,9 +6,10 @@ import PageActions from '../../components/PageActions'
 import { errorMessage } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
 import { formatBytes } from '../../lib/format'
-import { exportPack, PACK_STATE, packModsOf, packSize } from '../../lib/modpacks'
+import { PACK_STATE, packModsOf, packSize } from '../../lib/modpacks'
 import { useDeleteModpack, useModpacks, useMods, useSaveModpack } from '../../lib/mods'
 import type { Mod, Modpack } from '../../lib/types'
+import ExportPackSheet from './ExportPackSheet'
 import ModpackImport from './ModpackImport'
 import { usePackActivation } from './usePackActivation'
 import PackCover from './PackCover'
@@ -24,6 +25,7 @@ export default function ModpacksTab() {
   const remove = useDeleteModpack(server.id)
   const [dialog, setDialog] = useState<'new' | 'import' | null>(null)
   const [deleting, setDeleting] = useState<Modpack | null>(null)
+  const [exporting, setExporting] = useState<Modpack | null>(null)
   const [query, setQuery] = useState('')
   const [show, setShow] = useState<Show>('all')
   const [notice, setNotice] = useState<string | null>(null)
@@ -117,6 +119,7 @@ export default function ModpacksTab() {
               onOpen={() => navigate(pack.id)}
               onResult={onResult}
               onDelete={() => setDeleting(pack)}
+              onExport={() => setExporting(pack)}
             />
           ))}
         </div>
@@ -129,6 +132,8 @@ export default function ModpacksTab() {
       <Dialog open={dialog === 'import'} title="Importa da tModLoader" wide onClose={() => setDialog(null)}>
         {dialog === 'import' && <ModpackImport serverId={server.id} inDialog onClose={() => setDialog(null)} />}
       </Dialog>
+
+      <ExportPackSheet serverId={server.id} pack={exporting} onClose={() => setExporting(null)} />
 
       <Dialog open={deleting !== null} title="Eliminare il modpack?" onClose={() => setDeleting(null)}>
         {deleting && (
@@ -190,6 +195,7 @@ function PackCard(props: {
   onOpen: () => void
   onResult: (notice: string | null, error: string | null) => void
   onDelete: () => void
+  onExport: () => void
 }) {
   const { pack, byName } = props
   const state = PACK_STATE[pack.state]
@@ -255,11 +261,19 @@ function PackCard(props: {
       key: 'export',
       priority: 1,
       end: true,
-      label: 'Esporta (.json)',
+      label: 'Esporta',
       icon: exportIcon,
-      onSelect: () => exportPack(pack),
+      disabled: pack.mods.length === 0,
+      onSelect: props.onExport,
       inline: (
-        <button type="button" className="btn btn-sm btn-icon" aria-label={`Esporta ${pack.name}`} title="Esporta l'elenco delle mod (.json)" onClick={() => exportPack(pack)}>
+        <button
+          type="button"
+          className="btn btn-sm btn-icon"
+          aria-label={`Esporta ${pack.name}`}
+          title="Esporta: cartella del modpack (.zip) o elenco delle mod (.json)"
+          disabled={pack.mods.length === 0}
+          onClick={props.onExport}
+        >
           {exportIcon}
         </button>
       ),
