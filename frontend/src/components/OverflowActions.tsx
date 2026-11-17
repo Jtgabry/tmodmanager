@@ -14,6 +14,10 @@ export type OverflowAction = {
   priority: number
   /** Allineato a destra, dopo lo spazio libero. */
   end?: boolean
+  /** Le azioni con lo stesso gruppo finiscono nel menu tutte insieme. */
+  group?: string
+  /** Con `end`: resta a destra del pulsante «⋯» quando il menu c'è. */
+  afterMenu?: boolean
 }
 
 const MENU_BUTTON = 36
@@ -65,7 +69,8 @@ export default function OverflowActions({ actions, menuLabel }: { actions: Overf
     if (fits(actions, false)) return new Set<string>()
     const out = new Set<string>()
     for (const action of [...actions].sort((a, b) => a.priority - b.priority)) {
-      out.add(action.key)
+      if (out.has(action.key)) continue
+      for (const a of actions) if (a.key === action.key || (action.group && a.group === action.group)) out.add(a.key)
       if (fits(actions.filter((a) => !out.has(a.key)), true)) break
     }
     return out
@@ -91,7 +96,8 @@ export default function OverflowActions({ actions, menuLabel }: { actions: Overf
   const visible = actions.filter((a) => !hidden.has(a.key))
   const overflow = actions.filter((a) => hidden.has(a.key))
   const start = visible.filter((a) => !a.end)
-  const end = visible.filter((a) => a.end)
+  const end = visible.filter((a) => a.end && !(overflow.length > 0 && a.afterMenu))
+  const afterMenu = overflow.length > 0 ? visible.filter((a) => a.end && a.afterMenu) : []
 
   return (
     // I clic nella riga non arrivano alla card (che altrimenti si aprirebbe)
@@ -145,6 +151,11 @@ export default function OverflowActions({ actions, menuLabel }: { actions: Overf
           )}
         </div>
       )}
+      {afterMenu.map((a) => (
+        <span key={a.key} className="overflow-item">
+          {a.inline}
+        </span>
+      ))}
 
       {/* Copia invisibile di tutti i pulsanti, solo per misurarli */}
       <div className="overflow-measure" ref={measureRef} aria-hidden="true" inert>

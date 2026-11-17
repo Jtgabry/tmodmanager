@@ -204,7 +204,7 @@ function PackHero(props: {
     </svg>
   )
 
-  // Attivazione a sinistra, il resto a destra: se la riga è stretta, Duplica/Esporta/Elimina passano nel menu «⋯»
+  // Attivazione a sinistra, il resto a destra: se la riga è stretta, Duplica ed Esporta passano insieme nel menu «⋯» (poi Elimina)
   const actions: OverflowAction[] = [
     {
       key: 'toggle',
@@ -250,6 +250,7 @@ function PackHero(props: {
       key: 'duplicate',
       priority: 1,
       end: true,
+      group: 'copy',
       label: 'Duplica',
       icon: duplicateIcon,
       disabled: duplicate.isPending,
@@ -262,8 +263,9 @@ function PackHero(props: {
     },
     {
       key: 'export',
-      priority: 2,
+      priority: 1,
       end: true,
+      group: 'copy',
       label: 'Esporta (.json)',
       icon: exportIcon,
       disabled: pack.mods.length === 0,
@@ -278,6 +280,7 @@ function PackHero(props: {
       key: 'delete',
       priority: 3,
       end: true,
+      afterMenu: true,
       danger: true,
       label: 'Elimina',
       icon: deleteIcon,
