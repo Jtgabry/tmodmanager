@@ -830,16 +830,18 @@ input[type='checkbox'] {
 .tabs {
   display: flex;
   gap: 0.25rem;
-  border-bottom: 1px solid var(--border);
+  /* La linea di base è un'ombra interna, non un bordo: la sottolineatura della tab attiva ci si
+     sovrappone senza uscire dal riquadro (con margin negativo la riga scorreva in verticale) */
+  box-shadow: inset 0 -1px 0 var(--border);
   margin: 1.25rem 0 1rem;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .tabs a {
   color: var(--muted);
   padding: 0.55rem 0.9rem;
   border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
   white-space: nowrap;
 }
 
