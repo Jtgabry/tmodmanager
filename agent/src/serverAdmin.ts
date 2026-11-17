@@ -7,7 +7,7 @@ import type { ServerManager } from './manager.js'
 import { paths } from './paths.js'
 import { socketsOnPort } from './procfs.js'
 import { loadServers, type RawServer, ServerDefinition, updateRegistry } from './registry.js'
-import { applyServerConfig, readServerConfig } from './serverConfig.js'
+import { applyServerConfig, ConfigChanges, readConfigValues, readServerConfig } from './serverConfig.js'
 import { type Installation, listInstallations, serverWorldRelease } from './tml.js'
 import { moveToTrash } from './trash.js'
 
@@ -57,6 +57,8 @@ export const UpdateServerInput = Settings.partial().extend({
   launchArgs: z.array(z.string().max(200)).max(20).optional(),
   /** Cambio di versione: un'altra installazione (anche dell'altro gioco). Il server deve essere spento. */
   installDir: z.string().min(1).optional(),
+  /** Altre chiavi di serverconfig.txt (vedi ConfigValues); null toglie la chiave. */
+  config: ConfigChanges.optional(),
 })
 
 export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed'>
@@ -181,6 +183,7 @@ export async function createServer(input: CreateServerInput) {
 export async function serverSettings(id: string) {
   const server = (await loadServers()).find((s) => s.id === id)
   if (!server) throw new ServerAdminError('Server non trovato', 404)
+  const text = await readFile(server.configPath, 'utf8').catch(() => '')
   const settings = await readServerConfig(server.configPath)
   return {
     id: server.id,
@@ -198,6 +201,8 @@ export async function serverSettings(id: string) {
     motd: settings.motd ?? '',
     world: settings.world,
     worldName: settings.worldName,
+    /** Chiavi di serverconfig.txt modificabili presenti nel file (le assenti valgono il default di Terraria). */
+    config: readConfigValues(text),
   }
 }
 
@@ -219,6 +224,7 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
   }
 
   const changes: Record<string, string | null> = {}
+  for (const [key, value] of Object.entries(input.config ?? {})) if (value !== undefined) changes[key] = value
   if (input.port !== undefined) changes.port = String(input.port)
   if (input.maxPlayers !== undefined) changes.maxplayers = String(input.maxPlayers)
   if (input.password !== undefined) changes.password = input.password || null

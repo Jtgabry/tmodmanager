@@ -8,7 +8,7 @@ import { readWorldRelease, scanGameVersion, terrariaCode, terrariaVersionFromCod
 import { isServerProcess, type ServerManager } from '../src/manager.ts'
 import { paths } from '../src/paths.ts'
 import { loadServers, ServerDefinition } from '../src/registry.ts'
-import { createServer, knownInstallations, recreateWorld, ServerAdminError, serverSettings, updateServer } from '../src/serverAdmin.ts'
+import { createServer, knownInstallations, recreateWorld, ServerAdminError, serverSettings, UpdateServerInput, updateServer } from '../src/serverAdmin.ts'
 import { installationWorldRelease, recordWorldRelease } from '../src/tml.ts'
 import { listTrash } from '../src/trash.ts'
 
@@ -144,6 +144,43 @@ test('server vanilla: creazione, passaggio a tModLoader, ricreazione del mondo',
       ['save', join('Worlds', 'Mondo.wld')],
     ])
     assert.match(await readFile(after.configPath, 'utf8'), /^autocreate=1$/m)
+  } finally {
+    config.dataDir = previous
+  }
+})
+
+test('serverconfig: chiavi avanzate lette, modificate e tolte; chiavi sconosciute rifiutate', async () => {
+  const previous = config.dataDir
+  config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-config-'))
+  try {
+    const terraria = paths.terrariaInstall()
+    await mkdir(terraria, { recursive: true })
+    await writeFile(join(terraria, 'TerrariaServer.bin.x86_64'), '')
+    await writeFile(join(terraria, '.tmodmanager-version'), '1.4.5.8\n')
+    await createServer({
+      id: 'cfg',
+      name: 'Cfg',
+      installDir: terraria,
+      port: 47_778,
+      maxPlayers: 8,
+      password: 'segreta',
+      motd: '',
+      world: { name: 'Mondo', size: 2, difficulty: 3, seed: '' },
+      copyModsFrom: null,
+      launchArgs: ['-nosteam'],
+    })
+    const before = await serverSettings('cfg')
+    assert.deepEqual(before.config, { autocreate: '2', worldname: 'Mondo', difficulty: '3' })
+    assert.equal(JSON.stringify(before).includes('segreta'), false)
+
+    const input = UpdateServerInput.parse({ config: { secure: '1', language: 'it-IT', journeypermission_godmode: '0', difficulty: null } })
+    const after = await updateServer('cfg', input, managerIn('stopped'))
+    assert.deepEqual(after.config, { autocreate: '2', worldname: 'Mondo', secure: '1', language: 'it-IT', journeypermission_godmode: '0' })
+    assert.match(await readFile(paths.serverConfig('cfg'), 'utf8'), /^password=segreta$/m)
+
+    assert.throws(() => UpdateServerInput.parse({ config: { world: '/etc/passwd' } }))
+    assert.throws(() => UpdateServerInput.parse({ config: { secure: '1\nworld=/x' } }))
+    assert.throws(() => UpdateServerInput.parse({ config: { journeypermission_godmode: '5' } }))
   } finally {
     config.dataDir = previous
   }

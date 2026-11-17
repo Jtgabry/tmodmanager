@@ -14,6 +14,7 @@ import {
   IconMods,
   IconOverview,
   IconServers,
+  IconSettings,
   IconTrash,
   IconUsers,
   IconWorkshop,
@@ -51,7 +52,7 @@ function ServerCard({ server }: { server: Server }) {
 }
 
 function ServerNav({ serverId, server }: { serverId: string; server: Server | undefined }) {
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const base = `/servers/${serverId}`
 
   return (
@@ -87,6 +88,11 @@ function ServerNav({ serverId, server }: { serverId: string; server: Server | un
         {(can(serverId, 'files') || can(serverId, 'mods')) && (
           <NavItem to={`${base}/trash`} icon={<IconTrash />}>
             Cestino
+          </NavItem>
+        )}
+        {user?.isAdmin && (
+          <NavItem to={`${base}/settings`} icon={<IconSettings />}>
+            Impostazioni
           </NavItem>
         )}
       </nav>

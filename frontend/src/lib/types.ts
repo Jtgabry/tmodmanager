@@ -175,6 +175,8 @@ export type ServerSettings = {
   motd: string
   world: string | null
   worldName: string | null
+  /** Altre chiavi di serverconfig.txt presenti nel file (le assenti valgono il default di Terraria). */
+  config: Record<string, string>
 }
 
 export type TmlJob = {

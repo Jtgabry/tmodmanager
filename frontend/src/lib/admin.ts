@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import type { Game, Installation, InstallationChoice, ServerSettings, TmlRelease } from './types'
+import { type Game, GAME_LABEL, type Installation, type InstallationChoice, type ServerSettings, type TmlRelease } from './types'
 
 export type NewServer = {
   id: string
@@ -14,7 +14,11 @@ export type NewServer = {
   copyModsFrom: string | null
 }
 
-export type ServerSettingsInput = Partial<Pick<ServerSettings, 'name' | 'port' | 'maxPlayers' | 'motd' | 'installDir'>> & { password?: string }
+export type ServerSettingsInput = Partial<Pick<ServerSettings, 'name' | 'port' | 'maxPlayers' | 'motd' | 'installDir' | 'launchArgs'>> & {
+  password?: string
+  /** Chiavi di serverconfig.txt: null la toglie (vale il default di Terraria). */
+  config?: Record<string, string | null>
+}
 
 const busy = (list: Installation[] | undefined) => list?.some((i) => i.job && !['done', 'error'].includes(i.job.phase))
 
@@ -115,3 +119,7 @@ export function compareVersions(a: string, b: string): number {
   }
   return 0
 }
+
+/** "tModLoader 2026.09.3.1 (Terraria 1.4.4.9)", con il percorso se l'installazione non è gestita dal pannello. */
+export const choiceLabel = (c: InstallationChoice) =>
+  `${GAME_LABEL[c.kind]} ${c.version ?? '?'}${c.kind === 'tmodloader' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''}${c.managed ? '' : ` — ${c.path}`}`

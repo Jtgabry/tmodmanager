@@ -110,6 +110,22 @@ class ServerManagementTest extends TestCase
             && $request->data() === ['installDir' => '/srv/tmm-data/tmodloader/tModLoader']);
     }
 
+    public function test_passes_serverconfig_keys_to_the_agent(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+        Http::fake([self::AGENT_URL.'/admin/servers/alfa' => Http::response(['data' => ['config' => ['secure' => '1']]])]);
+
+        $this->patchJson(route('api.v1.admin.servers.update', 'alfa'), ['config' => ['secure' => '1', 'difficulty' => null]])
+            ->assertOk()
+            ->assertJsonPath('data.config.secure', '1');
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && $request->data() === ['config' => ['secure' => '1', 'difficulty' => null]]);
+
+        $this->patchJson(route('api.v1.admin.servers.update', 'alfa'), ['config' => ['seed' => "a\nworld=/x"]])
+            ->assertUnprocessable();
+    }
+
     public function test_recreates_the_world(): void
     {
         Sanctum::actingAs(User::factory()->admin()->create());

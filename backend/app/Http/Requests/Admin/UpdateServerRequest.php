@@ -20,6 +20,9 @@ class UpdateServerRequest extends FormRequest
             'motd' => ['sometimes', 'nullable', 'string', 'max:200', 'regex:/^[^\r\n\x00]*$/'],
             // Cambio di versione: un'altra installazione, anche dell'altro gioco (Terraria ↔ tModLoader)
             'installDir' => ['sometimes', 'string', 'max:255'],
+            // Altre chiavi di serverconfig.txt (l'agent sa quali e con che valori); null = toglie la chiave
+            'config' => ['sometimes', 'array', 'max:64'],
+            'config.*' => ['nullable', 'string', 'max:200', 'regex:/^[^\r\n\x00]*$/'],
         ];
     }
 

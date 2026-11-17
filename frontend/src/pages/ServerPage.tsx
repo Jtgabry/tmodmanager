@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Navigate, Outlet, useLocation, useParams } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import ServerStats from '../components/ServerStats'
+import { OverviewSettings } from './settings/ServerSettings'
 import { errorMessage } from '../lib/api'
 import { formatDate } from '../lib/format'
 import { useServer } from '../lib/servers'
@@ -14,6 +16,7 @@ const TITLES: Record<string, string> = {
   modpacks: 'Modpack',
   files: 'File',
   trash: 'Cestino',
+  settings: 'Impostazioni',
 }
 
 const MOD_SECTIONS = ['mods', 'workshop', 'modpacks']
@@ -68,5 +71,11 @@ export default function ServerPage() {
 
 export function ServerOverview() {
   const server = useCurrentServer()
-  return <ServerStats server={server} tiles />
+  const { user } = useAuth()
+  return (
+    <div className="stack">
+      <ServerStats server={server} tiles />
+      {user?.isAdmin && <OverviewSettings server={server} />}
+    </div>
+  )
 }

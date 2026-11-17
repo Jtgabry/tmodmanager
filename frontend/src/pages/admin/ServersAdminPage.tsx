@@ -2,6 +2,7 @@ import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 import StateBadge from '../../components/StateBadge'
 import {
+  choiceLabel,
   compareVersions,
   type NewServer,
   olderThanWorld,
@@ -9,13 +10,12 @@ import {
   useInstallations,
   useReleases,
   useServerDefaults,
-  useServerSettings,
   worldVersionLabel,
 } from '../../lib/admin'
 import { errorMessage, fieldErrors } from '../../lib/api'
 import { formatBytes, formatDate } from '../../lib/format'
 import { useServers } from '../../lib/servers'
-import { GAME_LABEL, type Installation, type InstallationChoice, type Server, type ServerSettings } from '../../lib/types'
+import { GAME_LABEL, type Installation, type Server } from '../../lib/types'
 
 export default function ServersAdminPage() {
   const [creating, setCreating] = useState(false)
@@ -53,7 +53,6 @@ export default function ServersAdminPage() {
 // --- Server esistenti ----------------------------------------------------------------------------
 
 function ServerRow({ server }: { server: Server }) {
-  const [editing, setEditing] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [removedDir, setRemovedDir] = useState<string | null>(null)
   const { remove } = useAdminServerActions()
@@ -81,9 +80,9 @@ function ServerRow({ server }: { server: Server }) {
           </div>
         </div>
         <div className="btn-row">
-          <button type="button" className="btn btn-sm" onClick={() => setEditing((v) => !v)}>
-            {editing ? 'Chiudi' : 'Impostazioni'}
-          </button>
+          <Link className="btn btn-sm" to={`/servers/${server.id}/settings`}>
+            Impostazioni
+          </Link>
           {confirmRemove ? (
             <>
               <button
@@ -118,235 +117,7 @@ function ServerRow({ server }: { server: Server }) {
         </p>
       )}
       {remove.isError && <div className="alert alert-error">{errorMessage(remove.error)}</div>}
-      {editing && <SettingsForm serverId={server.id} running={server.state !== 'stopped'} onDone={() => setEditing(false)} />}
     </article>
-  )
-}
-
-function SettingsForm({ serverId, running, onDone }: { serverId: string; running: boolean; onDone: () => void }) {
-  const settings = useServerSettings(serverId)
-  if (settings.isLoading) return <div className="spinner" />
-  if (settings.error || !settings.data) return <div className="alert alert-error">{errorMessage(settings.error)}</div>
-  return (
-    <>
-      <SettingsFields key={settings.dataUpdatedAt} data={settings.data} running={running} onDone={onDone} />
-      <VersionSwitch key={settings.data.id} data={settings.data} running={running} />
-    </>
-  )
-}
-
-const choiceLabel = (c: InstallationChoice) =>
-  `${GAME_LABEL[c.kind]} ${c.version ?? '?'}${c.kind === 'tmodloader' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''}${c.managed ? '' : ` — ${c.path}`}`
-
-/**
- * Cambio di versione del server, anche tra Terraria vanilla e tModLoader: il mondo resta lo stesso.
- * Se la versione scelta è più vecchia di quella che ha salvato il mondo si avvisa (e si propone di
- * ricrearlo), ma il cambio resta permesso.
- */
-function VersionSwitch({ data, running }: { data: ServerSettings; running: boolean }) {
-  const defaults = useServerDefaults(true)
-  const { update, recreateWorld } = useAdminServerActions()
-  const [target, setTarget] = useState(data.installDir)
-  const [confirmRecreate, setConfirmRecreate] = useState(false)
-  const [switched, setSwitched] = useState<InstallationChoice | null>(null)
-  const choices = defaults.data?.installations ?? []
-  const chosen = choices.find((c) => c.path === target)
-  const changed = target !== data.installDir
-  const tooOld = changed && olderThanWorld(chosen?.worldRelease, data.worldRelease)
-
-  const apply = () =>
-    update.mutate({ id: data.id, installDir: target }, { onSuccess: () => setSwitched(chosen ?? null) })
-
-  return (
-    <div className="pack-form">
-      <h4>Versione</h4>
-      <div className="form-inline">
-        <label className="field">
-          <span>Gioco e versione</span>
-          <select value={target} onChange={(e) => setTarget(e.target.value)} disabled={!defaults.data}>
-            {!choices.some((c) => c.path === data.installDir) && (
-              <option value={data.installDir}>
-                {GAME_LABEL[data.game]} — {data.installDir}
-              </option>
-            )}
-            {choices.map((c) => (
-              <option key={c.path} value={c.path}>
-                {choiceLabel(c)}
-                {c.path === data.installDir ? ' — attuale' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className={tooOld ? 'btn btn-warning btn-sm' : 'btn btn-primary btn-sm'}
-          disabled={!changed || running || update.isPending}
-          title={running ? 'Spegni il server per cambiare versione' : undefined}
-          onClick={apply}
-        >
-          {tooOld ? 'Cambia comunque' : 'Cambia versione'}
-        </button>
-      </div>
-      <p className="muted small">
-        Il mondo resta lo stesso. Con tModLoader compaiono le sezioni Mod, Workshop e Modpack; tornando a Terraria
-        vanilla le mod restano sul disco. I giocatori devono usare lo stesso gioco e la stessa versione del server.
-        {running && <strong> Spegni il server per cambiare versione.</strong>}
-      </p>
-
-      {tooOld && data.worldRelease !== null && (
-        <div className="alert alert-warning">
-          <p>
-            Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}, più
-            recente di quella usata da {chosen ? choiceLabel(chosen) : 'questa versione'}
-            {chosen?.worldRelease ? ` (${worldVersionLabel(chosen.worldRelease)})` : ''}. Il server potrebbe non riuscire ad
-            aprirlo o andare in crash.
-          </p>
-          <p className="small">
-            Puoi ricreare il mondo da capo (quello attuale va nel cestino del server e resta recuperabile) oppure provare
-            comunque ad aprirlo con questa versione.
-          </p>
-          <div className="btn-row">
-            {confirmRecreate ? (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-danger btn-sm"
-                  disabled={recreateWorld.isPending || running}
-                  onClick={() => recreateWorld.mutate(data.id, { onSettled: () => setConfirmRecreate(false) })}
-                >
-                  Conferma: ricrea il mondo
-                </button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmRecreate(false)}>
-                  Annulla
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-danger-outline btn-sm"
-                disabled={running}
-                title={running ? 'Spegni il server prima di ricreare il mondo' : undefined}
-                onClick={() => setConfirmRecreate(true)}
-              >
-                Ricrea il mondo da capo
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-      {recreateWorld.isSuccess && (
-        <div className="alert alert-success">
-          Mondo spostato nel cestino ({recreateWorld.data.trashed.join(', ') || 'nessun file'}). Al prossimo avvio ne
-          verrà generato uno nuovo con nome, dimensione, difficoltà e seed della configurazione.
-        </div>
-      )}
-      {recreateWorld.isError && <div className="alert alert-error">{errorMessage(recreateWorld.error)}</div>}
-      {update.isError && <div className="alert alert-error">{errorMessage(update.error)}</div>}
-      {switched && (
-        <div className="alert alert-success">
-          Ora il server usa {choiceLabel(switched)}: vale dal prossimo avvio.
-          {switched.kind === 'tmodloader' && ' Nella barra laterale del server ci sono le sezioni Mod, Workshop e Modpack.'}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SettingsFields({
-  data,
-  running,
-  onDone,
-}: {
-  data: NonNullable<ReturnType<typeof useServerSettings>['data']>
-  running: boolean
-  onDone: () => void
-}) {
-  const { update } = useAdminServerActions()
-  const [name, setName] = useState(data.name)
-  const [port, setPort] = useState(data.port)
-  const [maxPlayers, setMaxPlayers] = useState(data.maxPlayers)
-  const [motd, setMotd] = useState(data.motd)
-  // La password attuale non viene mai mostrata: si sceglie se lasciarla, cambiarla o toglierla
-  const [passwordMode, setPasswordMode] = useState<'keep' | 'set' | 'remove'>(data.hasPassword ? 'keep' : 'remove')
-  const [password, setPassword] = useState('')
-  const [saved, setSaved] = useState(false)
-  const errors = fieldErrors(update.error)
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    setSaved(false)
-    update.mutate(
-      {
-        id: data.id,
-        name,
-        port,
-        maxPlayers,
-        motd,
-        ...(passwordMode === 'set' ? { password } : passwordMode === 'remove' && data.hasPassword ? { password: '' } : {}),
-      },
-      { onSuccess: () => setSaved(true) },
-    )
-  }
-
-  return (
-    <form className="pack-form" onSubmit={submit}>
-      <div className="form-inline">
-        <label className="field">
-          <span>Nome</span>
-          <input required maxLength={64} value={name} onChange={(e) => setName(e.target.value)} />
-          {errors.name && <span className="error-text">{errors.name}</span>}
-        </label>
-        <label className="field">
-          <span>Porta</span>
-          <input type="number" required min={1024} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} />
-          {errors.port && <span className="error-text">{errors.port}</span>}
-        </label>
-        <label className="field">
-          <span>Giocatori max</span>
-          <input type="number" required min={1} max={255} value={maxPlayers} onChange={(e) => setMaxPlayers(Number(e.target.value))} />
-        </label>
-      </div>
-      <div className="form-inline">
-        <label className="field">
-          <span>Password</span>
-          <select value={passwordMode} onChange={(e) => setPasswordMode(e.target.value as typeof passwordMode)}>
-            {data.hasPassword && <option value="keep">Lascia quella attuale</option>}
-            <option value="set">{data.hasPassword ? 'Cambia password' : 'Imposta una password'}</option>
-            <option value="remove">{data.hasPassword ? 'Togli la password' : 'Nessuna password'}</option>
-          </select>
-        </label>
-        {passwordMode === 'set' && (
-          <label className="field">
-            <span>Nuova password</span>
-            <input required maxLength={64} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
-            {errors.password && <span className="error-text">{errors.password}</span>}
-          </label>
-        )}
-        <label className="field">
-          <span>Messaggio di benvenuto (motd)</span>
-          <input maxLength={200} value={motd} onChange={(e) => setMotd(e.target.value)} />
-        </label>
-      </div>
-      <p className="muted small">
-        Mondo: <span className="mono">{data.world ?? '—'}</span>
-        <br />
-        Configurazione: <span className="mono">{data.configPath}</span> · Dati: <span className="mono">{data.saveDir}</span>
-      </p>
-      {update.isError && !Object.keys(errors).length && <div className="alert alert-error">{errorMessage(update.error)}</div>}
-      {saved && (
-        <div className="alert alert-success">
-          Impostazioni salvate.{running && ' Porta, giocatori, password e motd valgono dal prossimo riavvio del server.'}
-        </div>
-      )}
-      <div className="btn-row">
-        <button type="submit" className="btn btn-primary btn-sm" disabled={update.isPending}>
-          Salva
-        </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
-          Chiudi
-        </button>
-      </div>
-    </form>
   )
 }
 
