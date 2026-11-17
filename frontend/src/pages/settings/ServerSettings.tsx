@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useState } from 'react'
-import { choiceLabel, olderThanWorld, useAdminServerActions, useServerDefaults, useServerSettings, worldVersionLabel } from '../../lib/admin'
+import { type AutoInstall, choiceLabel, olderThanWorld, useAdminServerActions, useReleases, useServerDefaults, useServerSettings, worldVersionLabel } from '../../lib/admin'
 import { errorMessage, fieldErrors } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
 import { GAME_LABEL, type InstallationChoice, type Server, type ServerSettings } from '../../lib/types'
@@ -97,16 +97,23 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
   const { update, recreateWorld } = useAdminServerActions()
   const [target, setTarget] = useState(data.installDir)
   const [confirmRecreate, setConfirmRecreate] = useState(false)
-  const [switched, setSwitched] = useState<InstallationChoice | null>(null)
-  // Per cambiare versione serve un'installazione già pronta (si installa da Gestione server → Installazioni)
-  const choices = (defaults.data?.installations ?? []).filter((c) => c.installed)
+  const [switched, setSwitched] = useState<{ choice: InstallationChoice | null; install: AutoInstall | null } | null>(null)
+  // Anche i giochi non ancora installati: scegliendoli si installa l'ultima versione
+  const choices = defaults.data?.installations ?? []
   const chosen = choices.find((c) => c.path === target)
   const changed = target !== data.installDir
-  const tooOld = changed && olderThanWorld(chosen?.worldRelease, data.worldRelease)
+  const toInstall = changed && chosen !== undefined && !chosen.installed
+  // Versione dei mondi di un gioco da installare: quella dell'ultima release, se nota (Terraria sì, tModLoader no)
+  const releases = useReleases(chosen?.kind ?? 'terraria', toInstall && !chosen?.installing)
+  const targetWorld = !toInstall ? chosen?.worldRelease : (releases.data?.find((r) => !r.prerelease)?.worldRelease ?? null)
+  const tooOld = changed && olderThanWorld(targetWorld, data.worldRelease)
+  // Mondo esistente e versione di destinazione ignota: si avvisa allo stesso modo, senza poter dire se è più vecchia
+  const unknownWorld = toInstall && targetWorld === null && data.worldRelease !== null
+  const warn = tooOld || unknownWorld
 
   const apply = () => {
     setSwitched(null)
-    update.mutate({ id: data.id, installDir: target }, { onSuccess: () => setSwitched(chosen ?? null) })
+    update.mutate({ id: data.id, installDir: target }, { onSuccess: (r) => setSwitched({ choice: chosen ?? null, install: r.install ?? null }) })
   }
 
   return (
@@ -130,29 +137,37 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
         </label>
         <button
           type="button"
-          className={tooOld ? 'btn btn-warning btn-sm' : 'btn btn-primary btn-sm'}
+          className={warn ? 'btn btn-warning btn-sm' : 'btn btn-primary btn-sm'}
           disabled={!changed || running || update.isPending}
           title={running ? 'Spegni il server per cambiare versione' : undefined}
           onClick={apply}
         >
-          {tooOld ? 'Cambia comunque' : 'Cambia versione'}
+          {warn ? 'Cambia comunque' : toInstall ? 'Installa e cambia' : 'Cambia versione'}
         </button>
       </div>
       <p className="muted small">
         Il mondo resta lo stesso. Con tModLoader compaiono le sezioni Mod, Workshop e Modpack; tornando a Terraria
         vanilla le mod restano sul disco. I giocatori devono usare lo stesso gioco e la stessa versione del server.
-        {choices.length < 2 && ' Le altre installazioni si aggiungono da Gestione server → Installazioni.'}
+        {toInstall && ` ${GAME_LABEL[chosen.kind]} non è ancora installato: ${chosen.installing ? 'si sta già installando' : "viene installata l'ultima versione"}, e il server si potrà accendere quando è finito.`}
         {running && <strong> Spegni il server per cambiare versione.</strong>}
       </p>
 
-      {tooOld && data.worldRelease !== null && (
+      {warn && data.worldRelease !== null && (
         <div className="alert alert-warning">
-          <p>
-            Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}, più
-            recente di quella usata da {chosen ? choiceLabel(chosen) : 'questa versione'}
-            {chosen?.worldRelease ? ` (${worldVersionLabel(chosen.worldRelease)})` : ''}. Il server potrebbe non riuscire ad
-            aprirlo o andare in crash.
-          </p>
+          {tooOld ? (
+            <p>
+              Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}, più
+              recente di quella usata da {chosen ? choiceLabel(chosen) : 'questa versione'}
+              {targetWorld ? ` (${worldVersionLabel(targetWorld)})` : ''}. Il server potrebbe non riuscire ad aprirlo o
+              andare in crash.
+            </p>
+          ) : (
+            <p>
+              Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}.
+              Finché {chosen ? GAME_LABEL[chosen.kind] : 'il gioco'} non è installato non si sa quale versione dei mondi sappia
+              aprire: se è più vecchia, il server potrebbe non riuscire ad aprirlo o andare in crash.
+            </p>
+          )}
           <p className="small">
             Puoi ricreare il mondo da capo (quello attuale va nel cestino del server e resta recuperabile) oppure provare
             comunque ad aprirlo con questa versione.
@@ -194,10 +209,22 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
       )}
       {recreateWorld.isError && <div className="alert alert-error">{errorMessage(recreateWorld.error)}</div>}
       {update.isError && <div className="alert alert-error">{errorMessage(update.error)}</div>}
-      {switched && (
+      {switched?.choice && (
         <div className="alert alert-success">
-          Ora il server usa {choiceLabel(switched)}: vale dal prossimo avvio.
-          {switched.kind === 'tmodloader' && ' Nella barra laterale del server ci sono le sezioni Mod, Workshop e Modpack.'}
+          Ora il server usa {switched.install ? GAME_LABEL[switched.choice.kind] : choiceLabel(switched.choice)}: vale dal prossimo avvio.
+          {switched.choice.kind === 'tmodloader' && ' Nella barra laterale del server ci sono le sezioni Mod, Workshop e Modpack.'}
+        </div>
+      )}
+      {switched?.install && !switched.install.error && (
+        <div className="alert alert-info">
+          Installazione di {GAME_LABEL[switched.install.game]} {switched.install.version ?? ''} in corso: il server si può
+          accendere quando è finita (l'avanzamento è in Gestione server → Installazioni).
+        </div>
+      )}
+      {switched?.install?.error && (
+        <div className="alert alert-warning">
+          {GAME_LABEL[switched.install.game]} non è stato installato: {switched.install.error}. Installalo da Gestione server →
+          Installazioni prima di accendere il server.
         </div>
       )}
     </div>

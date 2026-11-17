@@ -41,6 +41,8 @@ export const config = {
   trashRetentionDays: Number(process.env.AGENT_TRASH_RETENTION_DAYS ?? 30),
   /** Repository GitHub da cui scaricare le versioni di tModLoader. */
   tmlRepository: process.env.AGENT_TML_REPOSITORY ?? 'tModLoader/tModLoader',
+  /** API di GitHub (da cui si leggono le release di tModLoader). */
+  githubApi: process.env.AGENT_GITHUB_API ?? 'https://api.github.com',
   /** API di terraria.org per le versioni del dedicated server vanilla (ultima versione e download). */
   terrariaApi: process.env.AGENT_TERRARIA_API ?? 'https://terraria.org/api',
   /**

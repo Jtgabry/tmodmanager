@@ -186,11 +186,12 @@ test('serverconfig: chiavi avanzate lette, modificate e tolte; chiavi sconosciut
   }
 })
 
-test('nuovo server su un gioco non ancora installato: proposto, creato, installazione avviata', async () => {
-  const previous = { dataDir: config.dataDir, terrariaApi: config.terrariaApi }
+test('gioco non ancora installato: proposto alla creazione e al cambio di versione, installazione avviata', async () => {
+  const previous = { dataDir: config.dataDir, terrariaApi: config.terrariaApi, githubApi: config.githubApi }
   config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-autoinstall-'))
-  // terraria.org non raggiungibile: la creazione riesce comunque e riporta il motivo
+  // terraria.org e GitHub non raggiungibili: creazione e cambio riescono comunque e riportano il motivo
   config.terrariaApi = 'http://127.0.0.1:9'
+  config.githubApi = 'http://127.0.0.1:9'
   try {
     const choices = await knownInstallations()
     assert.deepEqual(
@@ -221,8 +222,11 @@ test('nuovo server su un gioco non ancora installato: proposto, creato, installa
     const [server] = await loadServers()
     assert.equal(server.game, 'terraria')
 
-    // Il cambio di versione invece vuole un'installazione già pronta
-    await assert.rejects(updateServer('nuovo', { installDir: paths.tmlInstall() }, managerIn('stopped')), ServerAdminError)
+    // Anche il cambio di versione accetta un gioco da installare (e prova a installarlo)
+    const switched = await updateServer('nuovo', { installDir: paths.tmlInstall() }, managerIn('stopped'))
+    assert.equal(switched.game, 'tmodloader')
+    assert.equal(switched.install?.game, 'tmodloader')
+    await assert.rejects(updateServer('nuovo', { installDir: '/non/esiste' }, managerIn('stopped')), ServerAdminError)
   } finally {
     Object.assign(config, previous)
   }

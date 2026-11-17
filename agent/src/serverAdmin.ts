@@ -87,7 +87,7 @@ export async function knownInstallations(): Promise<InstallationChoice[]> {
     }))
 }
 
-/** `allowMissing`: va bene anche un'installazione del pannello non ancora installata (creazione). */
+/** `allowMissing`: va bene anche un'installazione del pannello non ancora installata (viene installata subito dopo). */
 async function findChoice(installDir: string, allowMissing = false): Promise<InstallationChoice> {
   const found = (await knownInstallations()).find((i) => i.path === installDir)
   if (!found || (!found.installed && !(allowMissing && found.managed))) {
@@ -262,7 +262,7 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
   // Cambio di versione (anche Terraria ↔ tModLoader): stesso mondo, nella stessa cartella Worlds/
   let switchTo: InstallationChoice | null = null
   if (input.installDir !== undefined && input.installDir !== server.installDir) {
-    switchTo = await findChoice(input.installDir)
+    switchTo = await findChoice(input.installDir, true)
     const status = await manager.status(server)
     if (status.state !== 'stopped' || status.operation) {
       throw new ServerAdminError('Spegni il server prima di cambiare versione', 409, 'installDir')
@@ -298,7 +298,13 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
       result: undefined,
     }))
   }
-  return serverSettings(id)
+  // Gioco non ancora installato: si installa l'ultima versione (il server resta spento intanto)
+  const install = switchTo && !switchTo.installed ? await installLatest(switchTo, manager) : null
+  return {
+    ...(await serverSettings(id)),
+    /** Installazione partita con il cambio di versione (null se non serviva). */
+    install: install && { game: switchTo!.kind, version: install.job?.toVersion ?? null, error: install.error },
+  }
 }
 
 /** File di un mondo: il .wld più i dati di tModLoader (.twld) e i backup che Terraria tiene accanto. */

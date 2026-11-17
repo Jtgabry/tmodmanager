@@ -191,7 +191,7 @@ async function fetchJson(url: string, source: string): Promise<unknown> {
 }
 
 async function fetchTmlReleases(): Promise<Release[]> {
-  const data = (await fetchJson(`https://api.github.com/repos/${config.tmlRepository}/releases?per_page=15`, 'GitHub')) as GithubRelease[]
+  const data = (await fetchJson(`${config.githubApi}/repos/${config.tmlRepository}/releases?per_page=15`, 'GitHub')) as GithubRelease[]
   return data
     .filter((r) => !r.draft)
     .flatMap((r): Release[] => {

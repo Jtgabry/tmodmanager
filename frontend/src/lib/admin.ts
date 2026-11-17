@@ -18,8 +18,11 @@ export type CreatedServer = {
   id: string
   saveDir: string
   /** Installazione del gioco avviata con la creazione (null se era già installato). */
-  install: { game: Game; version: string | null; error: string | null } | null
+  install: AutoInstall | null
 }
+
+/** Installazione del gioco avviata da una creazione o da un cambio di versione. */
+export type AutoInstall = { game: Game; version: string | null; error: string | null }
 
 export type ServerSettingsInput = Partial<Pick<ServerSettings, 'name' | 'port' | 'maxPlayers' | 'motd' | 'installDir' | 'launchArgs'>> & {
   password?: string
@@ -38,11 +41,12 @@ export function useInstallations() {
   })
 }
 
-export function useReleases(game: Game) {
+export function useReleases(game: Game, enabled = true) {
   return useQuery({
     queryKey: ['admin', 'releases', game],
     queryFn: async () => (await api.get<{ data: TmlRelease[] }>(`/admin/releases/${game}`)).data.data,
     staleTime: 5 * 60 * 1000,
+    enabled,
   })
 }
 
@@ -76,7 +80,7 @@ export function useAdminServerActions() {
   })
   const update = useMutation({
     mutationFn: async ({ id, ...input }: ServerSettingsInput & { id: string }) =>
-      (await api.patch<{ data: ServerSettings }>(`/admin/servers/${id}`, input)).data.data,
+      (await api.patch<{ data: ServerSettings & { install?: AutoInstall | null } }>(`/admin/servers/${id}`, input)).data.data,
     onSuccess: refresh,
   })
   const remove = useMutation({
