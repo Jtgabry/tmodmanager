@@ -1,6 +1,7 @@
 import { type ReactNode, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Dialog from '../../components/Dialog'
+import OverflowActions, { type OverflowAction } from '../../components/OverflowActions'
 import { errorMessage } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
 import { formatBytes, formatDate } from '../../lib/format'
@@ -11,8 +12,8 @@ import type { ArchiveEntry, Mod, Modpack } from '../../lib/types'
 import { useCancelJobItem, useInstallByName, useUpdateJob } from '../../lib/workshop'
 import CardJobProgress from './CardJobProgress'
 import ModIcon, { ModInitials } from './ModIcon'
-import PackActivation from './PackActivation'
 import PackCover from './PackCover'
+import { usePackActivation } from './usePackActivation'
 import VersionArchive from './VersionArchive'
 
 type PackFilter = 'all' | 'pinned' | 'fix'
@@ -167,6 +168,128 @@ function PackHero(props: {
       { onSuccess: (copy) => props.onDuplicated(copy.id) },
     )
 
+  const activation = usePackActivation({
+    serverId: props.serverId,
+    pack,
+    packs: props.packs,
+    byName,
+    blocked,
+    onResult: (n, e) => {
+      setNotice(n)
+      setActivationError(e)
+    },
+  })
+  const toggleLabel = activation.busy ? 'Un momento…' : pack.active ? 'Disattiva il modpack' : 'Attiva il modpack'
+  const toggleDisabled = activation.busy || (!pack.active && blocked)
+  const exclusiveDisabled = activation.busy || blocked
+  const duplicateIcon = (
+    <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </svg>
+  )
+  const exportIcon = (
+    <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 4v11" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M5 20h14" />
+    </svg>
+  )
+  const deleteIcon = (
+    <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+      <path d="M9 7V4h6v3" />
+    </svg>
+  )
+
+  // Attivazione a sinistra, il resto a destra: se la riga è stretta, Duplica/Esporta/Elimina passano nel menu «⋯»
+  const actions: OverflowAction[] = [
+    {
+      key: 'toggle',
+      priority: 10,
+      label: toggleLabel,
+      disabled: toggleDisabled,
+      onSelect: activation.toggle,
+      inline: (
+        <button
+          type="button"
+          className={pack.active ? 'btn btn-sm btn-toggle-on' : 'btn btn-sm btn-primary'}
+          disabled={toggleDisabled}
+          title={pack.active ? undefined : 'Abilita le mod del pack; le altre mod restano come sono'}
+          onClick={activation.toggle}
+        >
+          {toggleLabel}
+        </button>
+      ),
+    },
+    ...(!pack.active
+      ? [
+          {
+            key: 'exclusive',
+            priority: 9,
+            label: 'Attiva solo questo',
+            disabled: exclusiveDisabled,
+            onSelect: activation.exclusive,
+            inline: (
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={exclusiveDisabled}
+                title="Abilita solo le mod di questo pack e disabilita tutte le altre"
+                onClick={activation.exclusive}
+              >
+                Attiva solo questo
+              </button>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: 'duplicate',
+      priority: 1,
+      end: true,
+      label: 'Duplica',
+      icon: duplicateIcon,
+      disabled: duplicate.isPending,
+      onSelect: onDuplicate,
+      inline: (
+        <button type="button" className="btn btn-sm" disabled={duplicate.isPending} onClick={onDuplicate}>
+          Duplica
+        </button>
+      ),
+    },
+    {
+      key: 'export',
+      priority: 2,
+      end: true,
+      label: 'Esporta (.json)',
+      icon: exportIcon,
+      disabled: pack.mods.length === 0,
+      onSelect: () => exportPack(pack),
+      inline: (
+        <button type="button" className="btn btn-sm" disabled={pack.mods.length === 0} title="Elenco delle mod in .json (importabile)" onClick={() => exportPack(pack)}>
+          Esporta
+        </button>
+      ),
+    },
+    {
+      key: 'delete',
+      priority: 3,
+      end: true,
+      danger: true,
+      label: 'Elimina',
+      icon: deleteIcon,
+      onSelect: () => setConfirmDelete(true),
+      inline: (
+        <button type="button" className="btn btn-sm btn-icon btn-danger-outline" aria-label="Elimina il modpack" title="Elimina" onClick={() => setConfirmDelete(true)}>
+          {deleteIcon}
+        </button>
+      ),
+    },
+  ]
+
   return (
     <section className="pack-hero">
       <PackCover serverId={props.serverId} packMods={packModsOf(pack, byName)} size={132} />
@@ -228,41 +351,13 @@ function PackHero(props: {
         </div>
       </div>
 
-      <div className="pack-hero-actions">
-        <PackActivation
-          serverId={props.serverId}
-          pack={pack}
-          packs={props.packs}
-          byName={byName}
-          blocked={blocked}
-          onResult={(n, e) => {
-            setNotice(n)
-            setActivationError(e)
-          }}
-        />
-        <p className="muted small">
-          {blocked && pack.mods.length > 0
-            ? 'Prima installa le mod mancanti (o scegli di nuovo le versioni non più disponibili).'
-            : pack.active
-              ? '«Solo questo» spegne tutte le mod che non sono del pack. Disattivandolo restano accese solo le mod che servono ad altri pack attivi o a mod abilitate a mano.'
-              : '«Attiva» abilita queste mod (alle versioni scelte) lasciando accese le altre; «Attiva solo questo» spegne tutte le mod che non sono del pack. Poi riavvia il server.'}
-        </p>
-        <div className="btn-row">
-          <button type="button" className="btn btn-sm" disabled={duplicate.isPending} onClick={onDuplicate}>
-            Duplica
-          </button>
-          <button type="button" className="btn btn-sm" disabled={pack.mods.length === 0} title="Elenco delle mod in .json (importabile)" onClick={() => exportPack(pack)}>
-            Esporta
-          </button>
-          <button type="button" className="btn btn-sm btn-icon btn-danger-outline" aria-label="Elimina il modpack" title="Elimina" onClick={() => setConfirmDelete(true)}>
-            <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 7h16" />
-              <path d="M10 11v6M14 11v6" />
-              <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
-              <path d="M9 7V4h6v3" />
-            </svg>
-          </button>
-        </div>
+      {blocked && pack.mods.length > 0 && (
+        <p className="muted small pack-hero-blocked">Per attivarlo, prima installa le mod mancanti (o scegli di nuovo le versioni non più disponibili).</p>
+      )}
+
+      <div className="pack-hero-bar">
+        <OverflowActions actions={actions} menuLabel="Altre azioni per il modpack" />
+        {activation.dialog}
       </div>
 
       {(notice || activationError || duplicate.error) && (

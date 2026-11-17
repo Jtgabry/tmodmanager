@@ -2196,19 +2196,14 @@ h2 {
   color: var(--nav-text);
 }
 
-.pack-hero-actions {
-  flex: 1 1 220px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+/* Riga dei pulsanti: attivazione a sinistra, Duplica/Esporta/Elimina a destra (o nel menu «⋯») */
+.pack-hero-bar {
+  flex-basis: 100%;
+  min-width: 0;
 }
 
-.pack-hero-actions > .btn {
-  min-height: 44px;
-  justify-content: center;
-}
-
-.pack-hero-actions p {
+.pack-hero-blocked {
+  flex-basis: 100%;
   margin: 0;
 }
 
@@ -2393,18 +2388,6 @@ h2 {
   .archive-version-actions .btn:not(.btn-icon) {
     flex: 1;
   }
-}
-
-/* Pulsanti di attivazione nell'intestazione del pack («Attiva» e «Attiva solo questo») */
-.pack-activation-hero {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.4rem;
-}
-
-.pack-activation-hero .btn {
-  min-height: 44px;
-  justify-content: center;
 }
 
 /* Riga di pulsanti che non va mai a capo: quelli che non ci stanno passano nel menu «⋯» */
