@@ -68,11 +68,14 @@ const exists = (path: string) =>
     () => false,
   )
 
+/** Versione aggiuntiva di Terraria (data/terraria/versions/<versione>): fissa, si aggiunge e si rimuove. */
+export const isPinned = (dir: string) => dirname(dir) === paths.terrariaVersions()
+
 /** Tipo di un'installazione dai suoi file; se non è (ancora) installata, dalla cartella. */
 export async function installationKind(dir: string): Promise<Game> {
   if (await exists(join(dir, TERRARIA_BINARY))) return 'terraria'
   if (await exists(join(dir, TML_ASSEMBLY))) return 'tmodloader'
-  return dir === paths.terrariaInstall() || basename(dir).toLowerCase().startsWith('terraria') ? 'terraria' : 'tmodloader'
+  return dir === paths.terrariaInstall() || isPinned(dir) || basename(dir).toLowerCase().startsWith('terraria') ? 'terraria' : 'tmodloader'
 }
 
 /** Versione installata: dal file scritto dall'aggiornamento, altrimenti (tModLoader) dalla prima riga del log del server. */
@@ -280,8 +283,10 @@ export type Installation = {
   id: string
   path: string
   kind: Game
-  /** Installazione predefinita del pannello (data/terraria/Terraria o data/tmodloader/tModLoader). */
+  /** Installazione del pannello (data/terraria/Terraria, le versioni aggiuntive di Terraria, data/tmodloader/tModLoader). */
   managed: boolean
+  /** Versione aggiuntiva di Terraria: non si aggiorna, si rimuove quando nessun server la usa. */
+  pinned: boolean
   /** false = cartella prevista ma il gioco non è ancora installato (si installa dal pannello). */
   installed: boolean
   version: string | null
@@ -297,10 +302,24 @@ export type Installation = {
 export const isInstalled = async (dir: string) =>
   (await exists(join(dir, TERRARIA_BINARY))) || (await exists(join(dir, TML_START_SCRIPT)))
 
-/** Installazioni usate dai server, più le due predefinite del pannello (anche se non ancora installate). */
+/** Versioni aggiuntive di Terraria: le cartelle presenti più quelle in installazione (o fallite), dalla più recente. */
+async function pinnedDirs(): Promise<string[]> {
+  const root = paths.terrariaVersions()
+  const names = new Set(await readdir(root).catch(() => [] as string[]))
+  for (const dir of jobs.keys()) if (isPinned(dir)) names.add(basename(dir))
+  return [...names]
+    .filter((name) => /^1(\.\d+){3,5}$/.test(name))
+    .sort((a, b) => compareVersions(b, a))
+    .map((name) => join(root, name))
+}
+
+/**
+ * Installazioni usate dai server, più quelle del pannello (anche se non ancora installate):
+ * Terraria, le sue versioni aggiuntive, tModLoader.
+ */
 export async function listInstallations(): Promise<Installation[]> {
   const servers = await loadServers()
-  const managed = [paths.terrariaInstall(), paths.tmlInstall()]
+  const managed = [paths.terrariaInstall(), ...(await pinnedDirs()), paths.tmlInstall()]
   const dirs = [...new Set([...managed, ...servers.map((s) => s.installDir)])]
   return Promise.all(
     dirs.map(async (path) => {
@@ -313,6 +332,7 @@ export async function listInstallations(): Promise<Installation[]> {
         path,
         kind,
         managed: managed.includes(path),
+        pinned: isPinned(path),
         installed,
         version,
         gameVersion: game,
@@ -353,6 +373,9 @@ export async function startJob(
   const dir = installation.path
   const label = gameLabel(installation.kind)
   if (busy(jobs.get(dir))) throw new TmlError('C\'è già un aggiornamento in corso per questa installazione', 409)
+  if (installation.pinned && installation.installed) {
+    throw new TmlError('Le versioni aggiuntive di Terraria sono fisse: per un\'altra versione aggiungila a parte', 409)
+  }
 
   let release: Release | null = null
   let backup: Backup | null = null
@@ -403,6 +426,46 @@ export async function startJob(
     })
     .finally(() => manager.unblockInstall(dir))
   return job
+}
+
+/** Aggiunge una versione fissa di Terraria (in background, come un'installazione). */
+export async function addTerrariaVersion(version: string, manager: ServerManager) {
+  const release =
+    (await listReleases('terraria').catch(() => [] as Release[])).find((r) => r.version === version) ?? terrariaRelease(version)
+  if (!release) throw new TmlError(`Versione di Terraria non valida: ${version}`, 422)
+  const all = await listInstallations()
+  const same = all.find((i) => i.kind === 'terraria' && i.installed && i.version === version && (i.pinned || i.path === paths.terrariaInstall()))
+  if (same) throw new TmlError(`Terraria ${version} è già installato${same.pinned ? '' : ' (è l\'installazione principale)'}`, 409)
+  const dir = paths.terrariaVersion(version)
+  if (busy(jobs.get(dir))) throw new TmlError(`Terraria ${version} si sta già installando`, 409)
+  // Un tentativo fallito in precedenza: si riparte da zero
+  await rm(dir, { recursive: true, force: true })
+  const installation: Installation = {
+    id: installationId(dir),
+    path: dir,
+    kind: 'terraria',
+    managed: true,
+    pinned: true,
+    installed: false,
+    version: null,
+    gameVersion: null,
+    worldRelease: null,
+    servers: [],
+    backups: [],
+    job: null,
+  }
+  return startJob(installation, { version: release.version }, false, manager)
+}
+
+/** Rimuove una versione aggiuntiva di Terraria (nessun server deve usarla). */
+export async function removeInstallation(installation: Installation) {
+  if (!installation.pinned) throw new TmlError('Si possono rimuovere solo le versioni aggiuntive di Terraria', 409)
+  if (busy(jobs.get(installation.path))) throw new TmlError('Installazione in corso: riprova quando è finita', 409)
+  if (installation.servers.length) {
+    throw new TmlError(`La usano ancora: ${installation.servers.map((s) => s.name).join(', ')}. Passali a un'altra versione prima.`, 409)
+  }
+  await rm(installation.path, { recursive: true, force: true })
+  jobs.delete(installation.path)
 }
 
 async function download(release: Release, file: string, job: Job) {

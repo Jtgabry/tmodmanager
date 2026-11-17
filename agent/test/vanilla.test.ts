@@ -9,7 +9,7 @@ import { isServerProcess, type ServerManager } from '../src/manager.ts'
 import { paths } from '../src/paths.ts'
 import { loadServers, ServerDefinition } from '../src/registry.ts'
 import { createServer, knownInstallations, recreateWorld, ServerAdminError, serverSettings, UpdateServerInput, updateServer } from '../src/serverAdmin.ts'
-import { installationWorldRelease, recordWorldRelease } from '../src/tml.ts'
+import { addTerrariaVersion, findInstallation, installationWorldRelease, listInstallations, recordWorldRelease, removeInstallation, startJob, TmlError } from '../src/tml.ts'
 import { listTrash } from '../src/trash.ts'
 
 const worldHeader = (release: number) => {
@@ -227,6 +227,79 @@ test('gioco non ancora installato: proposto alla creazione e al cambio di versio
     assert.equal(switched.game, 'tmodloader')
     assert.equal(switched.install?.game, 'tmodloader')
     await assert.rejects(updateServer('nuovo', { installDir: '/non/esiste' }, managerIn('stopped')), ServerAdminError)
+  } finally {
+    Object.assign(config, previous)
+  }
+})
+
+test('versioni aggiuntive di Terraria: elencate, scelte dai server, fisse, rimovibili se inutilizzate', async () => {
+  const previous = { dataDir: config.dataDir, terrariaApi: config.terrariaApi }
+  config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-pinned-'))
+  config.terrariaApi = 'http://127.0.0.1:9'
+  const manager = { ...managerIn('stopped'), blockInstall: () => {}, unblockInstall: () => {} } as unknown as ServerManager
+  try {
+    const install = async (dir: string, version: string) => {
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, 'TerrariaServer.bin.x86_64'), '')
+      await writeFile(join(dir, '.tmodmanager-version'), `${version}\n`)
+    }
+    await install(paths.terrariaInstall(), '1.4.5.8')
+    await install(paths.terrariaVersion('1.4.4.9'), '1.4.4.9')
+
+    const list = await listInstallations()
+    assert.deepEqual(
+      list.map((i) => [i.kind, i.version, i.pinned, i.managed]),
+      [
+        ['terraria', '1.4.5.8', false, true],
+        ['terraria', '1.4.4.9', true, true],
+        ['tmodloader', null, false, true],
+      ],
+    )
+    const pinned = list[1]
+    assert.equal(pinned.worldRelease, 279)
+    assert.deepEqual(
+      (await knownInstallations()).map((c) => [c.kind, c.version]),
+      [
+        ['terraria', '1.4.5.8'],
+        ['terraria', '1.4.4.9'],
+        ['tmodloader', null],
+      ],
+    )
+
+    // Già presenti: né come principale né come aggiuntiva
+    await assert.rejects(addTerrariaVersion('1.4.5.8', manager), TmlError)
+    await assert.rejects(addTerrariaVersion('1.4.4.9', manager), TmlError)
+    // Fisse: niente aggiornamenti
+    await assert.rejects(startJob(pinned, { version: '1.4.5.8' }, false, manager), TmlError)
+
+    // Usata da un server: non si rimuove
+    await createServer({
+      id: 'vecchio',
+      name: 'Vecchio',
+      installDir: pinned.path,
+      port: 47_780,
+      maxPlayers: 8,
+      password: '',
+      motd: '',
+      world: { name: 'Mondo', size: 1, difficulty: 0, seed: '' },
+      copyModsFrom: null,
+      launchArgs: ['-nosteam'],
+    })
+    await assert.rejects(removeInstallation(await findInstallation(pinned.id)), TmlError)
+    await updateServer('vecchio', { installDir: paths.terrariaInstall() }, manager)
+    await removeInstallation(await findInstallation(pinned.id))
+    assert.equal(await exists(pinned.path), false)
+
+    // Aggiunta non riuscita (terraria.org irraggiungibile): resta in elenco con l'errore, non si propone ai server
+    await addTerrariaVersion('1.4.3.6', manager)
+    const failed = async () => (await listInstallations()).find((i) => i.path === paths.terrariaVersion('1.4.3.6'))
+    for (let i = 0; i < 50 && (await failed())?.job?.phase !== 'error'; i++) await new Promise((r) => setTimeout(r, 50))
+    const entry = await failed()
+    assert.equal(entry?.job?.phase, 'error')
+    assert.equal(entry?.installed, false)
+    assert.equal((await knownInstallations()).some((c) => c.path === entry?.path), false)
+    await removeInstallation(entry!)
+    assert.equal(await failed(), undefined)
   } finally {
     Object.assign(config, previous)
   }

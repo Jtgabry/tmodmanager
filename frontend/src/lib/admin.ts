@@ -96,7 +96,15 @@ export function useAdminServerActions() {
       (await api.post(`/admin/installations/${id}/update`, body)).data,
     onSettled: refresh,
   })
-  return { create, update, remove, recreateWorld, updateTml }
+  const addTerrariaVersion = useMutation({
+    mutationFn: async (version: string) => (await api.post('/admin/installations/terraria/versions', { version })).data,
+    onSettled: refresh,
+  })
+  const removeInstallation = useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/admin/installations/${id}`)).data,
+    onSettled: refresh,
+  })
+  return { create, update, remove, recreateWorld, updateTml, addTerrariaVersion, removeInstallation }
 }
 
 /** Versione del mondo (primi byte del .wld) → versione di Terraria che lo ha salvato (tabella di TEdit). */

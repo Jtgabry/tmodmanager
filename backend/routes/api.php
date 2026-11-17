@@ -132,6 +132,8 @@ Route::prefix('v1')
                 Route::get('/installations', [InstallationController::class, 'index'])->name('installations.index');
                 Route::get('/releases/{game}', [InstallationController::class, 'releases'])->whereIn('game', ['terraria', 'tmodloader'])->name('releases');
                 Route::post('/installations/{installation}/update', [InstallationController::class, 'update'])->name('installations.update');
+                Route::post('/installations/terraria/versions', [InstallationController::class, 'storeTerrariaVersion'])->name('installations.terraria.store');
+                Route::delete('/installations/{installation}', [InstallationController::class, 'destroy'])->name('installations.destroy');
             });
         });
     });

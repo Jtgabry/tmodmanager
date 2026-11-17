@@ -197,8 +197,10 @@ export type Installation = {
   id: string
   path: string
   kind: Game
-  /** L'installazione predefinita del pannello (nella cartella dati). */
+  /** Installazione del pannello (nella cartella dati). */
   managed: boolean
+  /** Versione aggiuntiva di Terraria: fissa, si rimuove quando nessun server la usa. */
+  pinned: boolean
   /** false = gioco non ancora installato in questa cartella. */
   installed: boolean
   version: string | null

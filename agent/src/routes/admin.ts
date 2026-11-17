@@ -15,7 +15,7 @@ import {
   updateServer,
 } from '../serverAdmin.js'
 import { GAMES } from '../games.js'
-import { findInstallation, listInstallations, listReleases, startJob, TmlError } from '../tml.js'
+import { addTerrariaVersion, findInstallation, listInstallations, listReleases, removeInstallation, startJob, TmlError } from '../tml.js'
 
 /** Operazioni da amministratore: server (creazione, impostazioni, rimozione) e installazioni di Terraria e tModLoader. */
 export async function adminRoutes(app: FastifyInstance, { manager }: { manager: ServerManager }) {
@@ -64,6 +64,17 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
   // --- Installazioni (Terraria e tModLoader) ---------------------------------------------------
 
   app.get('/admin/installations', async () => ({ data: await listInstallations() }))
+
+  // Versioni aggiuntive di Terraria: più server vanilla su versioni diverse
+  app.post('/admin/installations/terraria/versions', async (req, reply) => {
+    const { version } = z.object({ version: z.string().regex(/^1(\.\d){3,5}$/, 'versione come 1.4.4.9') }).parse(req.body)
+    return reply.code(202).send({ data: await addTerrariaVersion(version, manager) })
+  })
+
+  app.delete<{ Params: { id: string } }>('/admin/installations/:id', async (req) => {
+    await removeInstallation(await findInstallation(req.params.id))
+    return { data: { removed: true } }
+  })
 
   app.get<{ Params: { game: string }; Querystring: { refresh?: string } }>('/admin/releases/:game', async (req, reply) => {
     const game = z.enum(GAMES).safeParse(req.params.game)

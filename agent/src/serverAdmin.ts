@@ -73,7 +73,8 @@ export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' 
  */
 export async function knownInstallations(): Promise<InstallationChoice[]> {
   return (await listInstallations())
-    .filter((i) => i.installed || i.managed)
+    // Le versioni aggiuntive solo se installate: non si "installano da sole" come le due principali
+    .filter((i) => i.installed || (i.managed && !i.pinned))
     .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'terraria' ? -1 : 1))
     .map(({ path, kind, version, gameVersion, worldRelease, managed, installed, job }) => ({
       path,

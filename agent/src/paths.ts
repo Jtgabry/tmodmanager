@@ -12,6 +12,7 @@ import { config } from './config.js'
  *   ├── resume-servers.json      server da riaccendere dopo uno spegnimento dell'agent
  *   ├── database.sqlite          database del sito (Laravel)
  *   ├── terraria/Terraria/       dedicated server di Terraria vanilla (+ Terraria-v<versione>: backup)
+ *   ├── terraria/versions/<v>/   versioni aggiuntive di Terraria, fisse (più server su versioni diverse)
  *   ├── tmodloader/tModLoader/   installazione di tModLoader (+ tModLoader-v<versione>: backup)
  *   ├── steamcmd/                steamcmd (scaricato al primo uso)
  *   ├── servers/<id>/
@@ -41,6 +42,9 @@ export const paths = {
 
   /** Installazione di Terraria vanilla gestita dal pannello. */
   terrariaInstall: () => join(config.dataDir, 'terraria', 'Terraria'),
+  /** Versioni aggiuntive di Terraria (una cartella per versione, non si aggiornano). */
+  terrariaVersions: () => join(config.dataDir, 'terraria', 'versions'),
+  terrariaVersion: (version: string) => join(config.dataDir, 'terraria', 'versions', version),
   /** Installazione di tModLoader gestita dal pannello. */
   tmlInstall: () => join(config.dataDir, 'tmodloader', 'tModLoader'),
   steamcmdDir: () => join(config.dataDir, 'steamcmd'),

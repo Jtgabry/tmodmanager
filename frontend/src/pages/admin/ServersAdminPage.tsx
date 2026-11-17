@@ -385,9 +385,75 @@ function InstallationsSection({ servers }: { servers: Server[] }) {
       {installations.isLoading && <div className="spinner" />}
       {installations.error && <div className="alert alert-error">{errorMessage(installations.error)}</div>}
       <div className="stack">
-        {installations.data?.map((i) => <InstallationCard key={i.id} installation={i} servers={servers} />)}
+        {installations.data?.map((i) => (
+          <InstallationCard key={i.id} installation={i} servers={servers} hasPinned={installations.data.some((x) => x.pinned)} />
+        ))}
+        {installations.data && <AddTerrariaVersion installations={installations.data} />}
       </div>
     </div>
+  )
+}
+
+/** Versioni aggiuntive di Terraria: più server vanilla su versioni diverse (ognuno sceglie la sua). */
+function AddTerrariaVersion({ installations }: { installations: Installation[] }) {
+  const releases = useReleases('terraria')
+  const { addTerrariaVersion } = useAdminServerActions()
+  const [version, setVersion] = useState('')
+  const [customVersion, setCustomVersion] = useState('')
+  const present = new Set(installations.filter((i) => i.kind === 'terraria' && (i.installed || i.job)).map((i) => i.version ?? i.job?.toVersion))
+  const available = releases.data?.filter((r) => !present.has(r.version)) ?? []
+  const selected = version === OTHER_VERSION ? customVersion.trim() : version || available[0]?.version || ''
+  const valid = /^1(\.\d){3,5}$/.test(selected) && !present.has(selected)
+
+  return (
+    <article className="pack">
+      <header>
+        <div>
+          <strong>Aggiungi un'altra versione di Terraria</strong>
+          <div className="muted small">
+            Per avere server vanilla su versioni diverse: ogni versione aggiunta è fissa (non si aggiorna) e ogni server
+            sceglie quale usare dalla Panoramica. Si possono rimuovere quando nessun server le usa.
+          </div>
+        </div>
+      </header>
+      <div className="form-inline">
+        <label className="field">
+          <span>Versione</span>
+          <select value={version || selected} onChange={(e) => setVersion(e.target.value)}>
+            {available.map((r) => (
+              <option key={r.version} value={r.version}>
+                {r.version}
+              </option>
+            ))}
+            <option value={OTHER_VERSION}>Altra versione…</option>
+          </select>
+        </label>
+        {(version === OTHER_VERSION || (!available.length && !releases.isLoading)) && (
+          <label className="field">
+            <span>Versione (es. 1.4.3.6)</span>
+            <input
+              pattern="1(\.\d){3,5}"
+              placeholder="1.4.3.6"
+              value={customVersion}
+              onChange={(e) => {
+                setVersion(OTHER_VERSION)
+                setCustomVersion(e.target.value)
+              }}
+            />
+          </label>
+        )}
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          disabled={!valid || addTerrariaVersion.isPending}
+          onClick={() => addTerrariaVersion.mutate(selected, { onSuccess: () => setVersion('') })}
+        >
+          Aggiungi
+        </button>
+      </div>
+      <p className="muted small">Su terraria.org si trovano le versioni dalla 1.4.1.2 in poi.</p>
+      {addTerrariaVersion.isError && <div className="alert alert-error">{errorMessage(addTerrariaVersion.error)}</div>}
+    </article>
   )
 }
 
@@ -402,9 +468,9 @@ const PHASES: Record<string, string> = {
 
 const OTHER_VERSION = '__other'
 
-function InstallationCard({ installation, servers }: { installation: Installation; servers: Server[] }) {
-  const releases = useReleases(installation.kind)
-  const { updateTml, recreateWorld } = useAdminServerActions()
+function InstallationCard({ installation, servers, hasPinned }: { installation: Installation; servers: Server[]; hasPinned: boolean }) {
+  const releases = useReleases(installation.kind, !installation.pinned)
+  const { updateTml, recreateWorld, removeInstallation } = useAdminServerActions()
   const [version, setVersion] = useState('')
   const [customVersion, setCustomVersion] = useState('')
   const [restartServers, setRestartServers] = useState(true)
@@ -437,9 +503,20 @@ function InstallationCard({ installation, servers }: { installation: Installatio
     <article className="pack">
       <header>
         <div>
-          <strong>{label}</strong> <span className="muted small mono">{installation.path}</span>
+          <strong>
+            {label}
+            {installation.pinned && ` ${installation.version ?? installation.job?.toVersion ?? ''}`}
+          </strong>{' '}
+          {installation.pinned ? (
+            <span className="muted small">versione aggiuntiva, fissa</span>
+          ) : (
+            installation.kind === 'terraria' && hasPinned && installation.managed && <span className="muted small">principale</span>
+          )}{' '}
+          <span className="muted small mono">{installation.path}</span>
           <div className="muted small">
-            {installation.installed ? (
+            {installation.pinned && !installation.installed ? (
+              installation.job?.phase === 'error' ? 'Installazione non riuscita.' : 'Installazione in corso…'
+            ) : installation.installed ? (
               <>
                 Versione installata: <strong>{installation.version ?? 'sconosciuta'}</strong>
                 {!isTerraria && installation.gameVersion && ` (basata su Terraria ${installation.gameVersion})`}
@@ -452,7 +529,21 @@ function InstallationCard({ installation, servers }: { installation: Installatio
             )}
           </div>
         </div>
+        {installation.pinned && !running && (
+          <div className="btn-row">
+            <button
+              type="button"
+              className="btn btn-danger-outline btn-sm"
+              disabled={installation.servers.length > 0 || removeInstallation.isPending}
+              title={installation.servers.length > 0 ? 'Passa prima i server che la usano a un\'altra versione' : 'Cancella questa versione dal disco'}
+              onClick={() => removeInstallation.mutate(installation.id)}
+            >
+              Rimuovi
+            </button>
+          </div>
+        )}
       </header>
+      {removeInstallation.isError && <div className="alert alert-error">{errorMessage(removeInstallation.error)}</div>}
 
       {job && (
         <div className={`alert ${job.phase === 'error' ? 'alert-error' : job.phase === 'done' ? 'alert-success' : 'alert-warning'}`}>
@@ -470,7 +561,7 @@ function InstallationCard({ installation, servers }: { installation: Installatio
         </div>
       )}
 
-      {!running && (
+      {!running && !installation.pinned && (
         <>
           <div className="form-inline">
             <label className="field">
