@@ -106,7 +106,7 @@ data/
 ```
 
 Aprendo il sito senza amministratori compare la pagina **Crea l'amministratore** (serve il codice monouso di
-`setup:code`). Poi, da *Gestione server*: installa tModLoader (scaricato da GitHub) e crea il primo server.
+`setup:code`). Poi, da *Gestione server*: installa Terraria (da terraria.org) e, per le mod, tModLoader (da GitHub), poi crea il primo server.
 steamcmd viene scaricato da solo al primo download dal Workshop.
 
 Da installazioni precedenti: la vecchia cartella `agent/data` viene spostata qui in automatico al primo avvio

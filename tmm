@@ -391,7 +391,7 @@ cmd_install() {
     say "Pannello: ${B}$url${R}"
   fi
   say ""
-  say "Poi, da Gestione server: installa tModLoader e crea il primo server."
+  say "Poi, da Gestione server → Installazioni: installa Terraria (e tModLoader, se vuoi le mod) e crea il primo server."
   say "Porte dei server di gioco: $(env_get TMM_GAME_PORTS) (TCP) — aprile anche sul router/firewall del provider."
   say "Gestione: tmm status · tmm logs · tmm update · tmm backup · tmm uninstall"
 }
