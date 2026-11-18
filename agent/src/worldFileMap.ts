@@ -12,7 +12,8 @@ import type { RenderJob, WorldFileSource } from './worldFileRender.js'
  * salvataggio del mondo) e solo mentre qualcuno guarda la sezione Mondo. Un disegno alla volta, in un
  * worker thread. Su disco: data/servers/<id>/worldmap/ (stesso formato di LiveMap).
  *
- * Con tModLoader i blocchi delle mod stanno nel .twld, non ancora letto: nella mappa mancano.
+ * Con tModLoader i blocchi e i muri delle mod stanno nel .twld accanto al .wld: si leggono anche quelli, con i
+ * colori ricavati dalle texture delle mod (modMapColors.ts).
  */
 
 export const worldMapDir = (serverId: string) => join(paths.server(serverId), 'worldmap')
@@ -61,8 +62,15 @@ export async function refreshWorldFileMap(server: ServerDefinition): Promise<Wor
   if (!(await exists(mapColorsPath()))) return { ...status, noColors: true }
 
   const info = await stat(path)
-  const source: WorldFileSource = { file: basename(path), mtimeMs: Math.round(info.mtimeMs), size: info.size }
-  const key = `${source.file}:${source.mtimeMs}:${source.size}`
+  const twldPath = server.game === 'tmodloader' ? path.replace(/\.wld$/i, '.twld') : null
+  const twld = twldPath ? await stat(twldPath).catch(() => null) : null
+  const source: WorldFileSource = {
+    file: basename(path),
+    mtimeMs: Math.round(info.mtimeMs),
+    size: info.size,
+    twld: twld ? { mtimeMs: Math.round(twld.mtimeMs), size: twld.size } : null,
+  }
+  const key = sourceKey(source)
   status.savedAt = new Date(source.mtimeMs).toISOString()
 
   let drawn: WorldFileSource | null = null
@@ -71,16 +79,23 @@ export async function refreshWorldFileMap(server: ServerDefinition): Promise<Wor
   } catch {
     // mai disegnata
   }
-  if (drawn && `${drawn.file}:${drawn.mtimeMs}:${drawn.size}` === key) return status
+  if (drawn && sourceKey(drawn) === key) return status
 
   const state = states.get(server.id) ?? { running: false, failed: null }
   states.set(server.id, state)
   if (state.running) return { ...status, generating: true }
   if (state.failed?.key === key) return { ...status, error: state.failed.message }
-  if (Date.now() - info.mtimeMs < SETTLE_MS) return { ...status, generating: true }
+  if (Date.now() - Math.max(info.mtimeMs, twld?.mtimeMs ?? 0) < SETTLE_MS) return { ...status, generating: true }
 
   state.running = true
-  const job: RenderJob = { worldPath: path, source, outDir: worldMapDir(server.id), colorsPath: mapColorsPath() }
+  const job: RenderJob = {
+    worldPath: path,
+    source,
+    outDir: worldMapDir(server.id),
+    colorsPath: mapColorsPath(),
+    twldPath: twld ? twldPath : null,
+    modsDir: twld ? join(server.saveDir, 'Mods') : null,
+  }
   queue = queue
     .then(() => runWorker(job))
     .then(
@@ -96,6 +111,9 @@ export async function refreshWorldFileMap(server: ServerDefinition): Promise<Wor
     })
   return { ...status, generating: true }
 }
+
+/** Il file (o il .twld accanto) è cambiato dall'ultimo disegno? */
+const sourceKey = (s: WorldFileSource) => `${s.file}:${s.mtimeMs}:${s.size}:${s.twld ? `${s.twld.mtimeMs}:${s.twld.size}` : '-'}`
 
 /** Il worker è lo stesso file .ts in sviluppo (tsx) e .js compilato in produzione. */
 function runWorker(job: RenderJob): Promise<void> {

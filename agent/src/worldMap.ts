@@ -73,6 +73,8 @@ export type WorldMapState = {
   liveMap: { available: boolean; enabled: boolean } | null
   /** Mappa dal file del mondo: ridisegno in corso, ultimo errore, salvataggio del mondo. */
   worldFile: { generating: boolean; error: string | null; savedAt: string | null } | null
+  /** tModLoader: blocchi e muri delle mod letti dal .twld (quanti tipi, quanti colori dalle texture, errore). */
+  modBlocks: { tiles: number; walls: number; fromTextures: number; error: string | null } | null
   /** Quando la mappa è stata aggiornata l'ultima volta (LiveMap: ultima scrittura; file: salvataggio del mondo). */
   updatedAt: string | null
   manifest: WorldMapManifest | null
@@ -100,7 +102,7 @@ async function readJson<T>(path: string, schema: z.ZodType<T>): Promise<{ value:
  */
 export async function worldMap(server: ServerDefinition, { watching = false } = {}): Promise<WorldMapState> {
   const state: WorldMapState = {
-    source: null, unavailable: null, liveMap: null, worldFile: null, updatedAt: null, manifest: null, players: [], playersAt: null,
+    source: null, unavailable: null, liveMap: null, worldFile: null, modBlocks: null, updatedAt: null, manifest: null, players: [], playersAt: null,
   }
 
   if (server.game === 'tshock') {
@@ -130,10 +132,16 @@ export async function worldMap(server: ServerDefinition, { watching = false } = 
 
   const file = await refreshWorldFileMap(server)
   state.worldFile = { generating: file.generating, error: file.error, savedAt: file.savedAt }
-  const manifest = await readJson(join(worldMapDir(server.id), 'manifest.json'), Manifest.extend({ source: z.object({ mtimeMs: z.number() }) }))
+  const manifest = await readJson(
+    join(worldMapDir(server.id), 'manifest.json'),
+    Manifest.extend({
+      source: z.object({ mtimeMs: z.number() }),
+      modBlocks: z.object({ tiles: z.number(), walls: z.number(), fromTextures: z.number(), error: z.string().nullable() }).nullable().optional(),
+    }),
+  )
   if (manifest && !file.missing) {
-    const { source, ...rest } = manifest.value
-    return { ...state, source: 'world', manifest: rest, updatedAt: new Date(source.mtimeMs).toISOString() }
+    const { source, modBlocks, ...rest } = manifest.value
+    return { ...state, source: 'world', manifest: rest, modBlocks: modBlocks ?? null, updatedAt: new Date(source.mtimeMs).toISOString() }
   }
   const unavailable: MapUnavailable = file.missing ? 'no-world' : file.noColors ? 'no-colors' : file.error ? 'world-error' : 'loading'
   return { ...state, unavailable }

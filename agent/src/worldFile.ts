@@ -175,11 +175,13 @@ function backgroundColors(header: WorldHeader, c: MapColors): Uint32Array {
 /**
  * Colori di tutte le tile (0xRRGGBB, riga per riga: indice y * larghezza + x), come la minimappa del gioco a
  * piena luce: blocco, altrimenti liquido, altrimenti muro, altrimenti sfondo. Variante dei blocchi: la prima
- * (alcuni blocchi, come gli alberi, nel gioco cambiano colore secondo il bioma).
+ * (alcuni blocchi, come gli alberi, nel gioco cambiano colore secondo il bioma). `layers` dice quale di questi
+ * ha vinto in ogni pixel (0 sfondo, 1 muro, 2 liquido, 3 blocco): serve per sovrapporre i blocchi delle mod.
  */
-export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors): Uint32Array {
+export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors): { pixels: Uint32Array; layers: Uint8Array } {
   const { width, height, frameImportant } = header
   const pixels = new Uint32Array(width * height)
+  const layers = new Uint8Array(width * height)
   const background = backgroundColors(header, c)
   const tileColor = Int32Array.from(c.tileLookup, (i) => (i > 0 ? c.colors[i] : -1))
   const wallColor = Int32Array.from(c.wallLookup, (i) => (i > 0 ? c.colors[i] : -1))
@@ -219,21 +221,31 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors): Uin
       if (h3 & 0x40) wall |= r.byte() << 8
 
       let color = -1
+      let layer = 0
       const solid = tile >= 0 && tile < tileColor.length ? tileColor[tile] : -1
-      if (solid >= 0 && !(h3 & 4)) color = solid // i blocchi disattivati da un attuatore non si vedono
-      else if (liquid >= 0) color = liquidColor[liquid]
-      else if (wall > 0 && wall < wallColor.length && wallColor[wall] >= 0) color = wallColor[wall]
+      if (solid >= 0 && !(h3 & 4)) {
+        color = solid // i blocchi disattivati da un attuatore non si vedono
+        layer = 3
+      } else if (liquid >= 0) {
+        color = liquidColor[liquid]
+        layer = 2
+      } else if (wall > 0 && wall < wallColor.length && wallColor[wall] >= 0) {
+        color = wallColor[wall]
+        layer = 1
+      }
 
       const repeat = (h1 & 0xc0) >> 6
       let count = repeat === 0 ? 0 : repeat === 1 ? r.byte() : r.int16()
       if (count < 0 || y + count >= height) count = Math.max(0, Math.min(count, height - 1 - y))
       // Senza blocco, liquido o muro: lo sfondo, che cambia con la profondità (anche per le tile ripetute)
       pixels[y * width + x] = color >= 0 ? color : background[y]
+      layers[y * width + x] = layer
       while (count-- > 0) {
         y++
         pixels[y * width + x] = color >= 0 ? color : background[y]
+        layers[y * width + x] = layer
       }
     }
   }
-  return pixels
+  return { pixels, layers }
 }

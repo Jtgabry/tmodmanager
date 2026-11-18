@@ -230,3 +230,54 @@ export async function readModIcon(path: string): Promise<Buffer | null> {
     await file.close()
   }
 }
+
+/**
+ * File interni scelti da `wanted` (percorso → true), decompressi; quelli oltre `maxBytes` si saltano.
+ * Una sola apertura del .tmod, anche se i file sono molti.
+ */
+export async function readModEntries(path: string, wanted: (entryPath: string) => boolean, maxBytes = 32 * 1024 * 1024): Promise<Map<string, Buffer>> {
+  const found = new Map<string, Buffer>()
+  const file = await open(path)
+  try {
+    const header = await readHeader(file)
+    let offset = header.dataStart
+    for (const entry of header.entries) {
+      if (wanted(entry.path) && entry.compressed >= 0 && entry.length >= 0 && entry.length <= maxBytes && entry.compressed <= maxBytes) {
+        const raw = Buffer.alloc(entry.compressed)
+        await file.read({ buffer: raw, position: offset })
+        found.set(entry.path, entry.compressed === entry.length ? raw : inflateRawSync(raw, { maxOutputLength: maxBytes }))
+      }
+      offset += entry.compressed
+    }
+  } finally {
+    await file.close()
+  }
+  return found
+}
+
+/**
+ * Colore medio (0xRRGGBB) di una texture "rawimg" di tModLoader (int32 versione, larghezza, altezza, pixel
+ * RGBA), contando solo i pixel quasi opachi; null se illeggibile o tutta trasparente.
+ */
+export function rawimgAverageColor(data: Buffer): number | null {
+  if (data.length < 12 || data.readInt32LE(0) !== 1) return null
+  const width = data.readInt32LE(4)
+  const height = data.readInt32LE(8)
+  if (width <= 0 || height <= 0 || 12 + width * height * 4 > data.length) return null
+  const pixels = width * height
+  const step = Math.max(1, Math.floor(pixels / 250_000)) // texture enormi: un campione basta
+  let r = 0
+  let g = 0
+  let b = 0
+  let n = 0
+  for (let i = 0; i < pixels; i += step) {
+    const o = 12 + i * 4
+    if (data[o + 3] < 200) continue
+    r += data[o]
+    g += data[o + 1]
+    b += data[o + 2]
+    n++
+  }
+  if (!n) return null
+  return (Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(b / n)
+}

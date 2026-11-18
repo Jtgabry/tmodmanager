@@ -95,8 +95,14 @@ function WorldFileNotice({ server, state }: { server: Server; state: WorldMapSta
         Mappa ricavata dal file del mondo: si aggiorna a ogni salvataggio
         {server.state === 'running' ? ' (salvataggi automatici del gioco, o alla chiusura del server)' : ''}.
         {file?.generating && ' Sto leggendo il salvataggio più recente…'}
-        {server.game === 'tmodloader' && ' I blocchi delle mod non compaiono ancora: stanno nel file .twld.'}
+        {server.game === 'tmodloader' &&
+          state.modBlocks &&
+          !state.modBlocks.error &&
+          ' I blocchi delle mod (dal file .twld) hanno il colore medio della loro texture: può differire un po\' da quello della mappa del gioco.'}
       </p>
+      {state.modBlocks?.error && (
+        <div className="alert alert-warning">I blocchi delle mod non si sono potuti leggere dal file .twld ({state.modBlocks.error}): la mappa mostra solo quelli di Terraria.</div>
+      )}
       {file?.error && <div className="alert alert-warning">L'ultimo salvataggio non si è potuto leggere ({file.error}): la mappa è quella precedente.</div>}
       {server.game === 'tshock' && state.liveMap?.enabled && (
         <div className="alert alert-info">

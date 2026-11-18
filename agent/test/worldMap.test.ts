@@ -101,13 +101,14 @@ test('lettura del .wld: intestazione, spawn e livelli, colori di blocchi, muri, 
     [header.name, header.id, header.width, header.height, header.spawnX, header.spawnY, header.surface, header.rock],
     ['Prova', 7, WIDTH, HEIGHT, 120, 90, 110, 160],
   )
-  const px = renderWorld(buf, header, COLORS)
+  const { pixels: px, layers } = renderWorld(buf, header, COLORS)
   const at = (x: number, y: number) => px[y * WIDTH + x]
   assert.equal(at(10, 150), 0x976b4b) // terra
   assert.equal(at(20, 50), 0x093dbf) // l'acqua copre il muro
   assert.equal(at(0, 0), 0x3228ff) // cielo in alto
   assert.equal(at(0, 100), 0x3a64ff) // cielo più chiaro verso la superficie
   assert.equal(at(0, 299), 0x322c26) // inferi
+  assert.deepEqual([layers[150 * WIDTH + 10], layers[50 * WIDTH + 20], layers[0]], [3, 2, 0])
   assert.throws(() => readWorldHeader(Buffer.from('non un mondo, decisamente non un mondo')))
 })
 

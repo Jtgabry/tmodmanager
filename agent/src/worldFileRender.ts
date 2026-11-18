@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { modBlockColors } from './modMapColors.js'
 import { encodePng } from './png.js'
+import { overlayModBlocks, readModBlocks } from './twld.js'
 import { type MapColors, readWorldHeader, renderWorld } from './worldFile.js'
 
 /**
@@ -15,9 +17,20 @@ export const CHUNK_WIDTH = 200
 export const CHUNK_HEIGHT = 150
 const OVERVIEW_SCALE = 4
 
-export type WorldFileSource = { file: string; mtimeMs: number; size: number }
+export type WorldFileSource = { file: string; mtimeMs: number; size: number; twld?: { mtimeMs: number; size: number } | null }
 
-export type RenderJob = { worldPath: string; source: WorldFileSource; outDir: string; colorsPath: string }
+export type RenderJob = {
+  worldPath: string
+  source: WorldFileSource
+  outDir: string
+  colorsPath: string
+  /** tModLoader: il .twld accanto al .wld (blocchi delle mod) e la cartella delle mod (per i loro colori). */
+  twldPath?: string | null
+  modsDir?: string | null
+}
+
+/** Esito della lettura dei blocchi delle mod (.twld). */
+export type ModBlocksInfo = { tiles: number; walls: number; fromTextures: number; error: string | null }
 
 type PreviousManifest = { cols?: number; rows?: number; chunks?: number[]; hashes?: string[]; overview?: { version?: number; hash?: string } }
 
@@ -33,8 +46,25 @@ async function writeAtomic(path: string, data: Buffer | string) {
 export async function renderWorldFile(job: RenderJob): Promise<{ width: number; height: number; chunks: number }> {
   const [buf, colors] = await Promise.all([readFile(job.worldPath), readFile(job.colorsPath, 'utf8').then((t) => JSON.parse(t) as MapColors)])
   const header = readWorldHeader(buf)
-  const pixels = renderWorld(buf, header, colors)
+  const { pixels, layers } = renderWorld(buf, header, colors)
   const { width, height } = header
+  await mkdir(job.outDir, { recursive: true })
+
+  // tModLoader: i blocchi delle mod stanno nel .twld. Se non si legge, resta la mappa vanilla (con l'errore)
+  let modBlocks: ModBlocksInfo | null = null
+  if (job.twldPath) {
+    try {
+      const blocks = readModBlocks(await readFile(job.twldPath))
+      if (blocks) {
+        const used = { tiles: blocks.tiles, walls: blocks.walls }
+        const { colorOf, fromTextures } = await modBlockColors(used.tiles, used.walls, job.modsDir ?? null, join(job.outDir, 'mod-colors.json'))
+        overlayModBlocks(pixels, layers, width, height, blocks, colorOf)
+        modBlocks = { tiles: used.tiles.length, walls: used.walls.length, fromTextures, error: null }
+      }
+    } catch (err) {
+      modBlocks = { tiles: 0, walls: 0, fromTextures: 0, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
   const cols = Math.ceil(width / CHUNK_WIDTH)
   const rows = Math.ceil(height / CHUNK_HEIGHT)
 
@@ -95,6 +125,7 @@ export async function renderWorldFile(job: RenderJob): Promise<{ width: number; 
     // Da quale file: se cambia (salvataggio del mondo), la mappa si ridisegna
     source: job.source,
     terraria: colors.terraria,
+    modBlocks,
   }
   await writeAtomic(join(job.outDir, 'manifest.json'), JSON.stringify(manifest))
   return { width, height, chunks: cols * rows }

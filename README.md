@@ -153,8 +153,9 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
 - **Mondo**: mappa del mondo del server, trascinabile e con zoom (anche a due dita), con lo spawn. Per tutti i server
   si ricava dal file del mondo (`.wld`) a ogni salvataggio, con i colori della minimappa di Terraria (estratti dal gioco
   durante la build, `addons/tools/MapColors`); il disegno gira in un worker thread dell'agent. Sui server TShock
-  l'add-on LiveMap la rende in tempo reale, con i giocatori, solo finché la pagina è aperta. Con tModLoader i blocchi
-  delle mod (file `.twld`) non compaiono ancora.
+  l'add-on LiveMap la rende in tempo reale, con i giocatori, solo finché la pagina è aperta. Con tModLoader si legge
+  anche il `.twld` accanto al mondo, con i blocchi e i muri delle mod: il loro colore è la media della texture nel
+  `.tmod` (il codice della mod che lo decide nel gioco non si può leggere), con un colore fisso se la texture manca.
 - **Add-on** (`addons/`): plugin TShock scritti per tModManager e distribuiti con il pannello, come **LiveMap** (mappa del
   mondo in tempo reale). Compaiono già tra i plugin di ogni server TShock, disattivati: si attivano con un clic e si
   aggiornano insieme al pannello. L'immagine dell'agent li compila; in sviluppo `addons/build.sh` (SDK .NET 9).

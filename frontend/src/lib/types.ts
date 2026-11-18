@@ -214,6 +214,8 @@ export type WorldMapState = {
   /** Solo per i server TShock. */
   liveMap: { available: boolean; enabled: boolean } | null
   worldFile: { generating: boolean; error: string | null; savedAt: string | null } | null
+  /** tModLoader: blocchi e muri delle mod letti dal .twld. */
+  modBlocks: { tiles: number; walls: number; fromTextures: number; error: string | null } | null
   updatedAt: string | null
   manifest: WorldMapManifest | null
   players: MapPlayer[]
