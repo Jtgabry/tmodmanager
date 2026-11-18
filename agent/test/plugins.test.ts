@@ -61,6 +61,8 @@ function fakeAssembly({ name, version, plugin = true, build = '' }: { name: stri
 
 async function setup() {
   config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-plugins-'))
+  // Niente add-on, salvo nel test che li riguarda (in sviluppo addons/dist può contenere quelli veri)
+  config.addonsDir = join(config.dataDir, 'addons')
   const install = join(config.dataDir, 'tshock', 'TShock')
   await mkdir(join(install, 'ServerPlugins'), { recursive: true })
   await writeFile(join(install, 'ServerPlugins', 'TShockAPI.dll'), fakeAssembly({ name: 'TShockAPI', version: '6.2.1' }))
@@ -180,4 +182,34 @@ test('attivazione, file messi a mano, plugin di TShock ed eliminazione completa'
   await restorePlugin(server, meta, itemPath, false)
   const extra = (await listPlugins(server)).plugins.find((p) => p.name === 'Extra')
   assert.deepEqual([extra?.enabled, extra?.versions.length], [false, 1])
+})
+
+test('add-on di tModManager: in elenco disattivato, si attiva, si aggiorna con il pannello, non si carica né si elimina', async () => {
+  const { server, upload, active } = await setup()
+  await mkdir(config.addonsDir, { recursive: true })
+  await writeFile(join(config.addonsDir, 'LiveMap.dll'), fakeAssembly({ name: 'LiveMap', version: '1.0.0' }))
+
+  const listed = (await listPlugins(server)).plugins
+  assert.deepEqual(
+    listed.map((p) => [p.name, p.addon, p.enabled, p.versions.length]),
+    [['LiveMap', true, false, 1]],
+  )
+  assert.deepEqual(await active(), [])
+
+  assert.equal((await setPluginEnabled(server, 'LiveMap', true)).enabled, true)
+  assert.deepEqual(await active(), ['LiveMap.dll'])
+
+  // Nuova build distribuita con il pannello: il file attivo si aggiorna da solo
+  await writeFile(join(config.addonsDir, 'LiveMap.dll'), fakeAssembly({ name: 'LiveMap', version: '1.1.0' }))
+  const updated = (await listPlugins(server)).plugins.find((p) => p.name === 'LiveMap')
+  assert.equal(updated?.versions[0].version, '1.1.0')
+  assert.equal(readAssemblyInfo(await readFile(join(server.saveDir, 'ServerPlugins', 'LiveMap.dll'))).version, '1.1.0')
+  // ...e non finisce tra le versioni dei plugin caricati
+  assert.equal((await readdir(join(config.dataDir, 'servers', 'p')).catch(() => [])).includes('plugins'), false)
+
+  await assert.rejects(upload('LiveMap.dll', fakeAssembly({ name: 'LiveMap', version: '9.0.0' })), (e: ModError) => e.status === 409)
+  await assert.rejects(deletePlugin(server, 'LiveMap'), (e: ModError) => e.status === 409)
+
+  await setPluginEnabled(server, 'LiveMap', false)
+  assert.deepEqual(await active(), [])
 })

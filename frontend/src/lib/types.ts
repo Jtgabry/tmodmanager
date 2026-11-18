@@ -174,6 +174,8 @@ export type Plugin = {
   versions: PluginVersion[]
   error: string | null
   file: string | null
+  /** Add-on di tModManager (es. LiveMap): arriva con il pannello, si attiva o disattiva soltanto. */
+  addon: boolean
 }
 
 export type BundledPlugin = Pick<Plugin, 'kind' | 'title' | 'author' | 'description'> & { file: string; version: string | null; size: number }
@@ -185,6 +187,32 @@ export type PluginUploadResult = {
   versionId: string
   duplicate: boolean
   previousVersion: PluginVersion | null
+}
+
+/** Mappa del mondo (sezione "Mondo"): griglia di riquadri PNG, un pixel per tile. */
+export type WorldMapManifest = {
+  format: 1
+  world: { name: string; id: number; width: number; height: number; spawnX: number; spawnY: number; surface: number; rock: number }
+  chunkWidth: number
+  chunkHeight: number
+  cols: number
+  rows: number
+  /** Versione di ogni riquadro, riga per riga (indice = cy * cols + cx); 0 = non ancora disegnato. */
+  chunks: number[]
+  overview: { scale: number; width: number; height: number; version: number }
+  progress: { drawn: number; total: number }
+}
+
+export type MapPlayer = { name: string; x: number; y: number; team: number; life: number; lifeMax: number; dead: boolean }
+
+export type WorldMapState = {
+  source: 'livemap' | null
+  unavailable: 'unsupported-game' | 'addon-missing' | 'addon-disabled' | 'no-data' | null
+  liveMap: { available: boolean; enabled: boolean } | null
+  updatedAt: string | null
+  manifest: WorldMapManifest | null
+  players: MapPlayer[]
+  playersAt: string | null
 }
 
 export type ImportablePack = { name: string; format: 'json' | 'folder'; mods: number; files: number }

@@ -2712,3 +2712,153 @@ html:has(.sheet[open]) {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 0.75rem;
 }
+
+/* --- Mondo: mappa a riquadri ------------------------------------------------------------------ */
+
+.world-map {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+.world-map-fullscreen {
+  border: 0;
+  border-radius: 0;
+}
+
+.world-map-frame {
+  position: relative;
+  height: min(70vh, 760px);
+  min-height: 320px;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.world-map-fullscreen .world-map-frame {
+  height: 100vh;
+}
+
+.world-map-frame:active {
+  cursor: grabbing;
+}
+
+.world-map-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.world-map-overview,
+.world-map-chunk {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Un pixel per tile: ingrandendo restano blocchi netti, come nella mappa del gioco */
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.world-map-spawn,
+.world-map-player {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.world-map-spawn svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: var(--accent);
+  stroke: var(--bg-deep);
+  stroke-width: 1.5;
+}
+
+.world-map-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+.world-map-player-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--team);
+  border: 2px solid var(--bg-deep);
+  box-shadow: 0 0 0 1px var(--team);
+}
+
+.world-map-player-name {
+  position: absolute;
+  top: 14px;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  background: rgb(15 11 8 / 0.8);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.world-map-player-dead {
+  opacity: 0.55;
+}
+
+.world-map-controls {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.world-map-controls .btn {
+  background: rgb(31 24 18 / 0.9);
+}
+
+.world-map-coords {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  background: rgb(15 11 8 / 0.8);
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+
+.world-map-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.world-map-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.world-map-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .world-map-frame {
+    height: 60vh;
+  }
+}

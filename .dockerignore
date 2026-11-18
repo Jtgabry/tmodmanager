@@ -8,6 +8,10 @@ data
 agent/data
 agent/data.migrated-*
 agent/dist
+addons/**/bin
+addons/**/obj
+addons/obj
+addons/dist
 frontend/dist
 backend/vendor
 backend/storage/logs/*

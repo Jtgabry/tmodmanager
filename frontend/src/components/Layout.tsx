@@ -20,6 +20,7 @@ import {
   IconSettings,
   IconTrash,
   IconUsers,
+  IconWorld,
   IconWorkshop,
 } from './icons'
 import { useAuth } from '../auth/AuthContext'
@@ -70,6 +71,9 @@ function ServerNav({ serverId, server }: { serverId: string; server: Server | un
             Console
           </NavItem>
         )}
+        <NavItem to={`${base}/world`} icon={<IconWorld />}>
+          Mondo
+        </NavItem>
         {can(serverId, 'mods') && server?.game === 'tmodloader' && (
           <>
             <NavItem to={`${base}/mods`} icon={<IconMods />}>

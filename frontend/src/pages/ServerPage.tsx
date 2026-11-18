@@ -11,6 +11,7 @@ import { PageActionsSlot } from '../lib/pageActions'
 
 const TITLES: Record<string, string> = {
   console: 'Console',
+  world: 'Mondo',
   mods: 'Mod',
   workshop: 'Workshop',
   modpacks: 'Modpack',

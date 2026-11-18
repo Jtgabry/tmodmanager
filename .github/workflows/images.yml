@@ -53,6 +53,13 @@ jobs:
           extensions: pdo_sqlite, intl, zip
           coverage: none
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Add-on (plugin TShock)
+        run: bash addons/build.sh
+
       - name: Agent
         working-directory: agent
         run: |
@@ -100,7 +107,7 @@ jobs:
           REBUILD: ${{ inputs.rebuild }}
         run: |
           case "$IMAGE" in
-            agent) paths='agent/package.json agent/package-lock.json agent/tsconfig.json agent/src
+            agent) paths='agent/package.json agent/package-lock.json agent/tsconfig.json agent/src addons
                           docker/agent.Dockerfile docker/agent-entrypoint.sh .dockerignore' ;;
             web)   paths='frontend backend docker/web.Dockerfile docker/php.ini docker/Caddyfile
                           docker/web-entrypoint.sh .dockerignore' ;;

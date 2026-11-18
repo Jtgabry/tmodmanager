@@ -1,0 +1,19 @@
+<!-- Impostazioni comuni agli add-on (plugin TShock distribuiti con tModManager). -->
+<Project>
+  <PropertyGroup>
+    <!-- TShock 6 gira su .NET 9 -->
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <!-- Finiscono nella risorsa di versione della .dll: il pannello li mostra nell'elenco dei plugin -->
+    <Company>tModManager</Company>
+    <Product>tModManager</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Serve solo per compilare: sul server TShock c'è già (niente .dll di TShock accanto all'add-on) -->
+    <PackageReference Include="TShock" ExcludeAssets="runtime" />
+  </ItemGroup>
+</Project>

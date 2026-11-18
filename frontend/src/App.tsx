@@ -11,6 +11,7 @@ import ModpackPage from './pages/mods/ModpackPage'
 import ModpacksTab from './pages/mods/ModpacksTab'
 import ModsTab from './pages/mods/ModsTab'
 import PluginsTab from './pages/plugins/PluginsTab'
+import WorldTab from './pages/world/WorldTab'
 import WorkshopTab from './pages/mods/WorkshopTab'
 import RegisterPage from './pages/RegisterPage'
 import SetupPage from './pages/SetupPage'
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="servers/:serverId" element={<ServerPage />}>
               <Route index element={<ServerOverview />} />
               <Route path="console" element={<ConsoleTab />} />
+              <Route path="world" element={<WorldTab />} />
               <Route path="mods" element={<ModsTab />} />
               <Route path="workshop" element={<WorkshopTab />} />
               <Route path="modpacks" element={<ModpacksTab />} />

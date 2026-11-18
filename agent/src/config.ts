@@ -58,6 +58,11 @@ export const config = {
    * Resta solo nell'agent: non viene mai inviata a Laravel né al browser.
    */
   steamApiKey: (process.env.STEAM_API_KEY ?? '').trim(),
+  /**
+   * Add-on di tModManager (plugin TShock compilati da addons/, es. LiveMap.dll): nell'immagine Docker
+   * /app/addons, in sviluppo addons/dist (creata da addons/build.sh). Se manca, gli add-on non compaiono.
+   */
+  addonsDir: resolve(projectRoot, process.env.AGENT_ADDONS_DIR ?? 'addons/dist'),
   /** steamcmd già installato altrove (facoltativo); di default viene scaricato in data/steamcmd. */
   steamcmdOverride: process.env.AGENT_STEAMCMD ? resolve(process.env.AGENT_STEAMCMD) : null,
 }

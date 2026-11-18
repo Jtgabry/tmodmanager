@@ -221,7 +221,7 @@ function PluginCard(props: { plugin: Plugin; serverId: string; busy: boolean; on
   return (
     <article className={plugin.enabled ? 'mod-card' : 'mod-card mod-card-off'}>
       <div className="mod-card-head">
-        <button type="button" className="mod-icon-button dim" onClick={props.onVersions} aria-label={`Versioni di ${title}`} disabled={plugin.error !== null}>
+        <button type="button" className="mod-icon-button dim" onClick={props.onVersions} aria-label={`Versioni di ${title}`} disabled={plugin.error !== null || plugin.addon}>
           <ModInitials title={title} />
         </button>
         <div className="mod-card-heading">
@@ -234,6 +234,11 @@ function PluginCard(props: { plugin: Plugin; serverId: string; busy: boolean; on
               <button type="button" className="pill pill-plain pill-button" onClick={props.onVersions} title="Versioni salvate">
                 {plugin.versions.length} versioni
               </button>
+            )}
+            {plugin.addon && (
+              <span className="pill pill-update" title="Distribuito con tModManager: si aggiorna insieme al pannello">
+                add-on tModManager
+              </span>
             )}
             {plugin.kind === 'library' && (
               <span className="pill pill-plain" title="Non contiene un plugin: è una dipendenza di altri plugin">
@@ -301,7 +306,7 @@ function pluginActions(props: { plugin: Plugin; serverId: string; busy: boolean;
         </button>
       ),
     },
-    ...(plugin.error
+    ...(plugin.error || plugin.addon
       ? []
       : [
           {
@@ -333,21 +338,25 @@ function pluginActions(props: { plugin: Plugin; serverId: string; busy: boolean;
           },
         ]
       : []),
-    {
-      key: 'delete',
-      priority: 2,
-      end: true,
-      danger: true,
-      label: 'Elimina',
-      icon: deleteIcon,
-      disabled: props.busy,
-      onSelect: props.onDelete,
-      inline: (
-        <button type="button" className="btn btn-sm btn-icon btn-danger-outline" disabled={props.busy} onClick={props.onDelete} aria-label={`Elimina ${title}`} title="Elimina">
-          {deleteIcon}
-        </button>
-      ),
-    },
+    ...(plugin.addon
+      ? []
+      : [
+          {
+            key: 'delete',
+            priority: 2,
+            end: true,
+            danger: true,
+            label: 'Elimina',
+            icon: deleteIcon,
+            disabled: props.busy,
+            onSelect: props.onDelete,
+            inline: (
+              <button type="button" className="btn btn-sm btn-icon btn-danger-outline" disabled={props.busy} onClick={props.onDelete} aria-label={`Elimina ${title}`} title="Elimina">
+                {deleteIcon}
+              </button>
+            ),
+          },
+        ]),
   ]
 }
 

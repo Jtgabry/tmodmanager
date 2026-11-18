@@ -4,6 +4,7 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, utimes, w
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { ADDONS, type Addon, addonPath } from './addons.js'
 import { tshockPluginsDir } from './games.js'
 import { ModError } from './mods.js'
 import { paths } from './paths.js'
@@ -193,6 +194,11 @@ export type PluginEntry = {
   error: string | null
   /** Nome del file in ServerPlugins/ (se attivo). */
   file: string | null
+  /**
+   * Add-on di tModManager: arriva con il pannello (sempre in elenco, disattivato finché non lo si attiva) e si
+   * aggiorna con lui. Ha una sola versione, quella distribuita; non si carica né si elimina da qui.
+   */
+  addon: boolean
 }
 
 export type BundledPlugin = Pick<PluginEntry, 'kind' | 'title' | 'author' | 'description'> & { file: string; version: string | null; size: number }
@@ -264,6 +270,12 @@ async function storeCopy(server: ServerDefinition, name: string, from: string, i
  */
 export async function listPlugins(server: ServerDefinition): Promise<PluginList> {
   const { byName, broken } = await activeFiles(server)
+  const addons = await availableAddons()
+  const plugins: PluginEntry[] = []
+  for (const { addon, path, info } of addons) {
+    plugins.push(await addonEntry(server, addon, path, info, byName.get(addon.name)))
+    byName.delete(addon.name)
+  }
   for (const [name, active] of byName) {
     await storeCopy(server, name, active.path, active.info.id)
     if ((await readSelected(server, name)) !== active.info.id) await writeSelected(server, name, active.info.id)
@@ -271,12 +283,11 @@ export async function listPlugins(server: ServerDefinition): Promise<PluginList>
 
   let names: string[] = []
   try {
-    names = (await readdir(storeRoot(server))).filter((n) => PLUGIN_NAME.test(n))
+    names = (await readdir(storeRoot(server))).filter((n) => PLUGIN_NAME.test(n) && !isAddon(n))
   } catch {
     // nessun plugin archiviato
   }
 
-  const plugins: PluginEntry[] = []
   for (const name of new Set([...names, ...byName.keys()])) {
     const versions = await storedVersions(server, name)
     if (!versions.length) continue
@@ -295,6 +306,7 @@ export async function listPlugins(server: ServerDefinition): Promise<PluginList>
       versions: versions.map(({ info: _i, ...v }) => v),
       error: null,
       file: active?.file ?? null,
+      addon: false,
     })
   }
   for (const b of broken) {
@@ -309,6 +321,7 @@ export async function listPlugins(server: ServerDefinition): Promise<PluginList>
       versions: [],
       error: b.info.error,
       file: b.file,
+      addon: false,
     })
   }
   plugins.sort((a, b) => (a.title ?? a.name).localeCompare(b.title ?? b.name, 'it', { sensitivity: 'base' }))
@@ -328,6 +341,53 @@ export async function listPlugins(server: ServerDefinition): Promise<PluginList>
     })
   }
   return { plugins, bundled: bundled.sort((a, b) => a.file.localeCompare(b.file)) }
+}
+
+// --- Add-on di tModManager -------------------------------------------------------------------------
+
+const isAddon = (name: string) => ADDONS.some((a) => a.name.toLowerCase() === name.toLowerCase())
+
+/** Add-on la cui .dll è disponibile (in sviluppo serve addons/build.sh). */
+async function availableAddons(): Promise<{ addon: Addon; path: string; info: FileInfo & { info: AssemblyInfo } }[]> {
+  const found = []
+  for (const addon of ADDONS) {
+    const path = addonPath(addon)
+    const info = await fileInfo(path)
+    if (info?.info) found.push({ addon, path, info: { ...info, info: info.info } })
+  }
+  return found
+}
+
+/** Copia la .dll distribuita in ServerPlugins/<Nome>.dll (staging e rename), togliendo un file attivo con un altro nome. */
+async function installAddon(server: ServerDefinition, addon: Addon, source: string, active: string | null) {
+  const dir = activePluginsDir(server)
+  await mkdir(dir, { recursive: true })
+  const staging = join(dir, `.${addon.name}.dll.${randomBytes(4).toString('hex')}.tmp`)
+  await copyFile(source, staging)
+  await rename(staging, join(dir, `${addon.name}.dll`))
+  if (active && active !== `${addon.name}.dll`) await unlink(join(dir, active)).catch(() => undefined)
+}
+
+/** Voce dell'elenco per un add-on; se è attivo con una build diversa da quella del pannello, la aggiorna. */
+async function addonEntry(server: ServerDefinition, addon: Addon, path: string, shipped: FileInfo & { info: AssemblyInfo }, active: ActiveFile | undefined): Promise<PluginEntry> {
+  if (active && active.info.id !== shipped.id) await installAddon(server, addon, path, active.file)
+  return {
+    name: addon.name,
+    kind: shipped.info.kind,
+    title: shipped.info.title,
+    author: shipped.info.author ?? 'tModManager',
+    description: addon.description,
+    enabled: active !== undefined,
+    selected: shipped.id,
+    versions: [{ id: shipped.id, version: shipped.info.version, size: shipped.size, uploadedAt: new Date(shipped.mtimeMs).toISOString() }],
+    error: null,
+    file: active ? `${addon.name}.dll` : null,
+    addon: true,
+  }
+}
+
+const addonOnly = (plugin: PluginEntry) => {
+  if (plugin.addon) throw new ModError(`${plugin.title ?? plugin.name} è un add-on di tModManager: si attiva o si disattiva soltanto, e si aggiorna con il pannello`, 409)
 }
 
 async function findPlugin(server: ServerDefinition, rawName: string | undefined): Promise<PluginEntry> {
@@ -363,6 +423,11 @@ export async function pluginsFingerprint(server: ServerDefinition): Promise<stri
 export async function pluginVersionPath(server: ServerDefinition, rawName: string | undefined, rawId: string | undefined) {
   const name = pluginName(rawName)
   const id = pluginVersionId(rawId)
+  const addon = (await availableAddons()).find((a) => a.addon.name === name)
+  if (addon) {
+    if (addon.info.id !== id) throw new ModError('Versione non trovata', 404)
+    return { path: addon.path, filename: `${name}.dll` }
+  }
   const path = versionPath(server, name, id)
   if (!(await stat(path).catch(() => null))) throw new ModError('Versione non trovata', 404)
   return { path, filename: `${name}.dll` }
@@ -390,7 +455,10 @@ async function deactivate(server: ServerDefinition, plugin: Pick<PluginEntry, 'f
 export async function setPluginEnabled(server: ServerDefinition, rawName: string | undefined, enabled: boolean): Promise<PluginEntry> {
   const plugin = await findPlugin(server, rawName)
   if (plugin.error) throw new ModError(`${plugin.file} non è un plugin leggibile: eliminalo o sostituiscilo`, 409)
-  if (enabled && !plugin.enabled && plugin.selected) await activate(server, plugin, plugin.selected)
+  const addon = ADDONS.find((a) => a.name === plugin.name)
+  if (plugin.addon && addon) {
+    if (enabled && !plugin.enabled) await installAddon(server, addon, addonPath(addon), null)
+  } else if (enabled && !plugin.enabled && plugin.selected) await activate(server, plugin, plugin.selected)
   if (!enabled && plugin.enabled) await deactivate(server, plugin)
   return findPlugin(server, plugin.name)
 }
@@ -398,6 +466,7 @@ export async function setPluginEnabled(server: ServerDefinition, rawName: string
 /** Sceglie la versione da usare; se il plugin è attivo, sostituisce subito il file in ServerPlugins/. */
 export async function usePluginVersion(server: ServerDefinition, rawName: string | undefined, rawId: string | undefined): Promise<PluginEntry> {
   const plugin = await findPlugin(server, rawName)
+  addonOnly(plugin)
   const id = pluginVersionId(rawId)
   if (!plugin.versions.some((v) => v.id === id)) throw new ModError('Versione non trovata', 404)
   if (plugin.enabled) await activate(server, plugin, id)
@@ -445,6 +514,7 @@ export async function uploadPlugin(
     const info = readAssemblyInfo(data)
     const name = info.name ?? cleanName(base.slice(0, -4))
     if (!name) throw new ModError('Nome del plugin non valido', 422)
+    if (isAddon(name)) throw new ModError(`${name} è un add-on di tModManager: è già nell'elenco dei plugin, basta attivarlo`, 409)
     const id = versionId(data)
 
     return await lock(async () => {
@@ -470,6 +540,7 @@ export async function uploadPlugin(
 /** Una versione nel cestino (si può ripristinare); non quella attiva. Da chiamare dentro withServerLock. */
 export async function deletePluginVersion(server: ServerDefinition, rawName: string | undefined, rawId: string | undefined): Promise<PluginEntry | null> {
   const plugin = await findPlugin(server, rawName)
+  addonOnly(plugin)
   const id = pluginVersionId(rawId)
   const version = plugin.versions.find((v) => v.id === id)
   if (!version) throw new ModError('Versione non trovata', 404)
@@ -485,6 +556,7 @@ export async function deletePluginVersion(server: ServerDefinition, rawName: str
 /** Tutte le versioni tranne quella scelta, nel cestino. */
 export async function deleteOldPluginVersions(server: ServerDefinition, rawName: string | undefined): Promise<{ plugin: PluginEntry; removed: number }> {
   const plugin = await findPlugin(server, rawName)
+  addonOnly(plugin)
   const old = plugin.versions.filter((v) => v.id !== plugin.selected)
   for (const version of old) await trashVersion(server, plugin.name, version)
   return { plugin: await findPlugin(server, plugin.name), removed: old.length }
@@ -505,6 +577,7 @@ async function trashVersion(server: ServerDefinition, name: string, version: Plu
 /** Plugin intero nel cestino: file attivo tolto e tutte le versioni insieme in un solo elemento. */
 export async function deletePlugin(server: ServerDefinition, rawName: string | undefined): Promise<void> {
   const plugin = await findPlugin(server, rawName)
+  addonOnly(plugin)
   if (plugin.error && plugin.file) {
     // File illeggibile in ServerPlugins/: va nel cestino così com'è
     await moveToTrash(server, join(activePluginsDir(server), plugin.file), {

@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\ServerConsoleTicketController;
 use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\ServerFileContentController;
 use App\Http\Controllers\Api\V1\ServerFileController;
+use App\Http\Controllers\Api\V1\ServerMapController;
 use App\Http\Controllers\Api\V1\ServerModArchiveController;
 use App\Http\Controllers\Api\V1\ServerModController;
 use App\Http\Controllers\Api\V1\ServerModpackActivationController;
@@ -88,6 +89,12 @@ Route::prefix('v1')
             Route::delete('/servers/{server}/mods/{mod}', [ServerModController::class, 'destroy'])->name('servers.mods.destroy');
             Route::get('/servers/{server}/mods/{mod}/download', [ServerModController::class, 'download'])->name('servers.mods.download');
             Route::get('/servers/{server}/mods/{mod}/icon', [ServerModController::class, 'icon'])->name('servers.mods.icon');
+
+            Route::controller(ServerMapController::class)->prefix('/servers/{server}/map')->name('servers.map.')->group(function () {
+                Route::get('/', 'show')->name('show');
+                Route::get('/chunks/{cx}/{cy}', 'chunk')->whereNumber(['cx', 'cy'])->name('chunk');
+                Route::get('/overview', 'overview')->name('overview');
+            });
 
             Route::controller(ServerPluginController::class)->prefix('/servers/{server}/plugins')->name('servers.plugins.')->group(function () {
                 Route::get('/', 'index')->name('index');
