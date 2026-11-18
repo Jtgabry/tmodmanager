@@ -15,6 +15,8 @@ namespace LiveMap;
 /// Per non pesare sul server:
 ///  - lavora solo se qualcuno guarda la mappa (il pannello tocca tshock/map/viewer) o con SempreAttiva;
 ///  - sul thread di gioco disegna al massimo MillisecondiPerTick ms per tick, una riga di tile alla volta;
+///    a server vuoto Terraria ferma l'aggiornamento del mondo (niente GameUpdate): allora disegna un timer,
+///    con lo stesso limite, senza rischi perché nessuno sta modificando il mondo;
 ///  - PNG e file li scrive un thread a parte (MapWriter);
 ///  - le modifiche si scoprono dai pacchetti che il server manda ai client (NetSendData), senza scansioni;
 ///    una rilettura lentissima a rotazione copre il resto.
@@ -48,6 +50,11 @@ public class LiveMap : TerrariaPlugin
     private int _cursor;
     private Job? _job;
     private long _nextActivityCheck, _nextPlayers, _nextRotationCheck;
+
+    // Chi disegna: il thread di gioco (GameUpdate) oppure, a server fermo senza giocatori, il timer
+    private readonly object _drawLock = new();
+    private Timer? _idleTimer;
+    private long _lastGameUpdate;
 
     // Statistiche per /mappa
     private long _tilesDrawn, _drawTicks, _errors;
@@ -87,7 +94,12 @@ public class LiveMap : TerrariaPlugin
             GeneralHooks.ReloadEvent -= OnReload;
             if (_command != null) Commands.ChatCommands.Remove(_command);
             _ready = false;
-            if (_job != null) ArrayPool<int>.Shared.Return(_job.Pixels);
+            _idleTimer?.Dispose();
+            lock (_drawLock)
+            {
+                if (_job != null) ArrayPool<int>.Shared.Return(_job.Pixels);
+                _job = null;
+            }
             _writer?.Dispose();
         }
         base.Dispose(disposing);
@@ -108,6 +120,7 @@ public class LiveMap : TerrariaPlugin
         _lastDrawn = new long[_cols * _rows];
         _writer = new MapWriter(MapDir, World(), _cols, _rows, ChunkWidth, ChunkHeight, _config.ScalaPanoramica);
         _ready = true;
+        _idleTimer = new Timer(_ => OnIdleTick(), null, 1000, 16);
         TShock.Log.ConsoleInfo($"[LiveMap] Mappa pronta: {_cols}×{_rows} riquadri in {MapDir}" +
                                (_config.SempreAttiva ? " (sempre attiva)" : " (si aggiorna quando il pannello la apre)"));
     }
@@ -133,6 +146,35 @@ public class LiveMap : TerrariaPlugin
     }
 
     private void OnUpdate(EventArgs args)
+    {
+        Interlocked.Exchange(ref _lastGameUpdate, Environment.TickCount64);
+        lock (_drawLock) Tick();
+    }
+
+    /// <summary>
+    /// Server senza giocatori: Terraria non chiama più GameUpdate (il mondo è fermo). Se il gioco tace da più di
+    /// un secondo, il disegno va avanti qui, 60 volte al secondo come il gioco; appena il gioco riparte, smette.
+    /// </summary>
+    private void OnIdleTick()
+    {
+        if (Environment.TickCount64 - Interlocked.Read(ref _lastGameUpdate) < 1000) return;
+        if (!Monitor.TryEnter(_drawLock)) return;
+        try
+        {
+            Tick();
+        }
+        catch (Exception ex)
+        {
+            TShock.Log.ConsoleError($"[LiveMap] Disegno della mappa non riuscito: {ex.Message}");
+        }
+        finally
+        {
+            Monitor.Exit(_drawLock);
+        }
+    }
+
+    /// <summary>Un passo di lavoro, al massimo MillisecondiPerTick. Sempre sotto _drawLock.</summary>
+    private void Tick()
     {
         if (!_ready || _writer == null) return;
         var now = Environment.TickCount64;
@@ -340,7 +382,7 @@ public class LiveMap : TerrariaPlugin
 
         if (args.Parameters.Count > 0 && args.Parameters[0].Equals("rigenera", StringComparison.OrdinalIgnoreCase))
         {
-            Array.Clear(_lastDrawn);
+            lock (_drawLock) Array.Clear(_lastDrawn);
             _nextRotationCheck = 0;
             _writer.ForgetHashes();
             player.SendSuccessMessage("[LiveMap] La mappa verrà ridisegnata da capo.");
