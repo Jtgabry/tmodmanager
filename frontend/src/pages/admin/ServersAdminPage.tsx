@@ -1,8 +1,9 @@
 import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 import StateBadge from '../../components/StateBadge'
+import { PickedHint } from '../../components/InstallationPicker'
+import { useInstallationPicker } from '../../lib/installationPicker'
 import {
-  choiceLabel,
   compareVersions,
   type CreatedServer,
   type NewServer,
@@ -16,7 +17,7 @@ import {
 import { errorMessage, fieldErrors } from '../../lib/api'
 import { formatBytes, formatDate } from '../../lib/format'
 import { useServers } from '../../lib/servers'
-import { GAME_LABEL, type Installation, type Server } from '../../lib/types'
+import { type Game, GAME_LABEL, type Installation, type Server } from '../../lib/types'
 
 export default function ServersAdminPage() {
   const [creating, setCreating] = useState(false)
@@ -143,7 +144,6 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
   const [maxPlayers, setMaxPlayers] = useState(8)
   const [password, setPassword] = useState('')
   const [motd, setMotd] = useState('')
-  const [installDir, setInstallDir] = useState('')
   const [world, setWorld] = useState<NewServer['world']>({ name: '', size: 2, difficulty: 1, seed: '' })
   const [copyModsFrom, setCopyModsFrom] = useState('')
   const [created, setCreated] = useState<CreatedServer | null>(null)
@@ -151,24 +151,23 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
   const conflictField = (create.error as { response?: { data?: { details?: { field?: string } } } } | null)?.response?.data?.details?.field
 
   const effectivePort = port === '' ? (defaults.data?.port ?? 7777) : port
-  const choices = defaults.data?.installations ?? []
-  // Di default i server nascono vanilla (Terraria); tModLoader si sceglie qui o dopo, dalle impostazioni
-  const effectiveInstall = installDir || choices.find((c) => c.kind === 'terraria')?.path || choices[0]?.path || ''
-  const chosen = choices.find((c) => c.path === effectiveInstall)
+  // Di default i server nascono vanilla (Terraria, installazione principale)
+  const { fields: versionFields, picked } = useInstallationPicker(defaults.data?.installations ?? [], null)
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
+    if (!picked) return
     create.mutate(
       {
         id,
         name,
-        installDir: effectiveInstall,
+        ...('installDir' in picked.target ? { installDir: picked.target.installDir } : { version: { game: picked.game, version: picked.target.version! } }),
         port: effectivePort,
         maxPlayers,
         password,
         motd,
         world: { ...world, name: world.name || name },
-        copyModsFrom: chosen?.kind === 'tmodloader' ? copyModsFrom || null : null,
+        copyModsFrom: picked.game === 'tmodloader' ? copyModsFrom || null : null,
       },
       { onSuccess: setCreated },
     )
@@ -313,19 +312,10 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
         </label>
       </div>
 
-      <h3>Versione</h3>
+      <h3>Gioco e versione</h3>
       <div className="form-inline">
-        <label className="field">
-          <span>Gioco e versione</span>
-          <select value={effectiveInstall} onChange={(e) => setInstallDir(e.target.value)} disabled={!choices.length}>
-            {choices.map((c) => (
-              <option key={c.path} value={c.path}>
-                {choiceLabel(c)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {chosen?.kind === 'tmodloader' && (
+        {versionFields}
+        {picked?.game === 'tmodloader' && (
           <label className="field">
             <span>Copia mod e loro configurazioni da</span>
             <select value={copyModsFrom} onChange={(e) => setCopyModsFrom(e.target.value)}>
@@ -339,30 +329,25 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
           </label>
         )}
       </div>
-      {chosen && !chosen.installed && (
+      {picked?.toInstall && (
         <div className="alert alert-info">
-          {chosen.installing
-            ? `${GAME_LABEL[chosen.kind]} si sta già installando: il server si potrà accendere quando è finito.`
-            : `${GAME_LABEL[chosen.kind]} non è ancora installato su questa macchina: creando il server viene installata in automatico l'ultima versione (qualche minuto).`}
+          {GAME_LABEL[picked.game]} va installato: creando il server l'installazione parte in automatico (qualche minuto), e il
+          server si può accendere quando è finita.
         </div>
       )}
-      {defaults.data && !effectiveInstall ? (
-        <div className="alert alert-warning">Nessuna installazione disponibile.</div>
-      ) : (
-        <p className="muted small">
-          {chosen?.kind === 'tmodloader'
-            ? 'Server tModLoader: avrà le sezioni Mod, Workshop e Modpack.'
-            : chosen?.kind === 'tshock'
-              ? 'Server TShock: Terraria vanilla con plugin, i giocatori entrano con Terraria normale. Configurazione e plugin di TShock stanno nella cartella SaveData del server (sezione File: tshock/ e ServerPlugins/); al primo avvio la console mostra il codice per /setup.'
-              : 'Server Terraria vanilla: per usare le mod potrai passare a tModLoader dalle impostazioni del server, con lo stesso mondo.'}{' '}
-          L'installazione è condivisa con gli altri server che la usano: aggiornandola si aggiornano tutti. Il mondo viene
-          generato al primo avvio.
-        </p>
-      )}
+      <p className="muted small">
+        <PickedHint picked={picked} />{' '}
+        {picked?.game === 'tmodloader'
+          ? 'Server tModLoader: avrà le sezioni Mod, Workshop e Modpack.'
+          : picked?.game === 'tshock'
+            ? 'Server TShock: Terraria vanilla con plugin, i giocatori entrano con Terraria normale. Configurazione e plugin di TShock stanno nella cartella SaveData del server (sezione File: tshock/ e ServerPlugins/); al primo avvio la console mostra il codice per /setup.'
+            : 'Server Terraria vanilla: potrai passare a TShock o tModLoader dalle impostazioni del server, con lo stesso mondo.'}{' '}
+        Il mondo viene generato al primo avvio.
+      </p>
 
       {create.isError && !Object.keys(errors).length && !conflictField && <div className="alert alert-error">{errorMessage(create.error)}</div>}
       <div className="btn-row">
-        <button type="submit" className="btn btn-primary" disabled={create.isPending || !effectiveInstall}>
+        <button type="submit" className="btn btn-primary" disabled={create.isPending || !picked}>
           {create.isPending ? 'Creazione…' : 'Crea server'}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onDone}>
@@ -382,56 +367,85 @@ function InstallationsSection({ servers }: { servers: Server[] }) {
     <div className="card">
       <h2>Installazioni</h2>
       <p className="muted small">
-        Terraria vanilla, TShock e tModLoader. Ogni server usa una di queste installazioni (si sceglie dalle sue
-        impostazioni). Una volta al giorno si controlla se ci sono versioni nuove: gli avvisi compaiono in cima alle pagine.
+        Terraria vanilla, TShock e tModLoader. Per ogni gioco c'è un'installazione principale, condivisa (aggiornandola si
+        aggiornano tutti i server che la usano), e le versioni fisse, che non si aggiornano: un server su una versione fissa
+        si aggiorna da solo, passando a un'altra versione. Ogni server sceglie la sua dalla Panoramica. Una volta al giorno
+        si controlla se ci sono versioni nuove: gli avvisi compaiono in cima alle pagine.
       </p>
       {installations.isLoading && <div className="spinner" />}
       {installations.error && <div className="alert alert-error">{errorMessage(installations.error)}</div>}
       <div className="stack">
         {installations.data?.map((i) => (
-          <InstallationCard key={i.id} installation={i} servers={servers} hasPinned={installations.data.some((x) => x.pinned)} />
+          <InstallationCard
+            key={i.id}
+            installation={i}
+            servers={servers}
+            hasPinned={installations.data.some((x) => x.pinned && x.kind === i.kind)}
+          />
         ))}
-        {installations.data && <AddTerrariaVersion installations={installations.data} />}
+        {installations.data && <AddVersion installations={installations.data} />}
       </div>
     </div>
   )
 }
 
-/** Versioni aggiuntive di Terraria: più server vanilla su versioni diverse (ognuno sceglie la sua). */
-function AddTerrariaVersion({ installations }: { installations: Installation[] }) {
-  const releases = useReleases('terraria')
-  const { addTerrariaVersion } = useAdminServerActions()
+/** Versioni fisse di Terraria, TShock o tModLoader: server su versioni diverse, aggiornati uno per uno. */
+function AddVersion({ installations }: { installations: Installation[] }) {
+  const [game, setGame] = useState<Game>('terraria')
+  const releases = useReleases(game)
+  const { addVersion } = useAdminServerActions()
   const [version, setVersion] = useState('')
   const [customVersion, setCustomVersion] = useState('')
-  const present = new Set(installations.filter((i) => i.kind === 'terraria' && (i.installed || i.job)).map((i) => i.version ?? i.job?.toVersion))
+  const present = new Set(installations.filter((i) => i.kind === game && i.pinned).map((i) => i.version ?? i.job?.toVersion))
   const available = releases.data?.filter((r) => !present.has(r.version)) ?? []
-  const selected = version === OTHER_VERSION ? customVersion.trim() : version || available[0]?.version || ''
-  const valid = /^1(\.\d){3,5}$/.test(selected) && !present.has(selected)
+  const isTerraria = game === 'terraria'
+  const selected = version === OTHER_VERSION ? customVersion.trim() : version || available.find((r) => !r.prerelease)?.version || available[0]?.version || ''
+  const valid = (isTerraria && version === OTHER_VERSION ? /^1(\.\d){3,5}$/.test(selected) : selected !== '') && !present.has(selected)
 
   return (
     <article className="pack">
       <header>
         <div>
-          <strong>Aggiungi un'altra versione di Terraria</strong>
+          <strong>Aggiungi una versione fissa</strong>
           <div className="muted small">
-            Per avere server vanilla su versioni diverse: ogni versione aggiunta è fissa (non si aggiorna) e ogni server
-            sceglie quale usare dalla Panoramica. Si possono rimuovere quando nessun server le usa.
+            Una versione fissa non si aggiorna: i server che la usano restano su quella finché non li passi a un'altra (dalla
+            Panoramica del server, dove si possono anche installare versioni nuove al volo). Si rimuove quando nessun server
+            la usa.
           </div>
         </div>
       </header>
       <div className="form-inline">
+        <label className="field field-narrow">
+          <span>Gioco</span>
+          <select
+            value={game}
+            onChange={(e) => {
+              setGame(e.target.value as Game)
+              setVersion('')
+            }}
+          >
+            {(['terraria', 'tshock', 'tmodloader'] as const).map((g) => (
+              <option key={g} value={g}>
+                {GAME_LABEL[g]}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="field">
           <span>Versione</span>
           <select value={version || selected} onChange={(e) => setVersion(e.target.value)}>
             {available.map((r) => (
               <option key={r.version} value={r.version}>
                 {r.version}
+                {r.prerelease ? ' (beta)' : ''}
+                {game === 'tshock' && r.gameVersion ? ` (Terraria ${r.gameVersion})` : ''}
+                {r.publishedAt ? ` · ${formatDate(r.publishedAt)}` : ''}
               </option>
             ))}
-            <option value={OTHER_VERSION}>Altra versione…</option>
+            {isTerraria && <option value={OTHER_VERSION}>Altra versione…</option>}
           </select>
         </label>
-        {(version === OTHER_VERSION || (!available.length && !releases.isLoading)) && (
+        {isTerraria && (version === OTHER_VERSION || (!available.length && !releases.isLoading)) && (
           <label className="field">
             <span>Versione (es. 1.4.3.6)</span>
             <input
@@ -448,14 +462,15 @@ function AddTerrariaVersion({ installations }: { installations: Installation[] }
         <button
           type="button"
           className="btn btn-primary btn-sm"
-          disabled={!valid || addTerrariaVersion.isPending}
-          onClick={() => addTerrariaVersion.mutate(selected, { onSuccess: () => setVersion('') })}
+          disabled={!valid || addVersion.isPending}
+          onClick={() => addVersion.mutate({ game, version: selected }, { onSuccess: () => setVersion('') })}
         >
           Aggiungi
         </button>
       </div>
-      <p className="muted small">Su terraria.org si trovano le versioni dalla 1.4.1.2 in poi.</p>
-      {addTerrariaVersion.isError && <div className="alert alert-error">{errorMessage(addTerrariaVersion.error)}</div>}
+      {isTerraria && <p className="muted small">Su terraria.org si trovano le versioni dalla 1.4.1.2 in poi.</p>}
+      {releases.error && <p className="error-text">Versioni non disponibili: {errorMessage(releases.error)}</p>}
+      {addVersion.isError && <div className="alert alert-error">{errorMessage(addVersion.error)}</div>}
     </article>
   )
 }
@@ -511,9 +526,9 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
             {installation.pinned && ` ${installation.version ?? installation.job?.toVersion ?? ''}`}
           </strong>{' '}
           {installation.pinned ? (
-            <span className="muted small">versione aggiuntiva, fissa</span>
+            <span className="muted small">versione fissa</span>
           ) : (
-            installation.kind === 'terraria' && hasPinned && installation.managed && <span className="muted small">principale</span>
+            hasPinned && installation.managed && <span className="muted small">principale, condivisa</span>
           )}{' '}
           <span className="muted small mono">{installation.path}</span>
           <div className="muted small">

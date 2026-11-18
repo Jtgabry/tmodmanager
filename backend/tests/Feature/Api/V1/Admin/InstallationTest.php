@@ -129,29 +129,35 @@ class InstallationTest extends TestCase
         Sanctum::actingAs(User::factory()->admin()->create());
         Http::fake([
             self::AGENT_URL.'/admin/installations/terraria/versions' => Http::response(['data' => ['phase' => 'download', 'toVersion' => '1.4.4.9']], 202),
+            self::AGENT_URL.'/admin/installations/tshock/versions' => Http::response(['data' => ['phase' => 'download', 'toVersion' => '6.0.0-pre3']], 202),
             self::AGENT_URL.'/admin/installations/abcdef12' => Http::response(['data' => ['removed' => true]]),
         ]);
 
-        $this->postJson(route('api.v1.admin.installations.terraria.store'), ['version' => '1.4.4.9'])
+        $this->postJson(route('api.v1.admin.installations.versions.store', 'terraria'), ['version' => '1.4.4.9'])
             ->assertAccepted()
             ->assertJsonPath('data.toVersion', '1.4.4.9');
+        $this->postJson(route('api.v1.admin.installations.versions.store', 'tshock'), ['version' => '6.0.0-pre3'])
+            ->assertAccepted()
+            ->assertJsonPath('data.toVersion', '6.0.0-pre3');
         $this->deleteJson(route('api.v1.admin.installations.destroy', 'abcdef12'))
             ->assertOk()
             ->assertJsonPath('data.removed', true);
 
         Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && $request->data() === ['version' => '1.4.4.9']);
+        Http::assertSent(fn (Request $request): bool => $request->url() === self::AGENT_URL.'/admin/installations/tshock/versions');
         Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE');
     }
 
     public function test_rejects_invalid_terraria_versions_and_non_admins(): void
     {
         Sanctum::actingAs(User::factory()->admin()->create());
-        $this->postJson(route('api.v1.admin.installations.terraria.store'), ['version' => '../1.4'])
+        $this->postJson(route('api.v1.admin.installations.versions.store', 'terraria'), ['version' => '../1.4'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('version');
+        $this->postJson('/api/v1/admin/installations/minecraft/versions', ['version' => '1.0'])->assertNotFound();
 
         Sanctum::actingAs(User::factory()->create());
-        $this->postJson(route('api.v1.admin.installations.terraria.store'), ['version' => '1.4.4.9'])->assertForbidden();
+        $this->postJson(route('api.v1.admin.installations.versions.store', 'terraria'), ['version' => '1.4.4.9'])->assertForbidden();
         $this->deleteJson(route('api.v1.admin.installations.destroy', 'abcdef12'))->assertForbidden();
 
         Http::assertNothingSent();

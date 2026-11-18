@@ -205,7 +205,7 @@ export type Installation = {
   kind: Game
   /** Installazione del pannello (nella cartella dati). */
   managed: boolean
-  /** Versione aggiuntiva di Terraria: fissa, si rimuove quando nessun server la usa. */
+  /** Versione fissa (di qualsiasi gioco): non si aggiorna, si rimuove quando nessun server la usa. */
   pinned: boolean
   /** false = gioco non ancora installato in questa cartella. */
   installed: boolean
@@ -232,7 +232,7 @@ export type TmlRelease = {
 }
 
 /** Installazione utilizzabile da un server (form di creazione e cambio di versione). */
-export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed' | 'installed'> & {
+export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed' | 'pinned' | 'installed'> & {
   /** Installazione in corso. */
   installing: boolean
 }
@@ -252,6 +252,17 @@ export type UpdateNotice =
       gameVersion: string | null
       url: string
       servers: ServerRef[]
+    }
+  | {
+      /** Server su una versione fissa: c'è una versione più recente (si aggiorna solo lui). */
+      type: 'server-update'
+      id: string
+      server: ServerRef
+      game: Game
+      from: string
+      to: string
+      gameVersion: string | null
+      url: string
     }
   | { type: 'tshock-behind'; id: string; terrariaVersion: string; tshockGameVersion: string | null; servers: ServerRef[] }
   | {
@@ -276,6 +287,9 @@ export type SwitchJob = {
   startedAt: string
   finishedAt: string | null
 }
+
+/** Destinazione di un passaggio: un'installazione esistente, una versione fissa (installata se manca) o un gioco. */
+export type SwitchRequest = { installDir: string } | { game: Game; version?: string }
 
 export type UpdateReportAdmin = { checkedAt: string | null; notices: UpdateNotice[]; switches: SwitchJob[] }
 

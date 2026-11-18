@@ -83,7 +83,8 @@ function SwitchProgress({ job, onClose }: { job: SwitchJob; onClose: () => void 
 
 function Notice({ notice, switches, onDismiss }: { notice: UpdateNotice; switches: SwitchJob[]; onDismiss: () => void }) {
   const busy = (id: string) => switches.some((s) => s.serverId === id && s.phase !== 'done' && s.phase !== 'error')
-  if (notice.type === 'update') return <UpdateAvailable notice={notice} onDismiss={onDismiss} />
+  if (notice.type === 'update') return <UpdateAvailable notice={notice} busy={busy} onDismiss={onDismiss} />
+  if (notice.type === 'server-update') return busy(notice.server.id) ? null : <ServerUpdate notice={notice} onDismiss={onDismiss} />
   if (notice.type === 'tshock-behind') {
     const servers = notice.servers.filter((s) => !busy(s.id))
     return servers.length ? <TshockBehind notice={{ ...notice, servers }} onDismiss={onDismiss} /> : null
@@ -91,9 +92,21 @@ function Notice({ notice, switches, onDismiss }: { notice: UpdateNotice; switche
   return busy(notice.server.id) ? null : <TshockReady notice={notice} onDismiss={onDismiss} />
 }
 
-function UpdateAvailable({ notice, onDismiss }: { notice: Extract<UpdateNotice, { type: 'update' }>; onDismiss: () => void }) {
-  const { updateTml } = useAdminServerActions()
+function UpdateAvailable({
+  notice,
+  busy,
+  onDismiss,
+}: {
+  notice: Extract<UpdateNotice, { type: 'update' }>
+  busy: (serverId: string) => boolean
+  onDismiss: () => void
+}) {
+  const { updateTml, switchGame } = useAdminServerActions()
   const [confirm, setConfirm] = useState(false)
+  // Aggiornamento di un server solo: passa a una versione fissa nuova (gli altri restano sulla principale)
+  const [single, setSingle] = useState<string | null>(null)
+  const singleServer = notice.servers.find((s) => s.id === single)
+  const others = notice.servers.filter((s) => !busy(s.id))
   const label = GAME_LABEL[notice.game]
   const forTerraria = notice.game !== 'terraria' && notice.gameVersion ? ` (per Terraria ${notice.gameVersion})` : ''
 
@@ -117,10 +130,16 @@ function UpdateAvailable({ notice, onDismiss }: { notice: Extract<UpdateNotice, 
           </a>
         )}
       </p>
+      {singleServer && (
+        <p className="small">
+          Solo <strong>{singleServer.name}</strong> passa a {label} {notice.to}, installato come versione fissa; gli altri
+          server restano sulla {notice.from ?? 'versione attuale'}. Se è acceso viene spento (salvando il mondo) e riacceso.
+        </p>
+      )}
       {confirm && (
         <p className="small">
           {notice.servers.length > 0
-            ? 'I server accesi che la usano vengono spenti (salvando il mondo) e riaccesi alla fine. '
+            ? `Si aggiornano tutti i server che la usano (${names(notice.servers)}): quelli accesi vengono spenti (salvando il mondo) e riaccesi alla fine. `
             : ''}
           {notice.game === 'tmodloader'
             ? 'Le mod potrebbero richiedere un aggiornamento per la nuova versione.'
@@ -128,7 +147,23 @@ function UpdateAvailable({ notice, onDismiss }: { notice: Extract<UpdateNotice, 
         </p>
       )}
       <div className="btn-row">
-        {confirm ? (
+        {singleServer ? (
+          <>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={switchGame.isPending}
+              onClick={() =>
+                switchGame.mutate({ id: singleServer.id, game: notice.game, version: notice.to }, { onSettled: () => setSingle(null) })
+              }
+            >
+              Conferma: aggiorna solo {singleServer.name}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSingle(null)}>
+              Annulla
+            </button>
+          </>
+        ) : confirm ? (
           <>
             <button
               type="button"
@@ -145,8 +180,14 @@ function UpdateAvailable({ notice, onDismiss }: { notice: Extract<UpdateNotice, 
         ) : (
           <>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setConfirm(true)}>
-              Aggiorna {label}
+              {notice.servers.length > 1 ? `Aggiorna ${label} per tutti` : `Aggiorna ${label}`}
             </button>
+            {notice.servers.length > 1 &&
+              others.map((s) => (
+                <button key={s.id} type="button" className="btn btn-sm" onClick={() => setSingle(s.id)}>
+                  Aggiorna solo {s.name}
+                </button>
+              ))}
             <button type="button" className="btn btn-ghost btn-sm" onClick={onDismiss}>
               Nascondi
             </button>
@@ -154,6 +195,63 @@ function UpdateAvailable({ notice, onDismiss }: { notice: Extract<UpdateNotice, 
         )}
       </div>
       {updateTml.isError && <p className="error-text">{errorMessage(updateTml.error)}</p>}
+      {switchGame.isError && <p className="error-text">{errorMessage(switchGame.error)}</p>}
+    </div>
+  )
+}
+
+/** Server su una versione fissa: si aggiorna da solo passando alla versione nuova (installata come fissa). */
+function ServerUpdate({ notice, onDismiss }: { notice: Extract<UpdateNotice, { type: 'server-update' }>; onDismiss: () => void }) {
+  const { switchGame } = useAdminServerActions()
+  const [confirm, setConfirm] = useState(false)
+  const label = GAME_LABEL[notice.game]
+  const forTerraria = notice.game !== 'terraria' && notice.gameVersion ? ` (per Terraria ${notice.gameVersion})` : ''
+
+  return (
+    <div className="alert alert-info">
+      <p>
+        È disponibile <strong>{label} {notice.to}</strong>
+        {forTerraria} per <strong>{notice.server.name}</strong>, che è sulla versione fissa {notice.from}.{' '}
+        {notice.url && (
+          <a href={notice.url} target="_blank" rel="noreferrer">
+            Note di rilascio
+          </a>
+        )}
+      </p>
+      {confirm && (
+        <p className="small">
+          {label} {notice.to} viene installato come versione fissa (se non c'è già) e solo questo server ci passa. Se è
+          acceso viene spento (salvando il mondo) e riacceso.
+          {notice.game === 'tmodloader' && ' Le mod potrebbero richiedere un aggiornamento per la nuova versione.'}
+        </p>
+      )}
+      <div className="btn-row">
+        {confirm ? (
+          <>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={switchGame.isPending}
+              onClick={() => switchGame.mutate({ id: notice.server.id, game: notice.game, version: notice.to }, { onSettled: () => setConfirm(false) })}
+            >
+              Conferma aggiornamento
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(false)}>
+              Annulla
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setConfirm(true)}>
+              Aggiorna {notice.server.name}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onDismiss}>
+              Nascondi
+            </button>
+          </>
+        )}
+      </div>
+      {switchGame.isError && <p className="error-text">{errorMessage(switchGame.error)}</p>}
     </div>
   )
 }

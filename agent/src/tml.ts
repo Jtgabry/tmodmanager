@@ -21,6 +21,7 @@ import {
   TML_START_SCRIPT,
   TSHOCK_ASSEMBLY,
   TSHOCK_BINARY,
+  GAMES,
   WORLD_RELEASES,
 } from './games.js'
 import { paths } from './paths.js'
@@ -72,17 +73,25 @@ const exists = (path: string) =>
     () => false,
   )
 
-/** Versione aggiuntiva di Terraria (data/terraria/versions/<versione>): fissa, si aggiunge e si rimuove. */
-export const isPinned = (dir: string) => dirname(dir) === paths.terrariaVersions()
+/** Nome della cartella di una versione fissa: il numero di versione (es. 1.4.5.8, 6.2.1, 2026.09.3.1, 6.0.0-pre3). */
+export const VERSION_NAME = /^\d[\w.-]{0,31}$/
+
+/** Gioco di una versione fissa (data/<gioco>/versions/<versione>); null se non lo è. */
+export const pinnedGame = (dir: string): Game | null => GAMES.find((g) => dirname(dir) === paths.gameVersions(g)) ?? null
+
+/** Versione fissa: si aggiunge e si rimuove, non si aggiorna (un server si aggiorna passando a un'altra). */
+export const isPinned = (dir: string) => pinnedGame(dir) !== null
 
 /** Tipo di un'installazione dai suoi file; se non è (ancora) installata, dalla cartella. */
 export async function installationKind(dir: string): Promise<Game> {
   if (await exists(join(dir, TSHOCK_BINARY))) return 'tshock'
   if (await exists(join(dir, TERRARIA_BINARY))) return 'terraria'
   if (await exists(join(dir, TML_ASSEMBLY))) return 'tmodloader'
+  const pinned = pinnedGame(dir)
+  if (pinned) return pinned
   const name = basename(dir).toLowerCase()
   if (dir === paths.tshockInstall() || name.startsWith('tshock')) return 'tshock'
-  return dir === paths.terrariaInstall() || isPinned(dir) || name.startsWith('terraria') ? 'terraria' : 'tmodloader'
+  return dir === paths.terrariaInstall() || name.startsWith('terraria') ? 'terraria' : 'tmodloader'
 }
 
 /** "6.2.1.0" (FileVersion) → "6.2.1", come i tag delle release. */
@@ -344,13 +353,16 @@ const jobs = new Map<string, Job>()
 /** Job di installazione/aggiornamento di una cartella (anche finito), se c'è. */
 export const installationJob = (dir: string) => jobs.get(dir) ?? null
 
+/** Job ancora in corso. */
+export const busy = (job: Job | null | undefined): job is Job => !!job && job.phase !== 'done' && job.phase !== 'error'
+
 export type Installation = {
   id: string
   path: string
   kind: Game
-  /** Installazione del pannello (data/terraria/Terraria, le versioni aggiuntive di Terraria, data/tshock/TShock, data/tmodloader/tModLoader). */
+  /** Installazione del pannello (le principali data/<gioco>/<Gioco> e le versioni fisse data/<gioco>/versions/<v>). */
   managed: boolean
-  /** Versione aggiuntiva di Terraria: non si aggiorna, si rimuove quando nessun server la usa. */
+  /** Versione fissa (di qualsiasi gioco): non si aggiorna, si rimuove quando nessun server la usa. */
   pinned: boolean
   /** false = cartella prevista ma il gioco non è ancora installato (si installa dal pannello). */
   installed: boolean
@@ -367,24 +379,26 @@ export type Installation = {
 export const isInstalled = async (dir: string) =>
   (await exists(join(dir, TERRARIA_BINARY))) || (await exists(join(dir, TSHOCK_BINARY))) || (await exists(join(dir, TML_START_SCRIPT)))
 
-/** Versioni aggiuntive di Terraria: le cartelle presenti più quelle in installazione (o fallite), dalla più recente. */
-async function pinnedDirs(): Promise<string[]> {
-  const root = paths.terrariaVersions()
+/** Versioni fisse di un gioco: le cartelle presenti più quelle in installazione (o fallite), dalla più recente. */
+async function pinnedDirs(game: Game): Promise<string[]> {
+  const root = paths.gameVersions(game)
   const names = new Set(await readdir(root).catch(() => [] as string[]))
-  for (const dir of jobs.keys()) if (isPinned(dir)) names.add(basename(dir))
+  for (const dir of jobs.keys()) if (pinnedGame(dir) === game) names.add(basename(dir))
   return [...names]
-    .filter((name) => /^1(\.\d+){3,5}$/.test(name))
+    .filter((name) => VERSION_NAME.test(name))
     .sort((a, b) => compareVersions(b, a))
     .map((name) => join(root, name))
 }
 
 /**
- * Installazioni usate dai server, più quelle del pannello (anche se non ancora installate):
- * Terraria, le sue versioni aggiuntive, TShock, tModLoader.
+ * Installazioni usate dai server, più quelle del pannello (anche se non ancora installate): per ogni
+ * gioco (Terraria, TShock, tModLoader) la principale e poi le sue versioni fisse.
  */
 export async function listInstallations(): Promise<Installation[]> {
   const servers = await loadServers()
-  const managed = [paths.terrariaInstall(), ...(await pinnedDirs()), paths.tshockInstall(), paths.tmlInstall()]
+  const main: Record<Game, string> = { terraria: paths.terrariaInstall(), tshock: paths.tshockInstall(), tmodloader: paths.tmlInstall() }
+  const managed: string[] = []
+  for (const game of GAMES) managed.push(main[game], ...(await pinnedDirs(game)))
   const dirs = [...new Set([...managed, ...servers.map((s) => s.installDir)])]
   return Promise.all(
     dirs.map(async (path) => {
@@ -426,7 +440,6 @@ export async function findInstallation(id: string): Promise<Installation> {
   return found
 }
 
-const busy = (job: Job | undefined) => job !== undefined && job.phase !== 'done' && job.phase !== 'error'
 
 /** Avvia l'aggiornamento (o il ripristino di un backup) in background. Lo stato si segue con listInstallations(). */
 export async function startJob(
@@ -439,7 +452,7 @@ export async function startJob(
   const label = gameLabel(installation.kind)
   if (busy(jobs.get(dir))) throw new TmlError('C\'è già un aggiornamento in corso per questa installazione', 409)
   if (installation.pinned && installation.installed) {
-    throw new TmlError('Le versioni aggiuntive di Terraria sono fisse: per un\'altra versione aggiungila a parte', 409)
+    throw new TmlError('Le versioni fisse non si aggiornano: per un\'altra versione aggiungila a parte e passaci i server', 409)
   }
 
   let release: Release | null = null
@@ -493,22 +506,25 @@ export async function startJob(
   return job
 }
 
-/** Aggiunge una versione fissa di Terraria (in background, come un'installazione). */
-export async function addTerrariaVersion(version: string, manager: ServerManager) {
-  const release =
-    (await listReleases('terraria').catch(() => [] as Release[])).find((r) => r.version === version) ?? terrariaRelease(version)
-  if (!release) throw new TmlError(`Versione di Terraria non valida: ${version}`, 422)
-  const all = await listInstallations()
-  const same = all.find((i) => i.kind === 'terraria' && i.installed && i.version === version && (i.pinned || i.path === paths.terrariaInstall()))
-  if (same) throw new TmlError(`Terraria ${version} è già installato${same.pinned ? '' : ' (è l\'installazione principale)'}`, 409)
-  const dir = paths.terrariaVersion(version)
-  if (busy(jobs.get(dir))) throw new TmlError(`Terraria ${version} si sta già installando`, 409)
+/**
+ * Aggiunge una versione fissa di un gioco (in background, come un'installazione). Anche se l'installazione
+ * principale ha la stessa versione: la fissa non cambia quando la principale si aggiorna.
+ */
+export async function addVersion(game: Game, version: string, manager: ServerManager) {
+  const label = gameLabel(game)
+  if (!VERSION_NAME.test(version)) throw new TmlError(`Versione di ${label} non valida: ${version}`, 422)
+  const listed = (await listReleases(game).catch(() => [] as Release[])).find((r) => r.version === version)
+  const release = listed ?? (game === 'terraria' ? terrariaRelease(version) : null)
+  if (!release) throw new TmlError(`Versione ${version} non trovata tra le release di ${label}`, 404)
+  const dir = paths.gameVersion(game, version)
+  if (busy(jobs.get(dir))) throw new TmlError(`${label} ${version} si sta già installando`, 409)
+  if (await isInstalled(dir)) throw new TmlError(`${label} ${version} è già tra le versioni fisse`, 409)
   // Un tentativo fallito in precedenza: si riparte da zero
   await rm(dir, { recursive: true, force: true })
   const installation: Installation = {
     id: installationId(dir),
     path: dir,
-    kind: 'terraria',
+    kind: game,
     managed: true,
     pinned: true,
     installed: false,
@@ -522,9 +538,9 @@ export async function addTerrariaVersion(version: string, manager: ServerManager
   return startJob(installation, { version: release.version }, false, manager)
 }
 
-/** Rimuove una versione aggiuntiva di Terraria (nessun server deve usarla). */
+/** Rimuove una versione fissa (nessun server deve usarla). */
 export async function removeInstallation(installation: Installation) {
-  if (!installation.pinned) throw new TmlError('Si possono rimuovere solo le versioni aggiuntive di Terraria', 409)
+  if (!installation.pinned) throw new TmlError('Si possono rimuovere solo le versioni fisse', 409)
   if (busy(jobs.get(installation.path))) throw new TmlError('Installazione in corso: riprova quando è finita', 409)
   if (installation.servers.length) {
     throw new TmlError(`La usano ancora: ${installation.servers.map((s) => s.name).join(', ')}. Passali a un'altra versione prima.`, 409)
@@ -643,6 +659,15 @@ type DotnetReleases = {
 async function ensureDotnet(dir: string, job: Job, work: string) {
   const channel = await requiredDotnet(dir)
   if (await hasDotnet(dir, channel)) return
+  // Un'altra installazione di TShock ha già lo stesso runtime: si copia invece di riscaricarlo
+  for (const other of [paths.tshockInstall(), ...(await pinnedDirs('tshock'))]) {
+    if (other === dir || other === dirname(dir) || `${other}.new` === dir || !(await hasDotnet(other, channel))) continue
+    job.phase = 'prepare'
+    job.message = `Copia del runtime .NET ${channel}…`
+    await rm(join(dir, 'dotnet'), { recursive: true, force: true })
+    await run('cp', ['-a', '--', join(other, 'dotnet'), join(dir, 'dotnet')])
+    return
+  }
   job.phase = 'prepare'
   job.progress = null
   job.message = `Download del runtime .NET ${channel}…`

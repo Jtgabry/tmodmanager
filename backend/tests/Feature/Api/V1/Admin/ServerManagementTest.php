@@ -61,13 +61,49 @@ class ServerManagementTest extends TestCase
             && $request->data() === ['game' => 'terraria']);
     }
 
-    public function test_switching_to_tmodloader_is_not_a_guided_switch(): void
+    public function test_creates_a_server_on_a_fixed_version_to_install(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+        Http::fake([self::AGENT_URL.'/admin/servers' => Http::response(['data' => ['id' => 'nuovo', 'install' => ['game' => 'tshock', 'version' => '6.2.1']]], 201)]);
+
+        $server = $this->validServer();
+        unset($server['installDir']);
+        $this->postJson(route('api.v1.admin.servers.store'), [...$server, 'version' => ['game' => 'tshock', 'version' => '6.2.1']])
+            ->assertCreated()
+            ->assertJsonPath('data.install.game', 'tshock');
+        $this->postJson(route('api.v1.admin.servers.store'), [...$server, 'version' => ['game' => 'tshock', 'version' => '../6']])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('version.version');
+
+        Http::assertSent(fn (Request $request): bool => $request['version'] === ['game' => 'tshock', 'version' => '6.2.1']
+            && ! isset($request['installDir']));
+    }
+
+    public function test_switches_a_server_to_an_installation_or_a_fixed_version(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+        Http::fake([self::AGENT_URL.'/admin/servers/alfa/switch-game' => Http::response(['data' => ['phase' => 'installing']], 202)]);
+
+        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), ['installDir' => '/srv/tmm-data/tshock/TShock'])->assertAccepted();
+        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), ['game' => 'tshock', 'version' => '6.2.1'])->assertAccepted();
+
+        Http::assertSent(fn (Request $request): bool => $request->data() === ['installDir' => '/srv/tmm-data/tshock/TShock']);
+        Http::assertSent(fn (Request $request): bool => $request->data() === ['game' => 'tshock', 'version' => '6.2.1']);
+    }
+
+    public function test_rejects_invalid_switch_requests(): void
     {
         Sanctum::actingAs(User::factory()->admin()->create());
 
-        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), ['game' => 'tmodloader'])
+        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), ['game' => 'minecraft'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('game');
+        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), ['game' => 'tshock', 'version' => '../x'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('version');
+        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['installDir', 'game']);
 
         Http::assertNothingSent();
     }

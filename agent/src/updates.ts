@@ -8,10 +8,12 @@ import { paths } from './paths.js'
 import { loadServers, type ServerDefinition } from './registry.js'
 import { ServerAdminError, updateServer } from './serverAdmin.js'
 import {
-  addTerrariaVersion,
+  addVersion,
+  busy,
   gameVersion,
   type Installation,
   installationJob,
+  isInstalled,
   type Job,
   listInstallations,
   listReleases,
@@ -137,6 +139,17 @@ export type UpdateNotice =
       servers: ServerRef[]
     }
   | {
+      /** Server su una versione fissa: è uscita una versione più recente (si aggiorna solo lui). */
+      type: 'server-update'
+      id: string
+      server: ServerRef
+      game: Game
+      from: string
+      to: string
+      gameVersion: string | null
+      url: string
+    }
+  | {
       /** È uscita una versione di Terraria che TShock non supporta ancora. */
       type: 'tshock-behind'
       id: string
@@ -157,7 +170,7 @@ export type UpdateNotice =
       needsUpdate: boolean
     }
 
-/** Installazione principale (del pannello, non una versione aggiuntiva) di un gioco. */
+/** Installazione principale (del pannello, non una versione fissa) di un gioco. */
 const mainInstallation = (installations: Installation[], game: Game) =>
   installations.find((i) => i.kind === game && i.managed && !i.pinned) ?? null
 
@@ -188,6 +201,27 @@ export async function updateNotices(): Promise<{ checkedAt: string | null; notic
     })
   }
 
+  const switching = (serverId: string) => {
+    const job = switches.get(serverId)
+    return !!job && !finished(job)
+  }
+  for (const installation of installations.filter((i) => i.pinned && i.installed && i.version)) {
+    const latest = s.latest[installation.kind]
+    if (!latest || compareVersions(latest.version, installation.version!) <= 0) continue
+    for (const server of installation.servers.filter((sv) => !switching(sv.id))) {
+      notices.push({
+        type: 'server-update',
+        id: `server-update:${server.id}:${latest.version}`,
+        server: { id: server.id, name: server.name },
+        game: installation.kind,
+        from: installation.version!,
+        to: latest.version,
+        gameVersion: latest.gameVersion,
+        url: latest.url,
+      })
+    }
+  }
+
   const terraria = s.latest.terraria?.version ?? null
   const tshock = mainInstallation(installations, 'tshock')
   const latestTshock = s.latest.tshock ?? null
@@ -203,7 +237,7 @@ export async function updateNotices(): Promise<{ checkedAt: string | null; notic
       id: `tshock-behind:${terraria}`,
       terrariaVersion: terraria,
       tshockGameVersion: tshockSupports,
-      servers: onTshock.filter((sv) => !switches.has(sv.id) || finished(switches.get(sv.id)!)).map(({ id, name }) => ({ id, name })),
+      servers: onTshock.filter((sv) => !switching(sv.id)).map(({ id, name }) => ({ id, name })),
     })
   }
 
@@ -250,15 +284,36 @@ export type SwitchJob = {
 const switches = new Map<string, SwitchJob>()
 const finished = (job: SwitchJob) => job.phase === 'done' || job.phase === 'error'
 
-export const SWITCH_TARGETS = ['terraria', 'tshock'] as const
-export type SwitchTarget = (typeof SWITCH_TARGETS)[number]
-
 /** Installazione di destinazione e, se va installata o aggiornata prima, il job partito per farlo. */
-type Target = { dir: string; version: string | null; job: Job | null }
+type Target = { game: Game; dir: string; version: string | null; job: Job | null }
+
+/** Versione fissa di un gioco: già installata, in installazione (si aspetta) o da installare. */
+async function versionTarget(game: Game, version: string, manager: ServerManager): Promise<Target> {
+  const dir = paths.gameVersion(game, version)
+  const running = installationJob(dir)
+  if (busy(running)) return { game, dir, version, job: running }
+  if (await isInstalled(dir)) return { game, dir, version, job: null }
+  return { game, dir, version, job: await addVersion(game, version, manager) }
+}
+
+/** Un'installazione esistente; se è una principale non ancora installata, si installa l'ultima versione stabile. */
+async function installationTarget(installDir: string, manager: ServerManager): Promise<Target> {
+  const installation = (await listInstallations()).find((i) => i.path === installDir)
+  if (!installation || (!installation.installed && !installation.managed)) {
+    throw new ServerAdminError('Installazione sconosciuta', 422, 'installDir')
+  }
+  const { kind: game } = installation
+  if (busy(installation.job)) return { game, dir: installDir, version: installation.job.toVersion, job: installation.job }
+  if (installation.installed) return { game, dir: installDir, version: installation.version, job: null }
+  if (installation.pinned) throw new ServerAdminError('Questa versione fissa non è installata: aggiungila di nuovo', 409, 'installDir')
+  const latest = latestOf(await listReleases(game))
+  if (!latest) throw new ServerAdminError(`Nessuna versione stabile di ${gameLabel(game)} trovata`, 409)
+  return { game, dir: installDir, version: latest.version, job: await startJob(installation, { version: latest.version }, false, manager) }
+}
 
 /**
  * Terraria vanilla, all'ultima versione: un'installazione che l'ha già, altrimenti quella principale
- * (installata o aggiornata se nessun server la usa), altrimenti una versione aggiuntiva.
+ * (installata o aggiornata se nessun server la usa), altrimenti una versione fissa.
  */
 async function terrariaTarget(manager: ServerManager): Promise<Target> {
   const s = await loadState()
@@ -266,13 +321,12 @@ async function terrariaTarget(manager: ServerManager): Promise<Target> {
   if (!version) throw new ServerAdminError('Nessuna versione di Terraria trovata', 409)
   const installations = await listInstallations()
   const ready = installations.find((i) => i.kind === 'terraria' && i.installed && i.version === version)
-  if (ready) return { dir: ready.path, version, job: null }
+  if (ready) return { game: 'terraria', dir: ready.path, version, job: null }
   const main = mainInstallation(installations, 'terraria')
-  if (main && (!main.installed || main.servers.length === 0)) {
-    return { dir: main.path, version, job: await startJob(main, { version }, false, manager) }
+  if (main && !busy(main.job) && (!main.installed || main.servers.length === 0)) {
+    return { game: 'terraria', dir: main.path, version, job: await startJob(main, { version }, false, manager) }
   }
-  const job = await addTerrariaVersion(version, manager)
-  return { dir: job.installDir, version, job }
+  return versionTarget('terraria', version, manager)
 }
 
 /** TShock: quella installata se supporta la versione di Terraria del server, altrimenti si installa/aggiorna l'ultima. */
@@ -281,7 +335,8 @@ async function tshockTarget(server: ServerDefinition, manager: ServerManager): P
   const main = mainInstallation(installations, 'tshock')
   if (!main) throw new ServerAdminError('Installazione di TShock non trovata', 409)
   const needed = await gameVersion(server.installDir, server.game).catch(() => null)
-  if (main.installed && (!needed || atLeast(main.gameVersion, needed))) return { dir: main.path, version: main.version, job: null }
+  if (busy(main.job)) return { game: 'tshock', dir: main.path, version: main.job.toVersion, job: main.job }
+  if (main.installed && (!needed || atLeast(main.gameVersion, needed))) return { game: 'tshock', dir: main.path, version: main.version, job: null }
 
   const latest = latestOf(await listReleases('tshock'))
   if (!latest) throw new ServerAdminError('Nessuna versione stabile di TShock trovata', 409)
@@ -291,18 +346,36 @@ async function tshockTarget(server: ServerDefinition, manager: ServerManager): P
       409,
     )
   }
-  if (main.installed && main.version === latest.version) return { dir: main.path, version: main.version, job: null }
-  return { dir: main.path, version: latest.version, job: await startJob(main, { version: latest.version }, true, manager) }
+  if (main.installed && main.version === latest.version) return { game: 'tshock', dir: main.path, version: main.version, job: null }
+  return { game: 'tshock', dir: main.path, version: latest.version, job: await startJob(main, { version: latest.version }, true, manager) }
 }
 
 /**
- * Passa un server a Terraria vanilla o a TShock. Prepara (o fa partire l'installazione di) ciò che serve
- * e restituisce subito il job; il resto prosegue in background e si segue con updateNotices().
+ * Destinazione di un passaggio:
+ *  - { installDir }: un'installazione esistente (la principale di un gioco non ancora installato si installa);
+ *  - { game, version }: una versione fissa, installata se manca (aggiorna solo questo server);
+ *  - { game }: Terraria all'ultima versione o TShock che supporta la versione del server (avvisi di aggiornamento);
+ *    tModLoader: la sua installazione principale.
  */
-export async function switchGame(id: string, to: SwitchTarget, manager: ServerManager): Promise<SwitchJob> {
+export type SwitchRequest = { installDir: string } | { game: Game; version?: string }
+
+async function resolveTarget(server: ServerDefinition, request: SwitchRequest, manager: ServerManager): Promise<Target> {
+  if ('installDir' in request) return installationTarget(request.installDir, manager)
+  if (request.version) return versionTarget(request.game, request.version, manager)
+  if (server.game === request.game) throw new ServerAdminError(`${server.name} è già un server ${gameLabel(request.game)}`, 409)
+  if (request.game === 'terraria') return terrariaTarget(manager)
+  if (request.game === 'tshock') return tshockTarget(server, manager)
+  return installationTarget(paths.tmlInstall(), manager)
+}
+
+/**
+ * Passa un server a un'altra installazione o versione (anche di un altro gioco). Prepara (o fa partire
+ * l'installazione di) ciò che serve e restituisce subito il job; il resto prosegue in background e si
+ * segue con updateNotices(): attesa dell'installazione, spegnimento (salvando il mondo), cambio, riaccensione.
+ */
+export async function switchGame(id: string, request: SwitchRequest, manager: ServerManager): Promise<SwitchJob> {
   const server = (await loadServers()).find((s) => s.id === id)
   if (!server) throw new ServerAdminError('Server non trovato', 404)
-  if (server.game === to) throw new ServerAdminError(`${server.name} è già un server ${gameLabel(to)}`, 409)
   const current = switches.get(id)
   if (current && !finished(current)) throw new ServerAdminError(`Passaggio di ${server.name} già in corso`, 409)
   const status = await manager.status(server)
@@ -310,14 +383,21 @@ export async function switchGame(id: string, to: SwitchTarget, manager: ServerMa
   if (status.state !== 'stopped' && !status.managed) {
     throw new ServerAdminError(`${server.name} è acceso fuori dal pannello: spegnilo prima`, 409)
   }
+  if ('installDir' in request && request.installDir === server.installDir) {
+    throw new ServerAdminError(`${server.name} usa già questa installazione`, 409, 'installDir')
+  }
+  if ('game' in request && request.version && paths.gameVersion(request.game, request.version) === server.installDir) {
+    throw new ServerAdminError(`${server.name} usa già ${gameLabel(request.game)} ${request.version}`, 409)
+  }
 
   let target: Target
   try {
-    target = to === 'terraria' ? await terrariaTarget(manager) : await tshockTarget(server, manager)
+    target = await resolveTarget(server, request, manager)
   } catch (err) {
     if (err instanceof TmlError) throw new ServerAdminError(err.message, err.status === 404 ? 404 : 409)
     throw err
   }
+  const to = target.game
 
   const job: SwitchJob = {
     serverId: id,

@@ -16,8 +16,8 @@ import {
   updateServer,
 } from '../serverAdmin.js'
 import { GAMES } from '../games.js'
-import { addTerrariaVersion, findInstallation, listInstallations, listReleases, removeInstallation, startJob, TmlError } from '../tml.js'
-import { SWITCH_TARGETS, switchGame, updateNotices } from '../updates.js'
+import { addVersion, findInstallation, listInstallations, listReleases, removeInstallation, startJob, TmlError, VERSION_NAME } from '../tml.js'
+import { switchGame, updateNotices } from '../updates.js'
 
 /** Operazioni da amministratore: server (creazione, impostazioni, rimozione) e installazioni di Terraria, TShock e tModLoader. */
 export async function adminRoutes(app: FastifyInstance, { manager }: { manager: ServerManager }) {
@@ -63,10 +63,14 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
 
   app.delete<{ Params: { id: string } }>('/admin/servers/:id', async (req) => ({ data: await removeServer(req.params.id, manager) }))
 
-  // Passaggio guidato tra TShock e Terraria vanilla (installa ciò che serve, spegne, cambia, riaccende)
+  // Passaggio guidato a un'altra installazione, versione o gioco (installa ciò che serve, spegne, cambia, riaccende)
+  const SwitchInput = z.union([
+    z.object({ installDir: z.string().min(1) }).strict(),
+    z.object({ game: z.enum(GAMES), version: z.string().regex(VERSION_NAME).optional() }).strict(),
+  ])
   app.post<{ Params: { id: string } }>('/admin/servers/:id/switch-game', async (req, reply) => {
-    const { game } = z.object({ game: z.enum(SWITCH_TARGETS) }).parse(req.body)
-    return reply.code(202).send({ data: await switchGame(req.params.id, game, manager) })
+    const input = SwitchInput.parse(req.body)
+    return reply.code(202).send({ data: await switchGame(req.params.id, input, manager) })
   })
 
   app.post<{ Params: { id: string } }>('/admin/servers/:id/stay-vanilla', async (req) => {
@@ -80,10 +84,12 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
 
   app.get('/admin/installations', async () => ({ data: await listInstallations() }))
 
-  // Versioni aggiuntive di Terraria: più server vanilla su versioni diverse
-  app.post('/admin/installations/terraria/versions', async (req, reply) => {
-    const { version } = z.object({ version: z.string().regex(/^1(\.\d){3,5}$/, 'versione come 1.4.4.9') }).parse(req.body)
-    return reply.code(202).send({ data: await addTerrariaVersion(version, manager) })
+  // Versioni fisse (Terraria, TShock, tModLoader): ogni server può stare su una versione sua
+  app.post<{ Params: { game: string } }>('/admin/installations/:game/versions', async (req, reply) => {
+    const game = z.enum(GAMES).safeParse(req.params.game)
+    if (!game.success) return reply.code(404).send({ error: 'not_found', message: 'Gioco sconosciuto' })
+    const { version } = z.object({ version: z.string().regex(VERSION_NAME, 'versione non valida') }).parse(req.body)
+    return reply.code(202).send({ data: await addVersion(game.data, version, manager) })
   })
 
   app.delete<{ Params: { id: string } }>('/admin/installations/:id', async (req) => {
@@ -98,7 +104,7 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
   })
 
   const JobInput = z.union([
-    z.object({ version: z.string().regex(/^[\d.]{3,32}$/), restartServers: z.boolean().default(true) }),
+    z.object({ version: z.string().regex(VERSION_NAME), restartServers: z.boolean().default(true) }),
     z.object({ backup: z.string().min(1), restartServers: z.boolean().default(true) }),
   ])
 

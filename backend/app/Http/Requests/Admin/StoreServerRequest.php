@@ -15,7 +15,11 @@ class StoreServerRequest extends FormRequest
         return [
             'id' => ['required', 'string', 'regex:/^[a-z0-9][a-z0-9-]{0,31}$/'],
             'name' => ['required', 'string', 'max:64'],
-            'installDir' => ['required', 'string', 'max:255'],
+            // Un'installazione esistente oppure una versione fissa di un gioco (installata dopo la creazione)
+            'installDir' => ['required_without:version', 'prohibits:version', 'string', 'max:255'],
+            'version' => ['required_without:installDir', 'array'],
+            'version.game' => ['required_with:version', 'string', Rule::in(['terraria', 'tshock', 'tmodloader'])],
+            'version.version' => ['required_with:version', 'string', 'regex:'.StoreInstallationVersionRequest::VERSION_PATTERN],
             'port' => ['required', 'integer', 'min:1024', 'max:65535'],
             'maxPlayers' => ['required', 'integer', 'min:1', 'max:255'],
             'password' => ['nullable', 'string', 'max:64', 'regex:/^[^\r\n\x00]*$/'],
@@ -52,7 +56,9 @@ class StoreServerRequest extends FormRequest
         return [
             'id' => $data['id'],
             'name' => $data['name'],
-            'installDir' => $data['installDir'],
+            ...(isset($data['installDir'])
+                ? ['installDir' => $data['installDir']]
+                : ['version' => ['game' => $data['version']['game'], 'version' => $data['version']['version']]]),
             'port' => (int) $data['port'],
             'maxPlayers' => (int) $data['maxPlayers'],
             'password' => $data['password'] ?? '',

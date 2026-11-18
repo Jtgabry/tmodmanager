@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\StoreTerrariaVersionRequest;
+use App\Http\Requests\Admin\StoreInstallationVersionRequest;
 use App\Http\Requests\Admin\UpdateInstallationRequest;
 use App\Services\Agent\AgentClient;
 use Illuminate\Http\JsonResponse;
@@ -55,25 +55,25 @@ class InstallationController extends Controller
     }
 
     /**
-     * Aggiunge una versione fissa di Terraria (per server vanilla su versioni diverse): l'installazione
-     * prosegue in background nell'agent.
+     * Aggiunge una versione fissa di Terraria, TShock o tModLoader (ogni server può stare su una versione sua):
+     * l'installazione prosegue in background nell'agent.
      */
-    public function storeTerrariaVersion(StoreTerrariaVersionRequest $request): JsonResponse
+    public function storeVersion(StoreInstallationVersionRequest $request, string $game): JsonResponse
     {
         $version = $request->validated('version');
-        $job = $this->agent->json('post', '/admin/installations/terraria/versions', ['version' => $version], timeout: 30);
-        Log::info('Versione di Terraria aggiunta', ['user' => $request->user()->email, 'version' => $version]);
+        $job = $this->agent->json('post', "/admin/installations/{$game}/versions", ['version' => $version], timeout: 30);
+        Log::info('Versione fissa aggiunta', ['user' => $request->user()->email, 'game' => $game, 'version' => $version]);
 
         return response()->json(['data' => $job], 202);
     }
 
     /**
-     * Rimuove una versione aggiuntiva di Terraria (nessun server deve usarla).
+     * Rimuove una versione fissa (nessun server deve usarla).
      */
     public function destroy(Request $request, string $installation): JsonResponse
     {
         $result = $this->agent->json('delete', "/admin/installations/{$installation}", timeout: 60);
-        Log::info('Versione di Terraria rimossa', ['user' => $request->user()->email, 'installation' => $installation]);
+        Log::info('Versione fissa rimossa', ['user' => $request->user()->email, 'installation' => $installation]);
 
         return response()->json(['data' => $result]);
     }

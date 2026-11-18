@@ -5,7 +5,7 @@ namespace App\Http\Requests\Admin;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Aggiornamento di un'installazione di tModLoader a una release (version) o ritorno a un backup (backup).
+ * Aggiornamento di un'installazione a una release (version) o ritorno a un backup (backup).
  */
 class UpdateInstallationRequest extends FormRequest
 {
@@ -15,7 +15,7 @@ class UpdateInstallationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'version' => ['required_without:backup', 'prohibits:backup', 'string', 'regex:/^[\d.]{3,32}$/'],
+            'version' => ['required_without:backup', 'prohibits:backup', 'string', 'regex:'.StoreInstallationVersionRequest::VERSION_PATTERN],
             'backup' => ['required_without:version', 'string', 'max:500'],
             'restartServers' => ['sometimes', 'boolean'],
         ];

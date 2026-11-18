@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { config } from './config.js'
+import type { Game } from './games.js'
 
 /**
  * Tutti i percorsi su disco dell'agent, sotto un'unica cartella dati (config.dataDir, di default
@@ -12,9 +13,10 @@ import { config } from './config.js'
  *   ├── resume-servers.json      server da riaccendere dopo uno spegnimento dell'agent
  *   ├── database.sqlite          database del sito (Laravel)
  *   ├── terraria/Terraria/       dedicated server di Terraria vanilla (+ Terraria-v<versione>: backup)
- *   ├── terraria/versions/<v>/   versioni aggiuntive di Terraria, fisse (più server su versioni diverse)
  *   ├── tshock/TShock/           installazione di TShock, con il suo runtime .NET in dotnet/ (+ TShock-v<versione>: backup)
  *   ├── tmodloader/tModLoader/   installazione di tModLoader (+ tModLoader-v<versione>: backup)
+ *   ├── <gioco>/versions/<v>/    versioni fisse (terraria, tshock, tmodloader): non si aggiornano, così
+ *   │                            ogni server si aggiorna per conto suo passando a un'altra versione
  *   ├── update-check.json        ultimo controllo giornaliero degli aggiornamenti (Terraria, TShock, tModLoader)
  *   ├── steamcmd/                steamcmd (scaricato al primo uso)
  *   ├── servers/<id>/
@@ -46,9 +48,9 @@ export const paths = {
 
   /** Installazione di Terraria vanilla gestita dal pannello. */
   terrariaInstall: () => join(config.dataDir, 'terraria', 'Terraria'),
-  /** Versioni aggiuntive di Terraria (una cartella per versione, non si aggiornano). */
-  terrariaVersions: () => join(config.dataDir, 'terraria', 'versions'),
-  terrariaVersion: (version: string) => join(config.dataDir, 'terraria', 'versions', version),
+  /** Versioni fisse di un gioco (una cartella per versione, non si aggiornano). */
+  gameVersions: (game: Game) => join(config.dataDir, game, 'versions'),
+  gameVersion: (game: Game, version: string) => join(config.dataDir, game, 'versions', version),
   /** Installazione di TShock gestita dal pannello. */
   tshockInstall: () => join(config.dataDir, 'tshock', 'TShock'),
   /** Ultimo controllo degli aggiornamenti (fatto al massimo una volta al giorno). */

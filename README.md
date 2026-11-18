@@ -102,6 +102,7 @@ data/
 ├── database.sqlite                 database del sito (con DB_CONNECTION=sqlite)
 ├── tshock/TShock/                  TShock, con il runtime .NET in dotnet/ (+ TShock-v<versione>: backup)
 ├── tmodloader/tModLoader/          tModLoader (+ tModLoader-v<versione>: backup)
+├── <gioco>/versions/<versione>/    versioni fisse di Terraria, TShock e tModLoader (non si aggiornano)
 ├── update-check.json               ultimo controllo giornaliero degli aggiornamenti
 ├── steamcmd/                       scaricato al primo uso
 ├── servers/<id>/                   serverconfig.txt, save/ (Mods, ModConfigs, Worlds), logs/,
@@ -143,8 +144,14 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
   varrebbero quelli del `config.json` di TShock). Configurazione, database (account, gruppi, regioni, SSC), log e plugin
   di ogni server stanno nel suo `save/` (`tshock/` e `ServerPlugins/`, dalla sezione File): restano passando a vanilla
   o tModLoader e tornando indietro.
+- **Versioni** (admin): per ogni gioco c'è un'installazione principale, condivisa (aggiornandola si aggiornano tutti i
+  server che la usano), più le versioni fisse, che non si aggiornano. Dalla Panoramica di un server si sceglie gioco e
+  versione, anche una non ancora installata: il pannello la installa come versione fissa, spegne il server salvando il
+  mondo, lo sposta e lo riaccende. Così un server si aggiorna (o cambia gioco) senza toccare gli altri. Le versioni
+  fisse si rimuovono da Installazioni quando nessun server le usa.
 - **Aggiornamenti** (admin): l'agent controlla al massimo una volta al giorno le nuove versioni di Terraria, TShock e
-  tModLoader; in cima alle pagine compaiono gli avvisi con il pulsante per aggiornare. Se esce una versione di Terraria
+  tModLoader; in cima alle pagine compaiono gli avvisi con il pulsante per aggiornare l'installazione principale (tutti i
+  suoi server) o un server solo. Se esce una versione di Terraria
   che TShock non supporta ancora, i server TShock si possono passare a Terraria vanilla con un clic (installazione,
   spegnimento con salvataggio, cambio, riaccensione); quando esce la TShock aggiornata compare il pulsante per tornarci.
 - **tModLoader** (admin): installazione e aggiornamento da GitHub (verifica sha256, spegnimento e riaccensione dei server, backup

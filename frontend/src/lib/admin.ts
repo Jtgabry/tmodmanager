@@ -1,11 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import { type Game, GAME_LABEL, type Installation, type InstallationChoice, type ServerSettings, type SwitchJob, type TmlRelease, type UpdateReportAdmin } from './types'
+import {
+  type Game,
+  GAME_LABEL,
+  type Installation,
+  type InstallationChoice,
+  type ServerSettings,
+  type SwitchJob,
+  type SwitchRequest,
+  type TmlRelease,
+  type UpdateReportAdmin,
+} from './types'
 
 export type NewServer = {
   id: string
   name: string
-  installDir: string
+  /** Un'installazione esistente oppure una versione fissa da installare (version). */
+  installDir?: string
+  version?: { game: Game; version: string }
   port: number
   maxPlayers: number
   password: string
@@ -111,25 +123,25 @@ export function useAdminServerActions() {
       (await api.post(`/admin/installations/${id}/update`, body)).data,
     onSettled: refresh,
   })
-  const addTerrariaVersion = useMutation({
-    mutationFn: async (version: string) => (await api.post('/admin/installations/terraria/versions', { version })).data,
+  const addVersion = useMutation({
+    mutationFn: async ({ game, version }: { game: Game; version: string }) => (await api.post(`/admin/installations/${game}/versions`, { version })).data,
     onSettled: refresh,
   })
   const removeInstallation = useMutation({
     mutationFn: async (id: string) => (await api.delete(`/admin/installations/${id}`)).data,
     onSettled: refresh,
   })
-  /** Passaggio guidato tra TShock e Terraria vanilla (installa, spegne, cambia, riaccende). */
+  /** Passaggio guidato a un'altra installazione, versione o gioco (installa se serve, spegne, cambia, riaccende). */
   const switchGame = useMutation({
-    mutationFn: async ({ id, game }: { id: string; game: 'terraria' | 'tshock' }) =>
-      (await api.post<{ data: SwitchJob }>(`/admin/servers/${id}/switch-game`, { game })).data.data,
+    mutationFn: async ({ id, ...target }: { id: string } & SwitchRequest) =>
+      (await api.post<{ data: SwitchJob }>(`/admin/servers/${id}/switch-game`, target)).data.data,
     onSettled: refresh,
   })
   const stayVanilla = useMutation({
     mutationFn: async (id: string) => (await api.post(`/admin/servers/${id}/stay-vanilla`)).data,
     onSettled: refresh,
   })
-  return { create, update, remove, recreateWorld, updateTml, addTerrariaVersion, removeInstallation, switchGame, stayVanilla }
+  return { create, update, remove, recreateWorld, updateTml, addVersion, removeInstallation, switchGame, stayVanilla }
 }
 
 /** Versione del mondo (primi byte del .wld) → versione di Terraria che lo ha salvato (tabella di TEdit). */
@@ -164,8 +176,13 @@ export function compareVersions(a: string, b: string): number {
   return 0
 }
 
-/** "tModLoader 2026.09.3.1 (Terraria 1.4.4.9)", con il percorso se l'installazione non è gestita dal pannello. */
-export const choiceLabel = (c: InstallationChoice) =>
-  !c.installed
-    ? `${GAME_LABEL[c.kind]} — ${c.installing ? 'installazione in corso' : 'da installare (ultima versione)'}`
-    : `${GAME_LABEL[c.kind]} ${c.version ?? '?'}${c.kind !== 'terraria' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''}${c.managed ? '' : ` — ${c.path}`}`
+/** "tModLoader 2026.09.3.1 (Terraria 1.4.4.9) — fissa", con il percorso se l'installazione non è gestita dal pannello. */
+export const choiceLabel = (c: InstallationChoice) => `${GAME_LABEL[c.kind]} ${versionLabel(c)}`
+
+/** Solo la parte di versione dell'etichetta: "6.2.1 (Terraria 1.4.5.8) — principale". */
+export const versionLabel = (c: InstallationChoice) => {
+  if (!c.installed) return c.installing ? `${c.version ?? ''} — installazione in corso` : c.pinned ? `${c.version} — da installare` : 'ultima versione — da installare'
+  const game = c.kind !== 'terraria' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''
+  const role = !c.managed ? ` — ${c.path}` : c.pinned ? ' — fissa' : ' — principale'
+  return `${c.version ?? '?'}${game}${role}`
+}

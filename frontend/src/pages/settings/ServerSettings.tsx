@@ -1,8 +1,10 @@
 import { type FormEvent, type ReactNode, useState } from 'react'
-import { type AutoInstall, choiceLabel, olderThanWorld, useAdminServerActions, useReleases, useServerDefaults, useServerSettings, worldVersionLabel } from '../../lib/admin'
+import { PickedHint } from '../../components/InstallationPicker'
+import { useInstallationPicker } from '../../lib/installationPicker'
+import { olderThanWorld, useAdminServerActions, useServerDefaults, useServerSettings, worldVersionLabel } from '../../lib/admin'
 import { errorMessage, fieldErrors } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
-import { GAME_LABEL, type InstallationChoice, type Server, type ServerSettings } from '../../lib/types'
+import { GAME_LABEL, type Server, type ServerSettings } from '../../lib/types'
 
 /**
  * Impostazioni di un server (solo admin). Nella Panoramica: nome, giocatori, motd e gioco/versione.
@@ -88,70 +90,48 @@ function GeneralForm({ data, running }: { data: ServerSettings; running: boolean
 }
 
 /**
- * Cambio di versione del server, anche tra Terraria vanilla e tModLoader: il mondo resta lo stesso.
- * Se la versione scelta è più vecchia di quella che ha salvato il mondo si avvisa (e si propone di
- * ricrearlo), ma il cambio resta permesso.
+ * Cambio di gioco e versione del server (Terraria, TShock, tModLoader): il mondo resta lo stesso. Si può
+ * scegliere anche una versione non ancora installata: il pannello la installa, spegne il server (salvando
+ * il mondo), lo sposta e lo riaccende se era acceso. Se la versione scelta è più vecchia di quella che ha
+ * salvato il mondo si avvisa (e si propone di ricrearlo), ma il cambio resta permesso.
  */
 function VersionSwitch({ data, running }: { data: ServerSettings; running: boolean }) {
   const defaults = useServerDefaults(true)
-  const { update, recreateWorld } = useAdminServerActions()
-  const [target, setTarget] = useState(data.installDir)
+  const { switchGame, recreateWorld } = useAdminServerActions()
   const [confirmRecreate, setConfirmRecreate] = useState(false)
-  const [switched, setSwitched] = useState<{ choice: InstallationChoice | null; install: AutoInstall | null } | null>(null)
-  // Anche i giochi non ancora installati: scegliendoli si installa l'ultima versione
-  const choices = defaults.data?.installations ?? []
-  const chosen = choices.find((c) => c.path === target)
-  const changed = target !== data.installDir
-  const toInstall = changed && chosen !== undefined && !chosen.installed
-  // Versione dei mondi di un gioco da installare: quella dell'ultima release, se nota (Terraria sì, tModLoader no)
-  const releases = useReleases(chosen?.kind ?? 'terraria', toInstall && !chosen?.installing)
-  const targetWorld = !toInstall ? chosen?.worldRelease : (releases.data?.find((r) => !r.prerelease)?.worldRelease ?? null)
-  const tooOld = changed && olderThanWorld(targetWorld, data.worldRelease)
+  const [started, setStarted] = useState(false)
+  const { fields, picked } = useInstallationPicker(defaults.data?.installations ?? [], { game: data.game, installDir: data.installDir })
+  const changed = picked !== null && !('installDir' in picked.target && picked.target.installDir === data.installDir)
+  const tooOld = changed && olderThanWorld(picked.worldRelease, data.worldRelease)
   // Mondo esistente e versione di destinazione ignota: si avvisa allo stesso modo, senza poter dire se è più vecchia
-  const unknownWorld = toInstall && targetWorld === null && data.worldRelease !== null
+  const unknownWorld = changed && picked.toInstall && picked.worldRelease === null && data.worldRelease !== null
   const warn = tooOld || unknownWorld
+  const target = picked ? `${GAME_LABEL[picked.game]} ${picked.release?.version ?? picked.choice?.version ?? ''}`.trim() : ''
 
   const apply = () => {
-    setSwitched(null)
-    update.mutate({ id: data.id, installDir: target }, { onSuccess: (r) => setSwitched({ choice: chosen ?? null, install: r.install ?? null }) })
+    if (!picked) return
+    setStarted(false)
+    switchGame.mutate({ id: data.id, ...picked.target }, { onSuccess: () => setStarted(true) })
   }
 
   return (
     <div className="stack">
       <div className="form-inline">
-        <label className="field">
-          <span>Installazione</span>
-          <select value={target} onChange={(e) => setTarget(e.target.value)} disabled={!defaults.data}>
-            {!choices.some((c) => c.path === data.installDir) && (
-              <option value={data.installDir}>
-                {GAME_LABEL[data.game]} — {data.installDir}
-              </option>
-            )}
-            {choices.map((c) => (
-              <option key={c.path} value={c.path}>
-                {choiceLabel(c)}
-                {c.path === data.installDir ? ' — attuale' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
+        {fields}
         <button
           type="button"
           className={warn ? 'btn btn-warning btn-sm' : 'btn btn-primary btn-sm'}
-          disabled={!changed || running || update.isPending}
-          title={running ? 'Spegni il server per cambiare versione' : undefined}
+          disabled={!changed || switchGame.isPending || !defaults.data}
           onClick={apply}
         >
-          {warn ? 'Cambia comunque' : toInstall ? 'Installa e cambia' : 'Cambia versione'}
+          {warn ? 'Cambia comunque' : picked?.toInstall ? 'Installa e cambia' : 'Cambia versione'}
         </button>
       </div>
       <p className="muted small">
-        Il mondo resta lo stesso. Con tModLoader compaiono le sezioni Mod, Workshop e Modpack; tornando a Terraria
-        vanilla le mod restano sul disco. Con TShock i giocatori entrano con Terraria normale; configurazione, account e
-        plugin di TShock restano nella cartella del server anche passando a un altro gioco. I giocatori devono usare la
-        stessa versione di Terraria del server (o tModLoader, per un server tModLoader).
-        {toInstall && ` ${GAME_LABEL[chosen.kind]} non è ancora installato: ${chosen.installing ? 'si sta già installando' : "viene installata l'ultima versione"}, e il server si potrà accendere quando è finito.`}
-        {running && <strong> Spegni il server per cambiare versione.</strong>}
+        <PickedHint picked={changed ? picked : null} /> Il mondo resta lo stesso. Con tModLoader compaiono le sezioni Mod,
+        Workshop e Modpack; con TShock i giocatori entrano con Terraria normale. Mod, configurazione e plugin di TShock
+        restano nella cartella del server anche passando a un altro gioco.
+        {changed && running && <strong> Il server è acceso: viene spento (salvando il mondo) e riacceso con {target}.</strong>}
       </p>
 
       {warn && data.worldRelease !== null && (
@@ -159,15 +139,15 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
           {tooOld ? (
             <p>
               Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}, più
-              recente di quella usata da {chosen ? choiceLabel(chosen) : 'questa versione'}
-              {targetWorld ? ` (${worldVersionLabel(targetWorld)})` : ''}. Il server potrebbe non riuscire ad aprirlo o
-              andare in crash.
+              recente di {target}
+              {picked?.worldRelease ? ` (${worldVersionLabel(picked.worldRelease)})` : ''}. Il server potrebbe non riuscire ad
+              aprirlo o andare in crash.
             </p>
           ) : (
             <p>
               Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}.
-              Finché {chosen ? GAME_LABEL[chosen.kind] : 'il gioco'} non è installato non si sa quale versione dei mondi sappia
-              aprire: se è più vecchia, il server potrebbe non riuscire ad aprirlo o andare in crash.
+              Finché {target} non è installato non si sa quale versione dei mondi sappia aprire: se è più vecchia, il server
+              potrebbe non riuscire ad aprirlo o andare in crash.
             </p>
           )}
           <p className="small">
@@ -210,30 +190,17 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
         </div>
       )}
       {recreateWorld.isError && <div className="alert alert-error">{errorMessage(recreateWorld.error)}</div>}
-      {update.isError && <div className="alert alert-error">{errorMessage(update.error)}</div>}
+      {switchGame.isError && <div className="alert alert-error">{errorMessage(switchGame.error)}</div>}
+      {started && (
+        <div className="alert alert-info">
+          Passaggio avviato: l'avanzamento è in cima alla pagina.
+        </div>
+      )}
       {data.awaitingTshock && !changed && (
         <p className="small">
           Questo server era su TShock: quando esce una versione di TShock per la sua versione di Terraria, in cima alla
           pagina compare il pulsante per riportarlo su TShock.
         </p>
-      )}
-      {switched?.choice && (
-        <div className="alert alert-success">
-          Ora il server usa {switched.install ? GAME_LABEL[switched.choice.kind] : choiceLabel(switched.choice)}: vale dal prossimo avvio.
-          {switched.choice.kind === 'tmodloader' && ' Nella barra laterale del server ci sono le sezioni Mod, Workshop e Modpack.'}
-        </div>
-      )}
-      {switched?.install && !switched.install.error && (
-        <div className="alert alert-info">
-          Installazione di {GAME_LABEL[switched.install.game]} {switched.install.version ?? ''} in corso: il server si può
-          accendere quando è finita (l'avanzamento è in Gestione server → Installazioni).
-        </div>
-      )}
-      {switched?.install?.error && (
-        <div className="alert alert-warning">
-          {GAME_LABEL[switched.install.game]} non è stato installato: {switched.install.error}. Installalo da Gestione server →
-          Installazioni prima di accendere il server.
-        </div>
       )}
     </div>
   )

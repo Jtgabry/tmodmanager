@@ -8,8 +8,22 @@ import { paths } from './paths.js'
 import { socketsOnPort } from './procfs.js'
 import { loadServers, type RawServer, ServerDefinition, updateRegistry } from './registry.js'
 import { applyServerConfig, ConfigChanges, readConfigValues, readServerConfig } from './serverConfig.js'
-import { findInstallation, type Installation, installationId, type Job, listInstallations, listReleases, serverWorldRelease, startJob } from './tml.js'
-import { GAMES, gameLabel, tshockDataDir, tshockPluginsDir } from './games.js'
+import {
+  addVersion,
+  busy,
+  findInstallation,
+  type Installation,
+  installationId,
+  installationJob,
+  isInstalled,
+  type Job,
+  listInstallations,
+  listReleases,
+  serverWorldRelease,
+  startJob,
+  VERSION_NAME,
+} from './tml.js'
+import { type Game, GAMES, gameLabel, tshockDataDir, tshockPluginsDir } from './games.js'
 import { moveToTrash } from './trash.js'
 
 /** Creazione, impostazioni e rimozione dei server (solo admin, lato Laravel). */
@@ -40,7 +54,10 @@ const Settings = z.object({
 
 export const CreateServerInput = Settings.extend({
   id: z.string().regex(SERVER_ID, 'solo minuscole, numeri e trattini (max 32)'),
-  installDir: z.string().min(1),
+  /** Installazione esistente (o principale da installare)… */
+  installDir: z.string().min(1).optional(),
+  /** …oppure una versione fissa di un gioco, installata dopo la creazione se manca. */
+  version: z.object({ game: z.enum(GAMES), version: z.string().regex(VERSION_NAME) }).optional(),
   world: z.object({
     name: z.string().trim().regex(WORLD_NAME, 'lettere, numeri, spazi, _ - \' (max 40)'),
     /** 1 piccolo, 2 medio, 3 grande. */
@@ -62,7 +79,7 @@ export const UpdateServerInput = Settings.partial().extend({
   config: ConfigChanges.optional(),
 })
 
-export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed' | 'installed'> & {
+export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' | 'gameVersion' | 'worldRelease' | 'managed' | 'pinned' | 'installed'> & {
   /** Installazione in corso (es. avviata dalla creazione di un server). */
   installing: boolean
 }
@@ -73,16 +90,17 @@ export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' 
  */
 export async function knownInstallations(): Promise<InstallationChoice[]> {
   return (await listInstallations())
-    // Le versioni aggiuntive solo se installate: non si "installano da sole" come le principali
+    // Le versioni fisse solo se installate: non si "installano da sole" come le principali
     .filter((i) => i.installed || (i.managed && !i.pinned))
     .sort((a, b) => GAMES.indexOf(a.kind) - GAMES.indexOf(b.kind))
-    .map(({ path, kind, version, gameVersion, worldRelease, managed, installed, job }) => ({
+    .map(({ path, kind, version, gameVersion, worldRelease, managed, pinned, installed, job }) => ({
       path,
       kind,
       version,
       gameVersion,
       worldRelease,
       managed,
+      pinned,
       installed,
       installing: job !== null && job.phase !== 'done' && job.phase !== 'error',
     }))
@@ -117,6 +135,17 @@ async function installLatest(choice: InstallationChoice, manager: ServerManager)
 async function createTshockDirs(saveDir: string) {
   await mkdir(tshockDataDir(saveDir), { recursive: true })
   await mkdir(tshockPluginsDir(saveDir), { recursive: true })
+}
+
+/** Installa una versione fissa per un server appena creato (se non si sta già installando). Come installLatest, non fa fallire la creazione. */
+async function installVersion(game: Game, version: string, manager: ServerManager): Promise<{ job: Job | null; error: string | null }> {
+  const running = installationJob(paths.gameVersion(game, version))
+  if (busy(running)) return { job: running, error: null }
+  try {
+    return { job: await addVersion(game, version, manager), error: null }
+  } catch (err) {
+    return { job: null, error: (err as Error).message }
+  }
 }
 
 async function assertPortFree(port: number, exceptId: string | null) {
@@ -160,7 +189,21 @@ export async function suggestPort(): Promise<number> {
 export async function createServer(input: CreateServerInput, manager?: ServerManager) {
   const servers = await loadServers()
   if (servers.some((s) => s.id === input.id)) throw new ServerAdminError(`Esiste già un server con id "${input.id}"`, 409, 'id')
-  const installation = await findChoice(input.installDir, manager !== undefined)
+  if (!input.installDir === !input.version) throw new ServerAdminError('Scegli un\'installazione oppure una versione', 422, 'installDir')
+  const installDir = input.installDir ?? paths.gameVersion(input.version!.game, input.version!.version)
+  const installation: InstallationChoice = input.version
+    ? {
+        path: installDir,
+        kind: input.version.game,
+        version: input.version.version,
+        gameVersion: null,
+        worldRelease: null,
+        managed: true,
+        pinned: true,
+        installed: await isInstalled(installDir),
+        installing: busy(installationJob(installDir)),
+      }
+    : await findChoice(installDir, manager !== undefined)
   await assertPortFree(input.port, null)
   const source = input.copyModsFrom ? servers.find((s) => s.id === input.copyModsFrom) : null
   if (input.copyModsFrom && !source) throw new ServerAdminError('Server da cui copiare le mod non trovato', 422, 'copyModsFrom')
@@ -210,7 +253,7 @@ export async function createServer(input: CreateServerInput, manager?: ServerMan
       id: input.id,
       name: input.name,
       game: installation.kind,
-      installDir: input.installDir,
+      installDir,
       saveDir,
       configFile: configPath,
       launchArgs: input.launchArgs,
@@ -220,7 +263,7 @@ export async function createServer(input: CreateServerInput, manager?: ServerMan
       if (list.some((s) => s.id === input.id)) throw new ServerAdminError(`Esiste già un server con id "${input.id}"`, 409, 'id')
       return { servers: [...list, raw], result: undefined }
     })
-    const install = !installation.installed && manager ? await installLatest(installation, manager) : null
+    const install = installation.installed || !manager ? null : input.version ? await installVersion(input.version.game, input.version.version, manager) : await installLatest(installation, manager)
     return {
       id: input.id,
       saveDir: serverDir,

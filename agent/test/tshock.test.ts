@@ -15,7 +15,7 @@ import { isServerProcess, launchCommand, type ServerManager } from '../src/manag
 import { paths } from '../src/paths.ts'
 import { loadServers, ServerDefinition } from '../src/registry.ts'
 import { createServer as createGameServer, ServerAdminError, serverSettings, stayOnVanilla, updateServer } from '../src/serverAdmin.ts'
-import { findInstallation, hasDotnet, installationId, installationKind, listInstallations, parseTshockReleases, requiredDotnet, startJob } from '../src/tml.ts'
+import { addVersion, findInstallation, hasDotnet, installationId, installationKind, listInstallations, parseTshockReleases, requiredDotnet, startJob } from '../src/tml.ts'
 import { resetUpdateState, switchGame, updateNotices } from '../src/updates.ts'
 import { writeZip } from '../src/zip.ts'
 
@@ -178,8 +178,8 @@ test('TShock ↔ vanilla: stesso mondo, dati di TShock e plugin restano; propost
     assert.equal(await readFile(join(tshockPluginsDir(save), 'Essentials.dll'), 'utf8'), 'plugin')
 
     // Un'altra versione di Terraria lascia la proposta aperta; "resta su vanilla" la chiude
-    await fakeTerraria(paths.terrariaVersion('1.4.5.9'), '1.4.5.9')
-    assert.equal((await updateServer('plug', { installDir: paths.terrariaVersion('1.4.5.9') }, manager)).awaitingTshock, true)
+    await fakeTerraria(paths.gameVersion('terraria', '1.4.5.9'), '1.4.5.9')
+    assert.equal((await updateServer('plug', { installDir: paths.gameVersion('terraria', '1.4.5.9') }, manager)).awaitingTshock, true)
     await stayOnVanilla('plug')
     assert.equal((await serverSettings('plug')).awaitingTshock, false)
 
@@ -234,7 +234,7 @@ test('avvisi: aggiornamenti, Terraria uscito prima di TShock, TShock pronto per 
     assert.deepEqual(notice.servers, [{ id: 'ts', name: 'Con plugin' }])
 
     // Il server TShock passa a vanilla 1.4.5.9: aspetta TShock, che non c'è ancora
-    await fakeTerraria(paths.terrariaVersion('1.4.5.9'), '1.4.5.9')
+    await fakeTerraria(paths.gameVersion('terraria', '1.4.5.9'), '1.4.5.9')
     await writeFile(
       paths.registry(),
       JSON.stringify({
@@ -244,7 +244,7 @@ test('avvisi: aggiornamenti, Terraria uscito prima di TShock, TShock pronto per 
             name: 'Con plugin',
             game: 'terraria',
             awaitingTshock: true,
-            installDir: paths.terrariaVersion('1.4.5.9'),
+            installDir: paths.gameVersion('terraria', '1.4.5.9'),
             saveDir: join(config.dataDir, 'ts'),
           },
         ],
@@ -279,8 +279,8 @@ test('passaggio guidato: a Terraria vanilla già installato, rifiutato verso lo 
       JSON.stringify({ servers: [{ id: 'ts', name: 'Con plugin', game: 'tshock', installDir: paths.tshockInstall(), saveDir: join(config.dataDir, 'ts') }] }),
     )
 
-    await assert.rejects(switchGame('ts', 'tshock', manager), ServerAdminError)
-    const job = await switchGame('ts', 'terraria', manager)
+    await assert.rejects(switchGame('ts', { game: 'tshock' }, manager), ServerAdminError)
+    const job = await switchGame('ts', { game: 'terraria' }, manager)
     assert.equal(job.version, '1.4.5.9')
     for (let i = 0; i < 50 && job.phase !== 'done' && job.phase !== 'error'; i++) await sleep(20)
     assert.equal(job.phase, 'done', job.error ?? '')
@@ -363,6 +363,15 @@ test('installazione di TShock: zip con .tar dentro, runtime .NET scaricato e ver
     assert.deepEqual([installed.kind, installed.version, installed.gameVersion], ['tshock', '6.2.1', '1.4.5.8'])
     assert.equal(await hasDotnet(paths.tshockInstall(), '9.0'), true)
 
+    // Versione fissa della stessa TShock: il runtime .NET si copia dall'installazione principale, senza scaricarlo
+    const metadata = routes['/9.0/releases.json']
+    delete routes['/9.0/releases.json']
+    const pinnedJob = await addVersion('tshock', '6.2.1', manager)
+    for (let i = 0; i < 250 && pinnedJob.phase !== 'done' && pinnedJob.phase !== 'error'; i++) await sleep(20)
+    assert.equal(pinnedJob.phase, 'done', pinnedJob.error ?? '')
+    assert.equal(await hasDotnet(paths.gameVersion('tshock', '6.2.1'), '9.0'), true)
+    routes['/9.0/releases.json'] = metadata
+
     // Runtime con hash sbagliato: l'installazione fallisce
     ;(routes['/9.0/releases.json'] as { releases: { runtime: { files: { hash: string }[] } }[] }).releases[0].runtime.files[0].hash = 'ff'
     config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-tshock-badhash-'))
@@ -373,6 +382,112 @@ test('installazione di TShock: zip con .tar dentro, runtime .NET scaricato e ver
     assert.equal(await exists(join(paths.tshockInstall(), 'TShock.Server')), false)
   } finally {
     http?.close()
+    Object.assign(config, previous)
+  }
+})
+
+test('versioni fisse di TShock e tModLoader: elencate, e un server si aggiorna da solo senza toccare gli altri', async () => {
+  const previous = config.dataDir
+  config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-pinned-all-'))
+  const { manager } = fakeManager()
+  try {
+    resetUpdateState()
+    await fakeTshock(paths.tshockInstall(), '6.2.1', '1.4.5.8')
+    await fakeTshock(paths.gameVersion('tshock', '6.3.0'), '6.3.0', '1.4.5.9')
+    await mkdir(paths.gameVersion('tmodloader', '2026.10.1.0'), { recursive: true }) // installazione non finita
+    assert.equal(await installationKind(paths.gameVersion('tmodloader', '2026.10.1.0')), 'tmodloader')
+    assert.equal(await installationKind(paths.gameVersion('tshock', '7.0.0')), 'tshock')
+
+    const saveDir = (id: string) => join(config.dataDir, id)
+    await writeFile(
+      paths.registry(),
+      JSON.stringify({
+        servers: [
+          { id: 'uno', name: 'Uno', game: 'tshock', installDir: paths.tshockInstall(), saveDir: saveDir('uno') },
+          { id: 'due', name: 'Due', game: 'tshock', installDir: paths.tshockInstall(), saveDir: saveDir('due') },
+        ],
+      }),
+    )
+    const list = await listInstallations()
+    assert.deepEqual(
+      list.filter((i) => i.kind !== 'terraria').map((i) => [i.kind, i.version, i.pinned, i.installed]),
+      [
+        ['tshock', '6.2.1', false, true],
+        ['tshock', '6.3.0', true, true],
+        ['tmodloader', null, false, false],
+        ['tmodloader', null, true, false],
+      ],
+    )
+
+    // Già su quella installazione: rifiutato
+    await assert.rejects(switchGame('uno', { installDir: paths.tshockInstall() }, manager), ServerAdminError)
+    // "Uno" passa alla versione fissa 6.3.0 (già installata); "Due" resta sulla principale
+    const job = await switchGame('uno', { game: 'tshock', version: '6.3.0' }, manager)
+    for (let i = 0; i < 50 && job.phase !== 'done' && job.phase !== 'error'; i++) await sleep(20)
+    assert.equal(job.phase, 'done', job.error ?? '')
+    const servers = await loadServers()
+    assert.deepEqual(
+      servers.map((s) => [s.id, s.installDir]),
+      [
+        ['uno', paths.gameVersion('tshock', '6.3.0')],
+        ['due', paths.tshockInstall()],
+      ],
+    )
+
+    // Esce TShock 6.4.0: avviso per la principale (usata da Due) e per Uno, che si aggiorna da solo
+    await writeFile(
+      paths.updateCheck(),
+      JSON.stringify({ checkedAt: new Date().toISOString(), latest: { tshock: { version: '6.4.0', gameVersion: '1.4.5.9', url: '' } }, errors: {} }),
+    )
+    resetUpdateState()
+    const notices = (await updateNotices()).notices
+    assert.deepEqual(
+      notices.map((n) => [n.type, n.id]),
+      [
+        ['update', `update:${installationId(paths.tshockInstall())}:6.4.0`],
+        ['server-update', 'server-update:uno:6.4.0'],
+      ],
+    )
+  } finally {
+    resetUpdateState()
+    config.dataDir = previous
+  }
+})
+
+test('creazione su una versione fissa: usata se installata, altrimenti installata dopo la creazione', async () => {
+  const previous = { dataDir: config.dataDir, githubApi: config.githubApi }
+  config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-create-pinned-'))
+  config.githubApi = 'http://127.0.0.1:9'
+  const { manager } = fakeManager()
+  const input = (id: string, port: number, version: string) => ({
+    id,
+    name: id,
+    version: { game: 'tshock' as const, version },
+    port,
+    maxPlayers: 8,
+    password: '',
+    motd: '',
+    world: { name: 'Mondo', size: 1 as const, difficulty: 0 as const, seed: '' },
+    copyModsFrom: null,
+    launchArgs: [],
+  })
+  try {
+    await fakeTshock(paths.gameVersion('tshock', '6.3.0'), '6.3.0', '1.4.5.9')
+    const ready = await createGameServer(input('pronto', 7791, '6.3.0'), manager)
+    assert.equal(ready.install, null)
+    // Versione non installata: il server nasce e l'installazione parte (qui fallisce: GitHub non raggiungibile)
+    const later = await createGameServer(input('dopo', 7792, '6.4.0'), manager)
+    assert.equal(later.install?.game, 'tshock')
+    assert.match(later.install?.error ?? '', /6\.4\.0/)
+    assert.deepEqual(
+      (await loadServers()).map((s) => [s.id, s.game, s.installDir]),
+      [
+        ['pronto', 'tshock', paths.gameVersion('tshock', '6.3.0')],
+        ['dopo', 'tshock', paths.gameVersion('tshock', '6.4.0')],
+      ],
+    )
+    await assert.rejects(createGameServer({ ...input('niente', 7793, '6.3.0'), version: undefined }, manager), ServerAdminError)
+  } finally {
     Object.assign(config, previous)
   }
 })

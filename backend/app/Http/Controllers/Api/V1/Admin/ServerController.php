@@ -67,14 +67,14 @@ class ServerController extends Controller
     }
 
     /**
-     * Passa il server a Terraria vanilla o a TShock: l'agent installa ciò che serve, spegne il server (salvando
-     * il mondo), cambia installazione e lo riaccende se era acceso. Prosegue in background.
+     * Passa il server a un'altra installazione, versione o gioco: l'agent installa ciò che serve, spegne il
+     * server (salvando il mondo), cambia installazione e lo riaccende se era acceso. Prosegue in background.
      */
     public function switchGame(SwitchServerGameRequest $request, string $server): JsonResponse
     {
-        $game = $request->validated('game');
-        $job = $this->agent->json('post', "/admin/servers/{$server}/switch-game", ['game' => $game], timeout: 60);
-        Log::info('Passaggio di gioco avviato', ['user' => $request->user()->email, 'server' => $server, 'game' => $game]);
+        $payload = $request->payload();
+        $job = $this->agent->json('post', "/admin/servers/{$server}/switch-game", $payload, timeout: 60);
+        Log::info('Passaggio di versione avviato', ['user' => $request->user()->email, 'server' => $server, ...$payload]);
 
         return response()->json(['data' => $job], 202);
     }
