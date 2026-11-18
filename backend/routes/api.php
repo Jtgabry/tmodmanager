@@ -139,9 +139,12 @@ Route::prefix('v1')
                 Route::get('/servers/defaults', [AdminServerController::class, 'defaults'])->name('servers.defaults');
                 Route::apiResource('servers', AdminServerController::class)->only(['store', 'show', 'update', 'destroy']);
                 Route::post('/servers/{server}/world/recreate', [AdminServerController::class, 'recreateWorld'])->name('servers.world.recreate');
+                Route::post('/servers/{server}/switch-game', [AdminServerController::class, 'switchGame'])->name('servers.switch-game');
+                Route::post('/servers/{server}/stay-vanilla', [AdminServerController::class, 'stayVanilla'])->name('servers.stay-vanilla');
 
                 Route::get('/installations', [InstallationController::class, 'index'])->name('installations.index');
-                Route::get('/releases/{game}', [InstallationController::class, 'releases'])->whereIn('game', ['terraria', 'tmodloader'])->name('releases');
+                Route::get('/updates', [InstallationController::class, 'updates'])->name('updates');
+                Route::get('/releases/{game}', [InstallationController::class, 'releases'])->whereIn('game', ['terraria', 'tshock', 'tmodloader'])->name('releases');
                 Route::post('/installations/{installation}/update', [InstallationController::class, 'update'])->name('installations.update');
                 Route::post('/installations/terraria/versions', [InstallationController::class, 'storeTerrariaVersion'])->name('installations.terraria.store');
                 Route::delete('/installations/{installation}', [InstallationController::class, 'destroy'])->name('installations.destroy');

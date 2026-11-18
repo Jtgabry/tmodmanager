@@ -147,7 +147,9 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
       </div>
       <p className="muted small">
         Il mondo resta lo stesso. Con tModLoader compaiono le sezioni Mod, Workshop e Modpack; tornando a Terraria
-        vanilla le mod restano sul disco. I giocatori devono usare lo stesso gioco e la stessa versione del server.
+        vanilla le mod restano sul disco. Con TShock i giocatori entrano con Terraria normale; configurazione, account e
+        plugin di TShock restano nella cartella del server anche passando a un altro gioco. I giocatori devono usare la
+        stessa versione di Terraria del server (o tModLoader, per un server tModLoader).
         {toInstall && ` ${GAME_LABEL[chosen.kind]} non è ancora installato: ${chosen.installing ? 'si sta già installando' : "viene installata l'ultima versione"}, e il server si potrà accendere quando è finito.`}
         {running && <strong> Spegni il server per cambiare versione.</strong>}
       </p>
@@ -209,6 +211,12 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
       )}
       {recreateWorld.isError && <div className="alert alert-error">{errorMessage(recreateWorld.error)}</div>}
       {update.isError && <div className="alert alert-error">{errorMessage(update.error)}</div>}
+      {data.awaitingTshock && !changed && (
+        <p className="small">
+          Questo server era su TShock: quando esce una versione di TShock per la sua versione di Terraria, in cima alla
+          pagina compare il pulsante per riportarlo su TShock.
+        </p>
+      )}
       {switched?.choice && (
         <div className="alert alert-success">
           Ora il server usa {switched.install ? GAME_LABEL[switched.choice.kind] : choiceLabel(switched.choice)}: vale dal prossimo avvio.

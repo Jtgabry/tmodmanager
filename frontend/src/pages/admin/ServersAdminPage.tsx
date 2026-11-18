@@ -352,7 +352,9 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
         <p className="muted small">
           {chosen?.kind === 'tmodloader'
             ? 'Server tModLoader: avrà le sezioni Mod, Workshop e Modpack.'
-            : 'Server Terraria vanilla: per usare le mod potrai passare a tModLoader dalle impostazioni del server, con lo stesso mondo.'}{' '}
+            : chosen?.kind === 'tshock'
+              ? 'Server TShock: Terraria vanilla con plugin, i giocatori entrano con Terraria normale. Configurazione e plugin di TShock stanno nella cartella SaveData del server (sezione File: tshock/ e ServerPlugins/); al primo avvio la console mostra il codice per /setup.'
+              : 'Server Terraria vanilla: per usare le mod potrai passare a tModLoader dalle impostazioni del server, con lo stesso mondo.'}{' '}
           L'installazione è condivisa con gli altri server che la usano: aggiornandola si aggiornano tutti. Il mondo viene
           generato al primo avvio.
         </p>
@@ -380,7 +382,8 @@ function InstallationsSection({ servers }: { servers: Server[] }) {
     <div className="card">
       <h2>Installazioni</h2>
       <p className="muted small">
-        Terraria vanilla e tModLoader. Ogni server usa una di queste installazioni (si sceglie dalle sue impostazioni).
+        Terraria vanilla, TShock e tModLoader. Ogni server usa una di queste installazioni (si sceglie dalle sue
+        impostazioni). Una volta al giorno si controlla se ci sono versioni nuove: gli avvisi compaiono in cima alle pagine.
       </p>
       {installations.isLoading && <div className="spinner" />}
       {installations.error && <div className="alert alert-error">{errorMessage(installations.error)}</div>}
@@ -519,11 +522,14 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
             ) : installation.installed ? (
               <>
                 Versione installata: <strong>{installation.version ?? 'sconosciuta'}</strong>
-                {!isTerraria && installation.gameVersion && ` (basata su Terraria ${installation.gameVersion})`}
+                {installation.kind === 'tmodloader' && installation.gameVersion && ` (basata su Terraria ${installation.gameVersion})`}
+                {installation.kind === 'tshock' && installation.gameVersion && ` (per Terraria ${installation.gameVersion})`}
                 {installation.servers.length > 0 ? ` · usata da ${installation.servers.map((s) => s.name).join(', ')}` : ' · nessun server la usa'}
               </>
             ) : isTerraria ? (
               'Terraria non è ancora installato: scegli una versione e installala per creare server vanilla.'
+            ) : installation.kind === 'tshock' ? (
+              'TShock non è ancora installato: installalo per creare server con i plugin (o farci passare quelli vanilla). Il runtime .NET che gli serve viene scaricato insieme.'
             ) : (
               'tModLoader non è ancora installato: installalo per creare server con le mod (o farci passare quelli vanilla).'
             )}
@@ -572,6 +578,7 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
                     {r.version}
                     {r.prerelease ? ' (beta)' : ''}
                     {isTerraria && index === 0 ? ' (ultima)' : ''}
+                    {installation.kind === 'tshock' && r.gameVersion ? ` · Terraria ${r.gameVersion}` : ''}
                     {installation.installed && r.version === installation.version ? ' — installata' : ''}
                     {r.publishedAt ? ` · ${formatDate(r.publishedAt)}` : ''}
                   </option>
@@ -614,6 +621,10 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
                 Note di rilascio
               </a>
               {isTerraria && ' I giocatori devono aggiornare Terraria alla stessa versione per entrare.'}
+              {installation.kind === 'tshock' &&
+                latestStable.gameVersion &&
+                latestStable.gameVersion !== installation.gameVersion &&
+                ` Supporta Terraria ${latestStable.gameVersion}: i giocatori devono avere quella versione per entrare.`}
             </p>
           )}
 
@@ -697,7 +708,9 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
             {installation.installed &&
               (isTerraria
                 ? 'I mondi non vengono toccati. I giocatori devono usare la stessa versione di Terraria del server.'
-                : 'Mondi e mod non vengono toccati; le mod potrebbero richiedere un aggiornamento per la nuova versione.')}
+                : installation.kind === 'tshock'
+                  ? 'Mondi, dati di TShock e plugin non vengono toccati; i plugin potrebbero richiedere una versione aggiornata.'
+                  : 'Mondi e mod non vengono toccati; le mod potrebbero richiedere un aggiornamento per la nuova versione.')}
             {'version' in confirm && confirmRelease?.size ? ` Download di circa ${formatBytes(confirmRelease.size)}.` : ''}
           </p>
           <div className="btn-row">

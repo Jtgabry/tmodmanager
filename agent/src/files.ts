@@ -5,6 +5,7 @@ import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile 
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import type { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { gameLabel } from './games.js'
 import type { ServerDefinition } from './registry.js'
 import { readServerConfig } from './serverConfig.js'
 import { move, moveToTrash, type TrashMeta } from './trash.js'
@@ -35,8 +36,7 @@ export async function fileRoots(server: ServerDefinition): Promise<FileRoot[]> {
     const worlds = dirname(world)
     if (!isInside(server.saveDir, worlds)) roots.push({ id: 'worlds', label: 'Mondi', path: worlds, limited: false })
   }
-  const game = server.game === 'terraria' ? 'Terraria' : 'tModLoader'
-  roots.push({ id: 'tml', label: `${game} (config e log)`, path: server.installDir, limited: true })
+  roots.push({ id: 'tml', label: `${gameLabel(server.game)} (config e log)`, path: server.installDir, limited: true })
   // serverconfig.txt nella cartella del server (server creati dal pannello)
   const configDir = dirname(server.configPath)
   if (!isInside(server.saveDir, configDir) && !isInside(server.installDir, configDir)) {

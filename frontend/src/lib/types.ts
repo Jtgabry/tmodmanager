@@ -14,9 +14,9 @@ export type User = {
 }
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'stopping'
-/** Terraria vanilla o tModLoader (mod, Workshop e modpack solo con tModLoader). */
-export type Game = 'terraria' | 'tmodloader'
-export const GAME_LABEL: Record<Game, string> = { terraria: 'Terraria', tmodloader: 'tModLoader' }
+/** Terraria vanilla, TShock (vanilla con plugin) o tModLoader (mod, Workshop e modpack solo con tModLoader). */
+export type Game = 'terraria' | 'tshock' | 'tmodloader'
+export const GAME_LABEL: Record<Game, string> = { terraria: 'Terraria', tshock: 'TShock', tmodloader: 'tModLoader' }
 export type PowerAction = 'start' | 'stop' | 'restart'
 
 export type Server = {
@@ -35,8 +35,10 @@ export type Server = {
   port: number
   hasPassword: boolean
   game: Game
-  /** Versione installata del gioco (Terraria o tModLoader). */
+  /** Versione installata del gioco (Terraria, TShock o tModLoader). */
   version: string | null
+  /** Versione di Terraria (per TShock e tModLoader: quella su cui si basano). */
+  gameVersion: string | null
   tmlVersion: string | null
   /** Mod cambiate dopo l'avvio: servono un riavvio per essere applicate. */
   restartRequired: boolean
@@ -169,6 +171,10 @@ export type ServerSettings = {
   saveDir: string
   configPath: string
   launchArgs: string[]
+  /** Passato da TShock a vanilla: si propone di tornare su TShock quando supporta la sua versione. */
+  awaitingTshock: boolean
+  /** Cartella con config e database di TShock, se c'è (resta anche quando il server non è su TShock). */
+  tshockData: string | null
   port: number
   maxPlayers: number
   hasPassword: boolean
@@ -215,6 +221,8 @@ export type Installation = {
 
 export type TmlRelease = {
   version: string
+  /** Versione di Terraria (TShock: quella supportata; tModLoader: null). */
+  gameVersion: string | null
   prerelease: boolean
   publishedAt: string | null
   url: string
@@ -228,6 +236,48 @@ export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' 
   /** Installazione in corso. */
   installing: boolean
 }
+
+// --- Aggiornamenti (controllo giornaliero dell'agent) --------------------------------------------
+
+type ServerRef = { id: string; name: string }
+
+export type UpdateNotice =
+  | {
+      type: 'update'
+      id: string
+      game: Game
+      installation: string
+      from: string | null
+      to: string
+      gameVersion: string | null
+      url: string
+      servers: ServerRef[]
+    }
+  | { type: 'tshock-behind'; id: string; terrariaVersion: string; tshockGameVersion: string | null; servers: ServerRef[] }
+  | {
+      type: 'tshock-ready'
+      id: string
+      server: ServerRef
+      serverGameVersion: string
+      tshockVersion: string
+      tshockGameVersion: string
+      needsUpdate: boolean
+    }
+
+export type SwitchJob = {
+  serverId: string
+  serverName: string
+  from: Game
+  to: Game
+  version: string | null
+  phase: 'installing' | 'stopping' | 'switching' | 'starting' | 'done' | 'error'
+  message: string
+  error: string | null
+  startedAt: string
+  finishedAt: string | null
+}
+
+export type UpdateReportAdmin = { checkedAt: string | null; notices: UpdateNotice[]; switches: SwitchJob[] }
 
 // --- Steam Workshop ----------------------------------------------------------------------------
 

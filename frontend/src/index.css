@@ -1234,6 +1234,34 @@ h2 {
   transition: width 0.2s;
 }
 
+/* Avanzamento senza percentuale (es. passaggio di un server a un altro gioco) */
+.progress-indeterminate div {
+  width: 30%;
+  animation: progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-indeterminate div {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+/* Avvisi di aggiornamento (admin), in cima a ogni pagina */
+.game-updates {
+  margin-bottom: 1.5rem;
+}
+
 /* Riquadro di un modulo (importazione dei pack, impostazioni dei server) */
 .pack-form {
   border: 1px solid var(--border);

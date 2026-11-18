@@ -45,7 +45,11 @@ export const config = {
   trashRetentionDays: Number(process.env.AGENT_TRASH_RETENTION_DAYS ?? 30),
   /** Repository GitHub da cui scaricare le versioni di tModLoader. */
   tmlRepository: process.env.AGENT_TML_REPOSITORY ?? 'tModLoader/tModLoader',
-  /** API di GitHub (da cui si leggono le release di tModLoader). */
+  /** Repository GitHub da cui scaricare le versioni di TShock. */
+  tshockRepository: process.env.AGENT_TSHOCK_REPOSITORY ?? 'Pryaxis/TShock',
+  /** Metadati delle versioni di .NET (runtime per TShock), dal sito di Microsoft. */
+  dotnetReleases: process.env.AGENT_DOTNET_RELEASES ?? 'https://builds.dotnet.microsoft.com/dotnet/release-metadata',
+  /** API di GitHub (da cui si leggono le release di tModLoader e TShock). */
   githubApi: process.env.AGENT_GITHUB_API ?? 'https://api.github.com',
   /** API di terraria.org per le versioni del dedicated server vanilla (ultima versione e download). */
   terrariaApi: process.env.AGENT_TERRARIA_API ?? 'https://terraria.org/api',

@@ -1,6 +1,6 @@
 # tModManager
 
-Pannello web per creare e gestire server Terraria / tModLoader: console in tempo reale, mod e Steam Workshop,
+Pannello web per creare e gestire server Terraria / TShock / tModLoader: console in tempo reale, mod e Steam Workshop,
 modpack, file, utenti con permessi per server. Si installa con un comando e gira in Docker.
 
 ```
@@ -100,7 +100,9 @@ non versionata). Copiarla o cancellarla = spostare o rimuovere tutto. Struttura 
 data/
 ├── servers.json, workshop.json     registry dei server, collegamenti al Workshop
 ├── database.sqlite                 database del sito (con DB_CONNECTION=sqlite)
+├── tshock/TShock/                  TShock, con il runtime .NET in dotnet/ (+ TShock-v<versione>: backup)
 ├── tmodloader/tModLoader/          tModLoader (+ tModLoader-v<versione>: backup)
+├── update-check.json               ultimo controllo giornaliero degli aggiornamenti
 ├── steamcmd/                       scaricato al primo uso
 ├── servers/<id>/                   serverconfig.txt, save/ (Mods, ModConfigs, Worlds), logs/,
 │                                   modpacks.json, archive/, trash/
@@ -109,7 +111,8 @@ data/
 ```
 
 Aprendo il sito senza amministratori compare la pagina **Crea l'amministratore** (serve il codice monouso di
-`setup:code`). Poi, da *Gestione server*: installa Terraria (da terraria.org) e, per le mod, tModLoader (da GitHub), poi crea il primo server.
+`setup:code`). Poi, da *Gestione server*: installa Terraria (da terraria.org), per i plugin TShock e per le mod
+tModLoader (entrambi da GitHub), poi crea il primo server.
 steamcmd viene scaricato da solo al primo download dal Workshop.
 
 Da installazioni precedenti: la vecchia cartella `agent/data` viene spostata qui in automatico al primo avvio
@@ -134,6 +137,16 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
 - **Cestino**: file e mod eliminati o sostituiti, con ripristino; cancellazione automatica dopo 30 giorni.
 - **Gestione server** (admin): creazione di nuovi server (cartella in `data/servers/<id>`, mondo generato al primo
   avvio, mod copiabili da un altro server), impostazioni (porta, giocatori, password, motd), rimozione dal pannello.
+- **TShock** (admin): server Terraria con plugin, a cui i giocatori si collegano con Terraria normale. Installazione e
+  aggiornamento da GitHub come tModLoader; il runtime .NET richiesto viene scaricato dal sito di Microsoft (verifica
+  sha512) dentro l'installazione. Porta e giocatori del pannello vengono passati da riga di comando (altrimenti
+  varrebbero quelli del `config.json` di TShock). Configurazione, database (account, gruppi, regioni, SSC), log e plugin
+  di ogni server stanno nel suo `save/` (`tshock/` e `ServerPlugins/`, dalla sezione File): restano passando a vanilla
+  o tModLoader e tornando indietro.
+- **Aggiornamenti** (admin): l'agent controlla al massimo una volta al giorno le nuove versioni di Terraria, TShock e
+  tModLoader; in cima alle pagine compaiono gli avvisi con il pulsante per aggiornare. Se esce una versione di Terraria
+  che TShock non supporta ancora, i server TShock si possono passare a Terraria vanilla con un clic (installazione,
+  spegnimento con salvataggio, cambio, riaccensione); quando esce la TShock aggiornata compare il pulsante per tornarci.
 - **tModLoader** (admin): installazione e aggiornamento da GitHub (verifica sha256, spegnimento e riaccensione dei server, backup
   della versione precedente in `<installazione>-v<versione>`, si tengono gli ultimi 2) e ritorno a un backup.
 - **Utenti**: registrazione con approvazione o invito, permessi per server (`view`, `console`, `power`, `mods`, `files`).

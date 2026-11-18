@@ -7,7 +7,7 @@ import { GAMES } from './games.js'
 import { paths } from './paths.js'
 
 /**
- * Definizione di un server (Terraria vanilla o tModLoader).
+ * Definizione di un server (Terraria vanilla, TShock o tModLoader).
  * Il registry (data/servers.json) è la fonte di verità: Laravel lo legge tramite l'agent.
  */
 export const ServerDefinition = z
@@ -17,7 +17,12 @@ export const ServerDefinition = z
     name: z.string().min(1).max(64),
     /** Gioco: deve corrispondere all'installazione. I server registrati prima del vanilla sono tModLoader. */
     game: z.enum(GAMES).default('tmodloader'),
-    /** Cartella di installazione (TerrariaServer.bin.x86_64 oppure start-tModLoaderServer.sh). */
+    /**
+     * Il server è passato da TShock a Terraria vanilla (di solito perché Terraria si è aggiornato prima di
+     * TShock): quando TShock supporta la sua versione, il pannello propone di riportarlo su TShock.
+     */
+    awaitingTshock: z.boolean().optional(),
+    /** Cartella di installazione (TerrariaServer.bin.x86_64, TShock.Server oppure start-tModLoaderServer.sh). */
     installDir: z.string().refine(isAbsolute, 'deve essere un percorso assoluto'),
     /** tModLoader: passato come -tmlsavedirectory (Mods/, ModConfigs/, Worlds/…). I mondi stanno in Worlds/ per entrambi i giochi. */
     saveDir: z.string().refine(isAbsolute, 'deve essere un percorso assoluto'),

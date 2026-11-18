@@ -16,6 +16,7 @@ import { serverRoutes } from './routes/servers.js'
 import { trashRoutes } from './routes/trash.js'
 import { workshopRoutes } from './routes/workshop.js'
 import { purgeExpiredTrash } from './trash.js'
+import { scheduleUpdateChecks } from './updates.js'
 
 // Agent di tModManager: gira come l'utente proprietario dei server e fa tutto ciò che Laravel
 // non può fare da www-data (sessioni screen, processi, file dei server).
@@ -95,6 +96,9 @@ setInterval(purge, 60 * 60 * 1000).unref()
 
 // Backup dei mondi di tutti i server ogni giorno a config.backupTime (fatto qui: niente cron da configurare)
 scheduleDailyBackups(manager, { info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) })
+
+// Nuove versioni di Terraria, TShock e tModLoader: al massimo un controllo al giorno
+scheduleUpdateChecks({ info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) })
 
 handleShutdown(manager, () => app.close(), { info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) })
 

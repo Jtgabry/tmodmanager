@@ -42,6 +42,8 @@ class ServerResource extends JsonResource
             // Server registrati prima del vanilla (o agent non aggiornato): tModLoader
             'game' => $server['game'] ?? 'tmodloader',
             'version' => $server['version'] ?? $server['tmlVersion'],
+            // Versione di Terraria (per TShock e tModLoader: quella su cui si basano)
+            'gameVersion' => $server['gameVersion'] ?? null,
             'tmlVersion' => $server['tmlVersion'],
             'restartRequired' => $server['restartRequired'] ?? false,
             'lastError' => $server['lastError'],

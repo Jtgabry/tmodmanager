@@ -2,19 +2,29 @@ import { open, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /**
- * I due tipi di server: Terraria vanilla (dedicated server di Re-Logic) e tModLoader.
- * Un server usa un'installazione di uno dei due; si può passare dall'uno all'altro (stesso mondo).
+ * I tipi di server: Terraria vanilla (dedicated server di Re-Logic), TShock (server vanilla con plugin,
+ * i giocatori entrano con Terraria normale) e tModLoader. Un server usa un'installazione di uno dei tre;
+ * si può passare dall'uno all'altro tenendo lo stesso mondo.
  */
-export type Game = 'terraria' | 'tmodloader'
-export const GAMES = ['terraria', 'tmodloader'] as const
+export const GAMES = ['terraria', 'tshock', 'tmodloader'] as const
+export type Game = (typeof GAMES)[number]
 
-export const gameLabel = (game: Game) => (game === 'terraria' ? 'Terraria' : 'tModLoader')
+const LABELS: Record<Game, string> = { terraria: 'Terraria', tshock: 'TShock', tmodloader: 'tModLoader' }
+export const gameLabel = (game: Game) => LABELS[game]
 
 /** File che identificano un'installazione. */
 export const TERRARIA_BINARY = 'TerrariaServer.bin.x86_64'
 export const TERRARIA_ASSEMBLY = 'TerrariaServer.exe'
 export const TML_ASSEMBLY = 'tModLoader.dll'
 export const TML_START_SCRIPT = 'start-tModLoaderServer.sh'
+export const TSHOCK_BINARY = 'TShock.Server'
+/** Assembly di TShock (la sua versione) e Terraria modificato da OTAPI (la versione di Terraria). */
+export const TSHOCK_ASSEMBLY = join('ServerPlugins', 'TShockAPI.dll')
+export const TSHOCK_GAME_ASSEMBLY = join('bin', 'OTAPI.dll')
+
+/** Cartelle di TShock dentro il save/ del server: restano lì anche passando a vanilla o tModLoader. */
+export const tshockDataDir = (saveDir: string) => join(saveDir, 'tshock')
+export const tshockPluginsDir = (saveDir: string) => join(saveDir, 'ServerPlugins')
 
 /**
  * Versione di Terraria → numero di versione scritto nei mondi (primi 4 byte del .wld).
@@ -96,9 +106,15 @@ export function scanGameVersion(assembly: Buffer): string | null {
 
 const scanCache = new Map<string, { key: string; version: string | null }>()
 
+const GAME_ASSEMBLY: Record<Game, string> = { terraria: TERRARIA_ASSEMBLY, tshock: TSHOCK_GAME_ASSEMBLY, tmodloader: TML_ASSEMBLY }
+
 /** Versione di Terraria di un'installazione letta dal suo assembly (in cache finché il file non cambia). */
-export async function assemblyGameVersion(installDir: string, game: Game): Promise<string | null> {
-  const file = join(installDir, game === 'terraria' ? TERRARIA_ASSEMBLY : TML_ASSEMBLY)
+export function assemblyGameVersion(installDir: string, game: Game): Promise<string | null> {
+  return assemblyVersion(join(installDir, GAME_ASSEMBLY[game]))
+}
+
+/** FileVersion di un assembly .NET (in cache finché il file non cambia); null se manca. */
+export async function assemblyVersion(file: string): Promise<string | null> {
   let key: string
   try {
     const info = await stat(file)

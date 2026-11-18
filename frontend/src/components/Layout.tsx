@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import ErrorBoundary from './ErrorBoundary'
+import GameUpdates from './GameUpdates'
 import PowerButtons from './PowerButtons'
 import StateBadge from './StateBadge'
 import {
@@ -202,6 +203,11 @@ export default function Layout() {
       </aside>
 
       <main className="content">
+        {user?.isAdmin && (
+          <ErrorBoundary resetKey="updates">
+            <GameUpdates />
+          </ErrorBoundary>
+        )}
         <ErrorBoundary resetKey={pathname}>
           <Outlet />
         </ErrorBoundary>

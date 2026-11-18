@@ -13,11 +13,14 @@ import { config } from './config.js'
  *   ├── database.sqlite          database del sito (Laravel)
  *   ├── terraria/Terraria/       dedicated server di Terraria vanilla (+ Terraria-v<versione>: backup)
  *   ├── terraria/versions/<v>/   versioni aggiuntive di Terraria, fisse (più server su versioni diverse)
+ *   ├── tshock/TShock/           installazione di TShock, con il suo runtime .NET in dotnet/ (+ TShock-v<versione>: backup)
  *   ├── tmodloader/tModLoader/   installazione di tModLoader (+ tModLoader-v<versione>: backup)
+ *   ├── update-check.json        ultimo controllo giornaliero degli aggiornamenti (Terraria, TShock, tModLoader)
  *   ├── steamcmd/                steamcmd (scaricato al primo uso)
  *   ├── servers/<id>/
  *   │   ├── serverconfig.txt
- *   │   ├── save/                -tmlsavedirectory: Mods/, ModConfigs/, Worlds/
+ *   │   ├── save/                -tmlsavedirectory: Mods/, ModConfigs/, Worlds/; con TShock anche
+ *   │   │                        tshock/ (config.json, database, log) e ServerPlugins/ (plugin del server)
  *   │   ├── logs/                console.log, console.log.1, console.session
  *   │   ├── modpacks.json
  *   │   ├── mods-state.json      impronta delle mod all'avvio (avviso "riavvio necessario")
@@ -46,6 +49,10 @@ export const paths = {
   /** Versioni aggiuntive di Terraria (una cartella per versione, non si aggiornano). */
   terrariaVersions: () => join(config.dataDir, 'terraria', 'versions'),
   terrariaVersion: (version: string) => join(config.dataDir, 'terraria', 'versions', version),
+  /** Installazione di TShock gestita dal pannello. */
+  tshockInstall: () => join(config.dataDir, 'tshock', 'TShock'),
+  /** Ultimo controllo degli aggiornamenti (fatto al massimo una volta al giorno). */
+  updateCheck: () => join(config.dataDir, 'update-check.json'),
   /** Installazione di tModLoader gestita dal pannello. */
   tmlInstall: () => join(config.dataDir, 'tmodloader', 'tModLoader'),
   steamcmdDir: () => join(config.dataDir, 'steamcmd'),

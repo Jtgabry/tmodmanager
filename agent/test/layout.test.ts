@@ -22,7 +22,7 @@ test('i percorsi stanno tutti sotto la cartella dati', () => {
   }
 })
 
-test('macchina nuova: compaiono le installazioni predefinite di Terraria e tModLoader, da installare', async () => {
+test('macchina nuova: compaiono le installazioni predefinite di Terraria, TShock e tModLoader, da installare', async () => {
   const previous = config.dataDir
   config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-layout-'))
   try {
@@ -31,6 +31,7 @@ test('macchina nuova: compaiono le installazioni predefinite di Terraria e tModL
       list.map((i) => [i.path, i.kind, i.managed, i.installed]),
       [
         [paths.terrariaInstall(), 'terraria', true, false],
+        [paths.tshockInstall(), 'tshock', true, false],
         [paths.tmlInstall(), 'tmodloader', true, false],
       ],
     )

@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { config } from './config.js'
 import {
@@ -24,8 +24,8 @@ import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { listSessions, quitSession, type ScreenSession, sendLine, startSession } from './screen.js'
 import { readConfigPassword, readServerConfig } from './serverConfig.js'
-import { type Game, gameLabel, TERRARIA_ASSEMBLY, TERRARIA_BINARY } from './games.js'
-import { installedVersion, isInstalled, recordWorldRelease } from './tml.js'
+import { type Game, gameLabel, TERRARIA_ASSEMBLY, TERRARIA_BINARY, TSHOCK_BINARY, tshockDataDir, tshockPluginsDir } from './games.js'
+import { gameVersion, installedVersion, isInstalled, recordWorldRelease } from './tml.js'
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'stopping'
 type Operation = 'start' | 'stop' | 'restart'
@@ -50,8 +50,10 @@ export type ServerStatus = {
   port: number
   hasPassword: boolean
   game: Game
-  /** Versione installata del gioco (Terraria o tModLoader). */
+  /** Versione installata del gioco (Terraria, TShock o tModLoader). */
   version: string | null
+  /** Versione di Terraria (per TShock e tModLoader: quella su cui si basano). */
+  gameVersion: string | null
   /** Solo per i server tModLoader (compatibilità: = version). */
   tmlVersion: string | null
   /** Mod cambiate (caricate, abilitate, rimosse…) dopo l'avvio: serve un riavvio per applicarle. */
@@ -62,15 +64,49 @@ export type ServerStatus = {
 
 /**
  * Processi del server. tModLoader: si riconosce dal -tmlsavedirectory, i subworld hanno -subworld.
- * Vanilla: dall'eseguibile e dal -config (unico per server).
+ * Vanilla e TShock: dall'eseguibile e dal -config (unico per server).
  */
-export const isServerProcess = (p: ProcessInfo, server: ServerDefinition) =>
-  server.game === 'terraria'
-    ? // Solo l'eseguibile (o "mono TerrariaServer.exe"): anche la riga di comando di screen contiene il binario e il -config
-      p.args.slice(0, 2).some((a) => a.endsWith(TERRARIA_BINARY) || a.endsWith(TERRARIA_ASSEMBLY)) &&
-      !p.args[0]?.toLowerCase().endsWith('screen') &&
-      p.args.includes(server.configPath)
-    : p.args.some((a) => a.endsWith('tModLoader.dll')) && p.args.includes('-server') && p.args.includes(server.saveDir)
+export const isServerProcess = (p: ProcessInfo, server: ServerDefinition) => {
+  // Solo l'eseguibile (o "mono TerrariaServer.exe"): anche la riga di comando di screen contiene il binario e il -config
+  const launched = (...binaries: string[]) =>
+    p.args.slice(0, 2).some((a) => binaries.some((b) => a.endsWith(b))) && !p.args[0]?.toLowerCase().endsWith('screen') && p.args.includes(server.configPath)
+  if (server.game === 'terraria') return launched(TERRARIA_BINARY, TERRARIA_ASSEMBLY)
+  if (server.game === 'tshock') return launched(TSHOCK_BINARY)
+  return p.args.some((a) => a.endsWith('tModLoader.dll')) && p.args.includes('-server') && p.args.includes(server.saveDir)
+}
+
+/**
+ * Comando di avvio del server e variabili d'ambiente in più, nella cartella dell'installazione.
+ * TShock: porta e giocatori vanno passati da riga di comando, altrimenti varrebbero quelli del suo
+ * config.json; config, database, log e plugin stanno nel save/ del server (restano cambiando gioco).
+ */
+export function launchCommand(server: ServerDefinition, settings: { port: number; maxPlayers: number }): { command: string[]; env: Record<string, string> } {
+  const args = server.launchArgs.filter((a) => a !== '-nosteam')
+  if (server.game === 'terraria') {
+    return { command: [`./${TERRARIA_BINARY}`, ...args, '-config', server.configPath, '-noupnp'], env: {} }
+  }
+  if (server.game === 'tshock') {
+    const data = tshockDataDir(server.saveDir)
+    return {
+      command: [
+        `./${TSHOCK_BINARY}`,
+        ...args,
+        '-config', server.configPath,
+        '-port', String(settings.port),
+        '-maxplayers', String(settings.maxPlayers),
+        '-configpath', data,
+        '-logpath', join(data, 'logs'),
+        '-additionalplugins', tshockPluginsDir(server.saveDir),
+        '-noupnp',
+      ],
+      env: { DOTNET_ROOT: join(server.installDir, 'dotnet') },
+    }
+  }
+  return {
+    command: ['bash', './start-tModLoaderServer.sh', ...server.launchArgs, '-tmlsavedirectory', server.saveDir, '-config', server.configPath],
+    env: {},
+  }
+}
 
 /** Domande del server vanilla a cui si risponde da soli durante l'avvio (riga incompleta in fondo alla console). */
 const STARTUP_PROMPTS: [RegExp, (server: ServerDefinition) => Promise<string>][] = [
@@ -87,6 +123,8 @@ export class ServerManager {
   private cpuSamples = new Map<number, { ticks: number; uptime: number }>()
   /** Installazioni bloccate (aggiornamento di tModLoader in corso): niente avvii/spegnimenti dal pannello. */
   private blockedInstalls = new Map<string, string>()
+  /** Server bloccati (passaggio a un altro gioco in corso): niente avvii/spegnimenti dal pannello. */
+  private blockedServers = new Map<string, string>()
   /** L'agent si sta spegnendo: nessuna nuova operazione. */
   private closing = false
 
@@ -96,6 +134,14 @@ export class ServerManager {
 
   unblockInstall(installDir: string) {
     this.blockedInstalls.delete(installDir)
+  }
+
+  blockServer(id: string, reason: string) {
+    this.blockedServers.set(id, reason)
+  }
+
+  unblockServer(id: string) {
+    this.blockedServers.delete(id)
   }
 
   async statusAll(servers: ServerDefinition[]): Promise<ServerStatus[]> {
@@ -148,6 +194,7 @@ export class ServerManager {
     if (phase === 'stopping') state = 'stopping'
     if (phase === 'starting' && state === 'stopped') state = 'starting'
     const version = await installedVersion(server.installDir)
+    const terrariaVersion = await gameVersion(server.installDir, server.game).catch(() => null)
 
     return {
       id: server.id,
@@ -166,6 +213,7 @@ export class ServerManager {
       hasPassword: settings.hasPassword,
       game: server.game,
       version,
+      gameVersion: terrariaVersion,
       tmlVersion: server.game === 'tmodloader' ? version : null,
       restartRequired: server.game === 'tmodloader' && state === 'running' && main ? await this.modsChangedSinceStart(server, main.pid) : false,
       screenSession: server.screenSession,
@@ -228,7 +276,7 @@ export class ServerManager {
     if (this.closing) throw new ConflictError('L\'agent si sta spegnendo: riprova tra poco')
     const running = this.operations.get(server.id)
     if (running) throw new ConflictError(`Operazione "${running}" già in corso`)
-    const blocked = this.blockedInstalls.get(server.installDir)
+    const blocked = this.blockedServers.get(server.id) ?? this.blockedInstalls.get(server.installDir)
     if (blocked) throw new ConflictError(blocked)
     if (op === 'start' && !(await isInstalled(server.installDir))) {
       throw new ConflictError(`${gameLabel(server.game)} non è installato: installalo da Gestione server → Installazioni`)
@@ -281,22 +329,24 @@ export class ServerManager {
     if (leftover) await quitSession(leftover)
 
     const logFile = await rotateConsoleLog(server)
-    const command =
-      server.game === 'terraria'
-        ? [`./${TERRARIA_BINARY}`, ...server.launchArgs.filter((a) => a !== '-nosteam'), '-config', server.configPath, '-noupnp']
-        : ['bash', './start-tModLoaderServer.sh', ...server.launchArgs, '-tmlsavedirectory', server.saveDir, '-config', server.configPath]
-    await startSession(server.screenSession, server.installDir, logFile, paths.screenrc(), command)
+    const settings = await readServerConfig(server.configPath)
+    if (server.game === 'tshock') {
+      // TShock non crea da solo la cartella dei plugin aggiuntivi (e senza non parte)
+      await mkdir(tshockPluginsDir(server.saveDir), { recursive: true })
+      await mkdir(tshockDataDir(server.saveDir), { recursive: true })
+    }
+    const { command, env } = launchCommand(server, settings)
+    await startSession(server.screenSession, server.installDir, logFile, paths.screenrc(), command, env)
 
     const session = (await listSessions()).find((s) => s.name === server.screenSession)
     if (session) await markSession(server, session)
 
-    const settings = await readServerConfig(server.configPath)
     const deadline = Date.now() + config.startTimeout * 1000
     let answeredAt = -1
     while (Date.now() < deadline) {
       await sleep(1000)
       const { main, session: alive } = this.locate(server, await listProcesses(), await listSessions())
-      if (server.game === 'terraria' && alive) answeredAt = await this.answerPrompts(server, alive, answeredAt)
+      if (server.game !== 'tmodloader' && alive) answeredAt = await this.answerPrompts(server, alive, answeredAt)
       // Al primo avvio lo script di tModLoader scarica .NET prima di lanciare il server: finché la
       // sessione screen è viva l'avvio è in corso anche se il processo del server non c'è ancora
       if (!main && !alive) throw new Error(`Il server si è chiuso durante l'avvio (vedi ${logFile})`)

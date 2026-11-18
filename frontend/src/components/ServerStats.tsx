@@ -34,6 +34,12 @@ export default function ServerStats({ server, tiles = false }: { server: Server;
         <dt>{GAME_LABEL[server.game]}</dt>
         <dd>{server.version ?? '—'}</dd>
       </div>
+      {server.game === 'tshock' && (
+        <div>
+          <dt>Terraria</dt>
+          <dd>{server.gameVersion ?? '—'}</dd>
+        </div>
+      )}
       {server.game === 'tmodloader' && (
         <div>
           <dt>Subworld</dt>

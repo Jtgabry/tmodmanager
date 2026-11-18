@@ -10,14 +10,16 @@ import {
   removeServer,
   ServerAdminError,
   serverSettings,
+  stayOnVanilla,
   suggestPort,
   UpdateServerInput,
   updateServer,
 } from '../serverAdmin.js'
 import { GAMES } from '../games.js'
 import { addTerrariaVersion, findInstallation, listInstallations, listReleases, removeInstallation, startJob, TmlError } from '../tml.js'
+import { SWITCH_TARGETS, switchGame, updateNotices } from '../updates.js'
 
-/** Operazioni da amministratore: server (creazione, impostazioni, rimozione) e installazioni di Terraria e tModLoader. */
+/** Operazioni da amministratore: server (creazione, impostazioni, rimozione) e installazioni di Terraria, TShock e tModLoader. */
 export async function adminRoutes(app: FastifyInstance, { manager }: { manager: ServerManager }) {
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ServerAdminError) {
@@ -61,7 +63,20 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
 
   app.delete<{ Params: { id: string } }>('/admin/servers/:id', async (req) => ({ data: await removeServer(req.params.id, manager) }))
 
-  // --- Installazioni (Terraria e tModLoader) ---------------------------------------------------
+  // Passaggio guidato tra TShock e Terraria vanilla (installa ciò che serve, spegne, cambia, riaccende)
+  app.post<{ Params: { id: string } }>('/admin/servers/:id/switch-game', async (req, reply) => {
+    const { game } = z.object({ game: z.enum(SWITCH_TARGETS) }).parse(req.body)
+    return reply.code(202).send({ data: await switchGame(req.params.id, game, manager) })
+  })
+
+  app.post<{ Params: { id: string } }>('/admin/servers/:id/stay-vanilla', async (req) => {
+    await stayOnVanilla(req.params.id)
+    return { data: { awaitingTshock: false } }
+  })
+
+  // --- Aggiornamenti (controllo giornaliero) e installazioni ------------------------------------
+
+  app.get('/admin/updates', async () => ({ data: await updateNotices() }))
 
   app.get('/admin/installations', async () => ({ data: await listInstallations() }))
 

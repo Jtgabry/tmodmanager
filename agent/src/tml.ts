@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 import { config } from './config.js'
 import {
   assemblyGameVersion,
+  assemblyVersion,
   compareVersions,
   type Game,
   gameLabel,
@@ -18,6 +19,8 @@ import {
   terrariaVersionFromCode,
   TML_ASSEMBLY,
   TML_START_SCRIPT,
+  TSHOCK_ASSEMBLY,
+  TSHOCK_BINARY,
   WORLD_RELEASES,
 } from './games.js'
 import { paths } from './paths.js'
@@ -28,13 +31,14 @@ import { parseTmlVersion, readServerConfig } from './serverConfig.js'
 export { compareVersions }
 
 /**
- * Installazioni di Terraria (dedicated server vanilla) e di tModLoader, e loro aggiornamento.
+ * Installazioni di Terraria (dedicated server vanilla), TShock e tModLoader, e loro aggiornamento.
  *
  * Aggiornamento (stessa procedura fatta a mano):
- *  1. download dello zip della versione scelta (tModLoader: GitHub, con verifica sha256; Terraria: terraria.org)
+ *  1. download dello zip della versione scelta (tModLoader e TShock: GitHub, con verifica sha256; Terraria: terraria.org)
  *  2. estrazione in <installDir>.new
  *  3. si riportano nella nuova cartella i file non presenti nella release (dotnet/, log, dati delle mod…)
- *     e le configurazioni (serverconfig*.txt, banlist.txt)
+ *     e le configurazioni (serverconfig*.txt, banlist.txt). TShock: se il runtime .NET che richiede
+ *     non c'è, lo si scarica in dotnet/ (lo script di TShock lo cercherebbe su un sito di Microsoft dismesso)
  *  4. si spengono i server che usano quell'installazione (con "exit": il mondo viene salvato)
  *  5. <installDir> → <installDir>-v<vecchia versione> (backup), <installDir>.new → <installDir>
  *  6. si riaccendono i server che erano accesi
@@ -73,10 +77,16 @@ export const isPinned = (dir: string) => dirname(dir) === paths.terrariaVersions
 
 /** Tipo di un'installazione dai suoi file; se non è (ancora) installata, dalla cartella. */
 export async function installationKind(dir: string): Promise<Game> {
+  if (await exists(join(dir, TSHOCK_BINARY))) return 'tshock'
   if (await exists(join(dir, TERRARIA_BINARY))) return 'terraria'
   if (await exists(join(dir, TML_ASSEMBLY))) return 'tmodloader'
-  return dir === paths.terrariaInstall() || isPinned(dir) || basename(dir).toLowerCase().startsWith('terraria') ? 'terraria' : 'tmodloader'
+  const name = basename(dir).toLowerCase()
+  if (dir === paths.tshockInstall() || name.startsWith('tshock')) return 'tshock'
+  return dir === paths.terrariaInstall() || isPinned(dir) || name.startsWith('terraria') ? 'terraria' : 'tmodloader'
 }
+
+/** "6.2.1.0" (FileVersion) → "6.2.1", come i tag delle release. */
+const trimRevision = (version: string) => version.replace(/^(\d+\.\d+\.\d+)\.0$/, '$1')
 
 /** Versione installata: dal file scritto dall'aggiornamento, altrimenti (tModLoader) dalla prima riga del log del server. */
 export async function installedVersion(dir: string): Promise<string | null> {
@@ -87,6 +97,10 @@ export async function installedVersion(dir: string): Promise<string | null> {
     // installazione non fatta dal pannello
   }
   if (await exists(join(dir, TERRARIA_BINARY))) return assemblyGameVersion(dir, 'terraria')
+  if (await exists(join(dir, TSHOCK_BINARY))) {
+    const version = await assemblyVersion(join(dir, TSHOCK_ASSEMBLY))
+    return version && trimRevision(version)
+  }
   try {
     const file = await open(join(dir, 'tModLoader-Logs', 'server.log'))
     try {
@@ -100,7 +114,7 @@ export async function installedVersion(dir: string): Promise<string | null> {
   }
 }
 
-/** Versione di Terraria dell'installazione: per il vanilla è la versione installata, per tModLoader quella su cui si basa. */
+/** Versione di Terraria dell'installazione: per il vanilla è la versione installata, per TShock e tModLoader quella su cui si basano. */
 export async function gameVersion(dir: string, kind: Game): Promise<string | null> {
   if (kind === 'terraria') {
     const version = await installedVersion(dir)
@@ -156,6 +170,8 @@ export async function listBackups(installDir: string): Promise<Backup[]> {
 
 export type Release = {
   version: string
+  /** Versione di Terraria (TShock: quella supportata; tModLoader: null, si sa solo dopo l'installazione). */
+  gameVersion: string | null
   prerelease: boolean
   /** null per Terraria: terraria.org non dà la data. */
   publishedAt: string | null
@@ -172,6 +188,7 @@ const releasesCache = new Map<Game, { at: number; releases: Release[] }>()
 
 type GithubRelease = {
   tag_name: string
+  name: string | null
   draft: boolean
   prerelease: boolean
   published_at: string
@@ -203,6 +220,7 @@ async function fetchTmlReleases(): Promise<Release[]> {
       return [
         {
           version: r.tag_name.replace(/^v/, ''),
+          gameVersion: null,
           prerelease: r.prerelease,
           publishedAt: r.published_at,
           url: r.html_url,
@@ -216,12 +234,47 @@ async function fetchTmlReleases(): Promise<Release[]> {
     })
 }
 
+/** Architettura per i download di TShock e .NET (l'immagine Docker è solo x86_64). */
+const linuxRid = () => (process.arch === 'arm64' ? 'linux-arm64' : 'linux-x64')
+
+/**
+ * Release di TShock: uno zip per piattaforma ("TShock-6.2.1-for-Terraria-1.4.5.8-linux-x64-Release.zip",
+ * nelle beta "TShock-Beta-linux-x64-Release.zip"); la versione di Terraria sta nel titolo della release.
+ */
+export function parseTshockReleases(data: GithubRelease[], rid = linuxRid()): Release[] {
+  return data
+    .filter((r) => !r.draft)
+    .flatMap((r): Release[] => {
+      const asset = r.assets.find((a) => a.name.endsWith(`-${rid}-Release.zip`))
+      if (!asset) return []
+      const gameVersion = (r.name ?? '').match(/Terraria (\d+(?:\.\d+){2,4})/)?.[1] ?? asset.name.match(/-for-Terraria-([\d.]+?)-/)?.[1] ?? null
+      return [
+        {
+          version: r.tag_name.replace(/^v/, ''),
+          gameVersion,
+          prerelease: r.prerelease,
+          publishedAt: r.published_at,
+          url: r.html_url,
+          downloadUrl: asset.browser_download_url,
+          size: asset.size,
+          sha256: asset.digest?.startsWith('sha256:') ? asset.digest.slice(7) : null,
+          worldRelease: gameVersion ? (WORLD_RELEASES[gameVersion] ?? null) : null,
+        },
+      ]
+    })
+}
+
+async function fetchTshockReleases(): Promise<Release[]> {
+  return parseTshockReleases((await fetchJson(`${config.githubApi}/repos/${config.tshockRepository}/releases?per_page=15`, 'GitHub')) as GithubRelease[])
+}
+
 /** Release di Terraria con una certa versione (terraria.org tiene scaricabili anche le versioni vecchie). */
 export function terrariaRelease(version: string): Release | null {
   const code = terrariaCode(version)
   if (!code) return null
   return {
     version,
+    gameVersion: version,
     prerelease: false,
     publishedAt: null,
     url: `https://terraria.wiki.gg/wiki/${version}`,
@@ -253,9 +306,18 @@ async function fetchTerrariaReleases(): Promise<Release[]> {
 export async function listReleases(kind: Game, force = false): Promise<Release[]> {
   const cached = releasesCache.get(kind)
   if (!force && cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.releases
-  const releases = kind === 'terraria' ? await fetchTerrariaReleases() : await fetchTmlReleases()
+  const releases = kind === 'terraria' ? await fetchTerrariaReleases() : kind === 'tshock' ? await fetchTshockReleases() : await fetchTmlReleases()
   releasesCache.set(kind, { at: Date.now(), releases })
+  for (const listener of releaseListeners) listener(kind, releases)
   return releases
+}
+
+type ReleaseListener = (kind: Game, releases: Release[]) => void
+const releaseListeners: ReleaseListener[] = []
+
+/** Chiamata a ogni elenco di release scaricato (il controllo degli aggiornamenti ne tiene l'ultima). */
+export function onReleases(listener: ReleaseListener) {
+  releaseListeners.push(listener)
 }
 
 // --- Job di aggiornamento ---------------------------------------------------------------------
@@ -279,11 +341,14 @@ export type Job = {
 
 const jobs = new Map<string, Job>()
 
+/** Job di installazione/aggiornamento di una cartella (anche finito), se c'è. */
+export const installationJob = (dir: string) => jobs.get(dir) ?? null
+
 export type Installation = {
   id: string
   path: string
   kind: Game
-  /** Installazione del pannello (data/terraria/Terraria, le versioni aggiuntive di Terraria, data/tmodloader/tModLoader). */
+  /** Installazione del pannello (data/terraria/Terraria, le versioni aggiuntive di Terraria, data/tshock/TShock, data/tmodloader/tModLoader). */
   managed: boolean
   /** Versione aggiuntiva di Terraria: non si aggiorna, si rimuove quando nessun server la usa. */
   pinned: boolean
@@ -300,7 +365,7 @@ export type Installation = {
 }
 
 export const isInstalled = async (dir: string) =>
-  (await exists(join(dir, TERRARIA_BINARY))) || (await exists(join(dir, TML_START_SCRIPT)))
+  (await exists(join(dir, TERRARIA_BINARY))) || (await exists(join(dir, TSHOCK_BINARY))) || (await exists(join(dir, TML_START_SCRIPT)))
 
 /** Versioni aggiuntive di Terraria: le cartelle presenti più quelle in installazione (o fallite), dalla più recente. */
 async function pinnedDirs(): Promise<string[]> {
@@ -315,11 +380,11 @@ async function pinnedDirs(): Promise<string[]> {
 
 /**
  * Installazioni usate dai server, più quelle del pannello (anche se non ancora installate):
- * Terraria, le sue versioni aggiuntive, tModLoader.
+ * Terraria, le sue versioni aggiuntive, TShock, tModLoader.
  */
 export async function listInstallations(): Promise<Installation[]> {
   const servers = await loadServers()
-  const managed = [paths.terrariaInstall(), ...(await pinnedDirs()), paths.tmlInstall()]
+  const managed = [paths.terrariaInstall(), ...(await pinnedDirs()), paths.tshockInstall(), paths.tmlInstall()]
   const dirs = [...new Set([...managed, ...servers.map((s) => s.installDir)])]
   return Promise.all(
     dirs.map(async (path) => {
@@ -468,16 +533,24 @@ export async function removeInstallation(installation: Installation) {
   jobs.delete(installation.path)
 }
 
-async function download(release: Release, file: string, job: Job) {
-  const response = await fetch(release.downloadUrl, { headers: { 'User-Agent': 'tmodmanager-agent' }, redirect: 'follow' })
+type Expected = { size: number | null; hash: { algorithm: 'sha256' | 'sha512'; value: string } | null; notFound: string }
+
+const download = (release: Release, file: string, job: Job) =>
+  downloadFile(release.downloadUrl, file, job, {
+    size: release.size,
+    hash: release.sha256 ? { algorithm: 'sha256', value: release.sha256 } : null,
+    notFound: `La versione ${release.version} non è scaricabile (non esiste?)`,
+  })
+
+/** Scarica `url` in `file` aggiornando job.progress; se l'hash atteso è noto, lo verifica. */
+async function downloadFile(url: string, file: string, job: Job, expected: Expected) {
+  const response = await fetch(url, { headers: { 'User-Agent': 'tmodmanager-agent' }, redirect: 'follow' })
   if (!response.ok || !response.body) {
-    throw new Error(
-      response.status === 404 ? `La versione ${release.version} non è scaricabile (non esiste?)` : `Download non riuscito (HTTP ${response.status})`,
-    )
+    throw new Error(response.status === 404 ? expected.notFound : `Download non riuscito (HTTP ${response.status})`)
   }
-  const total = Number(response.headers.get('content-length')) || release.size || 0
+  const total = Number(response.headers.get('content-length')) || expected.size || 0
   let received = 0
-  const hash = createHash('sha256')
+  const hash = createHash(expected.hash?.algorithm ?? 'sha256')
   const counter = new Transform({
     transform(chunk: Buffer, _enc, done) {
       received += chunk.length
@@ -487,11 +560,14 @@ async function download(release: Release, file: string, job: Job) {
     },
   })
   await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), counter, createWriteStream(file))
-  if (release.sha256 && hash.digest('hex') !== release.sha256) throw new Error('Il file scaricato non corrisponde (sha256 diverso)')
+  if (expected.hash && hash.digest('hex') !== expected.hash.value.toLowerCase()) {
+    throw new Error(`Il file scaricato non corrisponde (${expected.hash.algorithm} diverso)`)
+  }
 }
 
 /** Estrae lo zip di una release in `staging` e controlla che sia un'installazione del gioco giusto. */
 async function extractRelease(kind: Game, zip: string, staging: string, work: string) {
+  if (kind === 'tshock') return extractTshock(zip, staging, work)
   if (kind === 'tmodloader') {
     await mkdir(staging, { recursive: true })
     await run('unzip', ['-q', zip, '-d', staging], { maxBuffer: 16 * 1024 * 1024 })
@@ -515,6 +591,86 @@ async function extractRelease(kind: Game, zip: string, staging: string, work: st
     for (const name of [TERRARIA_BINARY, 'TerrariaServer']) await chmod(join(staging, name), 0o755).catch(() => undefined)
   } finally {
     await rm(out, { recursive: true, force: true })
+  }
+}
+
+/** TShock: lo zip contiene un .tar (per conservare i permessi) con l'installazione. */
+async function extractTshock(zip: string, staging: string, work: string) {
+  const out = join(work, `tshock-${randomBytes(4).toString('hex')}`)
+  try {
+    await mkdir(out, { recursive: true })
+    await run('unzip', ['-q', zip, '-d', out], { maxBuffer: 16 * 1024 * 1024 })
+    await mkdir(staging, { recursive: true })
+    const tars = (await readdir(out)).filter((name) => name.endsWith('.tar'))
+    if (tars.length) {
+      for (const tar of tars) await run('tar', ['-xf', join(out, tar), '-C', staging], { maxBuffer: 16 * 1024 * 1024 })
+    } else {
+      // Zip senza .tar: i file stanno direttamente nello zip
+      for (const name of await readdir(out)) await rename(join(out, name), join(staging, name))
+    }
+    if (!(await exists(join(staging, TSHOCK_BINARY))) || !(await exists(join(staging, TSHOCK_ASSEMBLY)))) {
+      throw new Error('Lo zip scaricato non sembra un\'installazione di TShock')
+    }
+    for (const name of [TSHOCK_BINARY, 'TShock.Installer']) await chmod(join(staging, name), 0o755).catch(() => undefined)
+  } finally {
+    await rm(out, { recursive: true, force: true })
+  }
+}
+
+/** Canale di .NET richiesto da TShock.Server ("9.0"), dal runtimeconfig incorporato nell'eseguibile. */
+export async function requiredDotnet(dir: string): Promise<string> {
+  const binary = await readFile(join(dir, TSHOCK_BINARY))
+  return binary.toString('latin1').match(/"tfm"\s*:\s*"net(\d+\.\d+)"/)?.[1] ?? '9.0'
+}
+
+/** Il runtime .NET in <dir>/dotnet ha la versione `channel` (es. "9.0")? */
+export async function hasDotnet(dir: string, channel: string): Promise<boolean> {
+  if (!(await exists(join(dir, 'dotnet', 'dotnet')))) return false
+  const versions = await readdir(join(dir, 'dotnet', 'shared', 'Microsoft.NETCore.App')).catch(() => [] as string[])
+  return versions.some((v) => v.startsWith(`${channel}.`))
+}
+
+type DotnetReleases = {
+  'latest-runtime': string
+  releases: { runtime?: { version: string; files: { name: string; rid?: string; url: string; hash?: string }[] } | null }[]
+}
+
+/**
+ * TShock ha bisogno del runtime .NET (non incluso): si scarica l'ultima versione del canale richiesto
+ * in <dir>/dotnet (verificata con lo sha512 pubblicato da Microsoft). Gli aggiornamenti lo riportano
+ * nella nuova installazione; si riscarica solo se una nuova TShock chiede un altro canale.
+ */
+async function ensureDotnet(dir: string, job: Job, work: string) {
+  const channel = await requiredDotnet(dir)
+  if (await hasDotnet(dir, channel)) return
+  job.phase = 'prepare'
+  job.progress = null
+  job.message = `Download del runtime .NET ${channel}…`
+  const meta = (await fetchJson(`${config.dotnetReleases}/${channel}/releases.json`, 'Microsoft (.NET)')) as DotnetReleases
+  const version = meta['latest-runtime']
+  const rid = linuxRid()
+  const file = meta.releases
+    .find((r) => r.runtime?.version === version)
+    ?.runtime?.files.find((f) => f.rid === rid && f.name.endsWith('.tar.gz'))
+  if (!file) throw new Error(`Runtime .NET ${version} per ${rid} non trovato`)
+  const archive = join(work, `dotnet-${version}-${randomBytes(4).toString('hex')}.tar.gz`)
+  const target = join(dir, 'dotnet.new')
+  try {
+    await downloadFile(file.url, archive, job, {
+      size: null,
+      hash: file.hash ? { algorithm: 'sha512', value: file.hash } : null,
+      notFound: `Runtime .NET ${version} non scaricabile`,
+    })
+    job.progress = null
+    job.message = `Estrazione del runtime .NET ${version}…`
+    await rm(target, { recursive: true, force: true })
+    await mkdir(target, { recursive: true })
+    await run('tar', ['-xzf', archive, '-C', target], { maxBuffer: 16 * 1024 * 1024 })
+    await rm(join(dir, 'dotnet'), { recursive: true, force: true })
+    await rename(target, join(dir, 'dotnet'))
+  } finally {
+    await rm(archive, { force: true })
+    await rm(target, { recursive: true, force: true })
   }
 }
 
@@ -551,6 +707,7 @@ async function runJob(
   const work = paths.tmp()
   const zip = join(work, `${kind}-${release?.version ?? 'backup'}.zip`)
   await rm(staging, { recursive: true, force: true })
+  await mkdir(work, { recursive: true })
   const stopped: ServerDefinition[] = []
 
   try {
@@ -575,14 +732,17 @@ async function runJob(
 
     if (job.kind === 'install') {
       // Prima installazione: niente da copiare, niente server da spegnere
+      if (kind === 'tshock') await ensureDotnet(staging, job, work)
       job.phase = 'swap'
       job.message = 'Installazione…'
       await mkdir(dirname(dir), { recursive: true })
       await rename(staging, dir)
     } else {
       job.phase = 'prepare'
-      job.message = kind === 'tmodloader' ? 'Copia di configurazioni, runtime .NET e dati dall\'installazione attuale…' : 'Copia delle configurazioni dall\'installazione attuale…'
+      job.message =
+        kind === 'terraria' ? 'Copia delle configurazioni dall\'installazione attuale…' : 'Copia di configurazioni, runtime .NET e dati dall\'installazione attuale…'
       await carryOver(dir, staging)
+      if (kind === 'tshock') await ensureDotnet(staging, job, work)
 
       job.phase = 'stopping'
       for (const server of servers) {

@@ -93,6 +93,7 @@ test('server vanilla: creazione, passaggio a tModLoader, ricreazione del mondo',
       choices.map((c) => [c.kind, c.gameVersion, c.worldRelease]),
       [
         ['terraria', '1.4.5.8', 326],
+        ['tshock', null, null],
         ['tmodloader', '1.4.4.9', 279],
       ],
     )
@@ -198,6 +199,7 @@ test('gioco non ancora installato: proposto alla creazione e al cambio di versio
       choices.map((c) => [c.kind, c.installed, c.installing]),
       [
         ['terraria', false, false],
+        ['tshock', false, false],
         ['tmodloader', false, false],
       ],
     )
@@ -252,6 +254,7 @@ test('versioni aggiuntive di Terraria: elencate, scelte dai server, fisse, rimov
       [
         ['terraria', '1.4.5.8', false, true],
         ['terraria', '1.4.4.9', true, true],
+        ['tshock', null, false, true],
         ['tmodloader', null, false, true],
       ],
     )
@@ -262,6 +265,7 @@ test('versioni aggiuntive di Terraria: elencate, scelte dai server, fisse, rimov
       [
         ['terraria', '1.4.5.8'],
         ['terraria', '1.4.4.9'],
+        ['tshock', null],
         ['tmodloader', null],
       ],
     )

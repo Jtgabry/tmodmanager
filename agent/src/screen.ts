@@ -36,13 +36,13 @@ const SCREENRC = ['logfile flush 1', 'defscrollback 10000', 'defutf8 on', ''].jo
 
 /**
  * Avvia una sessione detached che esegue direttamente `command` (senza shell) e registra l'output in logFile.
- * `rcFile` viene (ri)scritto con SCREENRC.
+ * `rcFile` viene (ri)scritto con SCREENRC. `extraEnv`: variabili in più per il server (es. DOTNET_ROOT).
  */
-export async function startSession(name: string, cwd: string, logFile: string, rcFile: string, command: string[]) {
+export async function startSession(name: string, cwd: string, logFile: string, rcFile: string, command: string[], extraEnv: Record<string, string> = {}) {
   await mkdir(dirname(rcFile), { recursive: true })
   await writeFile(rcFile, SCREENRC)
   // Il server non deve ereditare la configurazione dell'agent (token compreso)
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('AGENT_')))
+  const env = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('AGENT_'))), ...extraEnv }
   await run('screen', ['-c', rcFile, '-dmS', name, '-L', '-Logfile', logFile, ...command], { cwd, env })
 }
 

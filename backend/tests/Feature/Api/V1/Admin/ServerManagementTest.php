@@ -36,6 +36,38 @@ class ServerManagementTest extends TestCase
         $this->patchJson(route('api.v1.admin.servers.update', 'alfa'), ['port' => 7778])->assertForbidden();
         $this->deleteJson(route('api.v1.admin.servers.destroy', 'alfa'))->assertForbidden();
         $this->postJson(route('api.v1.admin.servers.world.recreate', 'alfa'))->assertForbidden();
+        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), ['game' => 'terraria'])->assertForbidden();
+        $this->postJson(route('api.v1.admin.servers.stay-vanilla', 'alfa'))->assertForbidden();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_switches_a_server_between_tshock_and_vanilla(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+        Http::fake([
+            self::AGENT_URL.'/admin/servers/alfa/switch-game' => Http::response(['data' => ['serverId' => 'alfa', 'to' => 'terraria', 'phase' => 'installing']], 202),
+            self::AGENT_URL.'/admin/servers/alfa/stay-vanilla' => Http::response(['data' => ['awaitingTshock' => false]]),
+        ]);
+
+        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), ['game' => 'terraria'])
+            ->assertAccepted()
+            ->assertJsonPath('data.phase', 'installing');
+        $this->postJson(route('api.v1.admin.servers.stay-vanilla', 'alfa'))
+            ->assertOk()
+            ->assertJsonPath('data.awaitingTshock', false);
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === self::AGENT_URL.'/admin/servers/alfa/switch-game'
+            && $request->data() === ['game' => 'terraria']);
+    }
+
+    public function test_switching_to_tmodloader_is_not_a_guided_switch(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+
+        $this->postJson(route('api.v1.admin.servers.switch-game', 'alfa'), ['game' => 'tmodloader'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('game');
 
         Http::assertNothingSent();
     }

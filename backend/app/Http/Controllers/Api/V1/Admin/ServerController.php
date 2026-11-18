@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreServerRequest;
+use App\Http\Requests\Admin\SwitchServerGameRequest;
 use App\Http\Requests\Admin\UpdateServerRequest;
 use App\Models\ServerAccess;
 use App\Services\Agent\AgentClient;
@@ -63,6 +64,27 @@ class ServerController extends Controller
         Log::info('Mondo ricreato', ['user' => $request->user()->email, 'server' => $server]);
 
         return response()->json(['data' => $result]);
+    }
+
+    /**
+     * Passa il server a Terraria vanilla o a TShock: l'agent installa ciò che serve, spegne il server (salvando
+     * il mondo), cambia installazione e lo riaccende se era acceso. Prosegue in background.
+     */
+    public function switchGame(SwitchServerGameRequest $request, string $server): JsonResponse
+    {
+        $game = $request->validated('game');
+        $job = $this->agent->json('post', "/admin/servers/{$server}/switch-game", ['game' => $game], timeout: 60);
+        Log::info('Passaggio di gioco avviato', ['user' => $request->user()->email, 'server' => $server, 'game' => $game]);
+
+        return response()->json(['data' => $job], 202);
+    }
+
+    /**
+     * Il server passato da TShock a vanilla resta su vanilla: non si propone più di tornare su TShock.
+     */
+    public function stayVanilla(string $server): JsonResponse
+    {
+        return response()->json(['data' => $this->agent->json('post', "/admin/servers/{$server}/stay-vanilla")]);
     }
 
     /**

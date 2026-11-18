@@ -50,6 +50,34 @@ class InstallationTest extends TestCase
         Http::assertSent(fn (Request $request): bool => $request->url() === self::AGENT_URL.'/admin/releases/terraria');
     }
 
+    public function test_lists_tshock_releases_and_update_notices(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+        Http::fake([
+            self::AGENT_URL.'/admin/releases/tshock' => Http::response(['data' => [['version' => '6.2.1', 'gameVersion' => '1.4.5.8']]]),
+            self::AGENT_URL.'/admin/updates' => Http::response(['data' => [
+                'checkedAt' => '2026-11-18T04:00:00Z',
+                'notices' => [['type' => 'tshock-behind', 'id' => 'tshock-behind:1.4.5.9', 'terrariaVersion' => '1.4.5.9']],
+                'switches' => [],
+            ]]),
+        ]);
+
+        $this->getJson(route('api.v1.admin.releases', 'tshock'))->assertOk()->assertJsonPath('data.0.gameVersion', '1.4.5.8');
+        $this->getJson(route('api.v1.admin.updates'))
+            ->assertOk()
+            ->assertJsonPath('data.notices.0.type', 'tshock-behind')
+            ->assertJsonPath('data.notices.0.terrariaVersion', '1.4.5.9');
+    }
+
+    public function test_only_admins_see_update_notices(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson(route('api.v1.admin.updates'))->assertForbidden();
+
+        Http::assertNothingSent();
+    }
+
     public function test_releases_of_an_unknown_game_are_not_found(): void
     {
         Sanctum::actingAs(User::factory()->admin()->create());

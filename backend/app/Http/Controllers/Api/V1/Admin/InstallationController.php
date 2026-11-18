@@ -11,8 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Installazioni di Terraria vanilla e di tModLoader (solo admin): versione, server che le usano, backup e
- * aggiornamento (Terraria da terraria.org, tModLoader da GitHub).
+ * Installazioni di Terraria vanilla, TShock e tModLoader (solo admin): versione, server che le usano, backup e
+ * aggiornamento (Terraria da terraria.org, TShock e tModLoader da GitHub).
  */
 class InstallationController extends Controller
 {
@@ -24,7 +24,16 @@ class InstallationController extends Controller
     }
 
     /**
-     * Versioni disponibili di Terraria (terraria.org) o tModLoader (GitHub), in cache nell'agent per 10 minuti.
+     * Avvisi del controllo giornaliero degli aggiornamenti (fatto dall'agent al massimo una volta al giorno):
+     * installazioni da aggiornare, Terraria uscito prima di TShock, server che possono tornare su TShock.
+     */
+    public function updates(): JsonResponse
+    {
+        return response()->json(['data' => $this->agent->json('get', '/admin/updates')]);
+    }
+
+    /**
+     * Versioni disponibili di Terraria (terraria.org), TShock o tModLoader (GitHub), in cache nell'agent per 10 minuti.
      */
     public function releases(Request $request, string $game): JsonResponse
     {

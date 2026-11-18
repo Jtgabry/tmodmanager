@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import { type Game, GAME_LABEL, type Installation, type InstallationChoice, type ServerSettings, type TmlRelease } from './types'
+import { type Game, GAME_LABEL, type Installation, type InstallationChoice, type ServerSettings, type SwitchJob, type TmlRelease, type UpdateReportAdmin } from './types'
 
 export type NewServer = {
   id: string
@@ -47,6 +47,21 @@ export function useReleases(game: Game, enabled = true) {
     queryFn: async () => (await api.get<{ data: TmlRelease[] }>(`/admin/releases/${game}`)).data.data,
     staleTime: 5 * 60 * 1000,
     enabled,
+  })
+}
+
+const switching = (report: UpdateReportAdmin | undefined) => report?.switches.some((s) => s.phase !== 'done' && s.phase !== 'error')
+
+/**
+ * Avvisi del controllo giornaliero degli aggiornamenti (solo admin). Si rileggono ogni 10 minuti (sono dati
+ * dell'agent, non nuove richieste a GitHub) e ogni 2 secondi durante un passaggio di gioco.
+ */
+export function useGameUpdates(enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'updates'],
+    queryFn: async () => (await api.get<{ data: UpdateReportAdmin }>('/admin/updates')).data.data,
+    enabled,
+    refetchInterval: (query) => (switching(query.state.data) ? 2000 : 10 * 60 * 1000),
   })
 }
 
@@ -104,7 +119,17 @@ export function useAdminServerActions() {
     mutationFn: async (id: string) => (await api.delete(`/admin/installations/${id}`)).data,
     onSettled: refresh,
   })
-  return { create, update, remove, recreateWorld, updateTml, addTerrariaVersion, removeInstallation }
+  /** Passaggio guidato tra TShock e Terraria vanilla (installa, spegne, cambia, riaccende). */
+  const switchGame = useMutation({
+    mutationFn: async ({ id, game }: { id: string; game: 'terraria' | 'tshock' }) =>
+      (await api.post<{ data: SwitchJob }>(`/admin/servers/${id}/switch-game`, { game })).data.data,
+    onSettled: refresh,
+  })
+  const stayVanilla = useMutation({
+    mutationFn: async (id: string) => (await api.post(`/admin/servers/${id}/stay-vanilla`)).data,
+    onSettled: refresh,
+  })
+  return { create, update, remove, recreateWorld, updateTml, addTerrariaVersion, removeInstallation, switchGame, stayVanilla }
 }
 
 /** Versione del mondo (primi byte del .wld) → versione di Terraria che lo ha salvato (tabella di TEdit). */
@@ -143,4 +168,4 @@ export function compareVersions(a: string, b: string): number {
 export const choiceLabel = (c: InstallationChoice) =>
   !c.installed
     ? `${GAME_LABEL[c.kind]} — ${c.installing ? 'installazione in corso' : 'da installare (ultima versione)'}`
-    : `${GAME_LABEL[c.kind]} ${c.version ?? '?'}${c.kind === 'tmodloader' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''}${c.managed ? '' : ` — ${c.path}`}`
+    : `${GAME_LABEL[c.kind]} ${c.version ?? '?'}${c.kind !== 'terraria' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''}${c.managed ? '' : ` — ${c.path}`}`

@@ -9,7 +9,7 @@ import { socketsOnPort } from './procfs.js'
 import { loadServers, type RawServer, ServerDefinition, updateRegistry } from './registry.js'
 import { applyServerConfig, ConfigChanges, readConfigValues, readServerConfig } from './serverConfig.js'
 import { findInstallation, type Installation, installationId, type Job, listInstallations, listReleases, serverWorldRelease, startJob } from './tml.js'
-import { gameLabel } from './games.js'
+import { GAMES, gameLabel, tshockDataDir, tshockPluginsDir } from './games.js'
 import { moveToTrash } from './trash.js'
 
 /** Creazione, impostazioni e rimozione dei server (solo admin, lato Laravel). */
@@ -68,14 +68,14 @@ export type InstallationChoice = Pick<Installation, 'path' | 'kind' | 'version' 
 }
 
 /**
- * Installazioni utilizzabili da un server: quelle installate più le due del pannello anche se non ancora
- * installate (creando un server su una di queste viene installata da sola). Prima Terraria, poi tModLoader.
+ * Installazioni utilizzabili da un server: quelle installate più quelle del pannello anche se non ancora
+ * installate (creando un server su una di queste viene installata da sola). Prima Terraria, poi TShock, poi tModLoader.
  */
 export async function knownInstallations(): Promise<InstallationChoice[]> {
   return (await listInstallations())
-    // Le versioni aggiuntive solo se installate: non si "installano da sole" come le due principali
+    // Le versioni aggiuntive solo se installate: non si "installano da sole" come le principali
     .filter((i) => i.installed || (i.managed && !i.pinned))
-    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'terraria' ? -1 : 1))
+    .sort((a, b) => GAMES.indexOf(a.kind) - GAMES.indexOf(b.kind))
     .map(({ path, kind, version, gameVersion, worldRelease, managed, installed, job }) => ({
       path,
       kind,
@@ -111,6 +111,12 @@ async function installLatest(choice: InstallationChoice, manager: ServerManager)
   } catch (err) {
     return { job: null, error: (err as Error).message }
   }
+}
+
+/** Cartelle di TShock nel save/ del server: config e database (create da TShock al primo avvio) e plugin. */
+async function createTshockDirs(saveDir: string) {
+  await mkdir(tshockDataDir(saveDir), { recursive: true })
+  await mkdir(tshockPluginsDir(saveDir), { recursive: true })
 }
 
 async function assertPortFree(port: number, exceptId: string | null) {
@@ -167,6 +173,7 @@ export async function createServer(input: CreateServerInput, manager?: ServerMan
 
   await mkdir(join(saveDir, 'Worlds'), { recursive: true })
   await mkdir(join(saveDir, 'Mods'), { recursive: true })
+  if (installation.kind === 'tshock') await createTshockDirs(saveDir)
   try {
     if (source) {
       // Le mod (e le loro configurazioni) dell'altro server; i suoi ModPacks no
@@ -243,6 +250,10 @@ export async function serverSettings(id: string) {
     saveDir: server.saveDir,
     configPath: server.configPath,
     launchArgs: server.launchArgs,
+    /** Passato da TShock a vanilla: si propone di tornare a TShock quando supporta la sua versione. */
+    awaitingTshock: server.game === 'terraria' && server.awaitingTshock === true,
+    /** Cartella con config e database di TShock (c'è anche quando il server non è su TShock). */
+    tshockData: (await exists(join(tshockDataDir(server.saveDir), 'config.json'))) ? tshockDataDir(server.saveDir) : null,
     port: settings.port,
     maxPlayers: settings.maxPlayers,
     hasPassword: settings.hasPassword,
@@ -269,6 +280,7 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
       throw new ServerAdminError('Spegni il server prima di cambiare versione', 409, 'installDir')
     }
     if (switchTo.kind === 'tmodloader') await mkdir(join(server.saveDir, 'Mods'), { recursive: true })
+    if (switchTo.kind === 'tshock') await createTshockDirs(server.saveDir)
   }
 
   const changes: Record<string, string | null> = {}
@@ -292,7 +304,12 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
               ...s,
               ...(input.name !== undefined && { name: input.name }),
               ...(input.launchArgs !== undefined && { launchArgs: input.launchArgs }),
-              ...(switchTo && { game: switchTo.kind, installDir: switchTo.path }),
+              ...(switchTo && {
+                game: switchTo.kind,
+                installDir: switchTo.path,
+                // Da TShock a vanilla: TShock resta "in attesa"; ogni altro cambio lo chiude
+                awaitingTshock: switchTo.kind === 'terraria' && (s.game === 'tshock' || (s.awaitingTshock ?? false)) ? true : undefined,
+              }),
             }
           : s,
       ),
@@ -306,6 +323,16 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
     /** Installazione partita con il cambio di versione (null se non serviva). */
     install: install && { game: switchTo!.kind, version: install.job?.toVersion ?? null, error: install.error },
   }
+}
+
+/** Il server resta su Terraria vanilla: non si propone più di riportarlo su TShock. */
+export async function stayOnVanilla(id: string) {
+  const server = (await loadServers()).find((s) => s.id === id)
+  if (!server) throw new ServerAdminError('Server non trovato', 404)
+  await updateRegistry(async (list) => ({
+    servers: list.map((s) => (s.id === id ? { ...s, awaitingTshock: undefined } : s)),
+    result: undefined,
+  }))
 }
 
 /** File di un mondo: il .wld più i dati di tModLoader (.twld) e i backup che Terraria tiene accanto. */
