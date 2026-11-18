@@ -11,6 +11,11 @@ aggiornano insieme al pannello (un add-on attivo viene sostituito dalla build nu
 Versione di TShock per la compilazione in `Directory.Packages.props`: l'API dei plugin (`ApiVersion 2.1`) è la
 stessa per tutta TShock 6, quindi la .dll vale per tutti i server TShock 6.
 
+`tools/MapColors` non è un add-on: durante la build ricava da Terraria (tramite OTAPI, `MapHelper.Initialize()`)
+i colori della minimappa e li scrive in `dist/map-colors.json`. L'agent li usa per disegnare la mappa dai file del
+mondo (`.wld`) di qualsiasi server, anche senza LiveMap. Nessuna tabella di colori copiata a mano nel repository: si
+rigenera a ogni build, quindi segue la versione di Terraria in `Directory.Packages.props`.
+
 Per aggiungere un add-on: una cartella `<Nome>/` con `<Nome>.csproj` (titolo, descrizione e versione nel
 `PropertyGroup`) e una voce in `ADDONS` in `agent/src/addons.ts`.
 

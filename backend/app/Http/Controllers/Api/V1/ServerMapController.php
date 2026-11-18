@@ -11,7 +11,8 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Mappa del mondo (sezione "Mondo"): basta l'accesso al server.
+ * Mappa del mondo (sezione "Mondo"): basta l'accesso al server. Sorgenti: l'add-on LiveMap (TShock, in
+ * tempo reale) o il file del mondo (tutti i server, a ogni salvataggio).
  */
 class ServerMapController extends Controller
 {
@@ -33,18 +34,18 @@ class ServerMapController extends Controller
      * Riquadro della mappa. Il frontend mette la versione nell'indirizzo: quando il riquadro cambia, cambia
      * l'indirizzo, quindi il browser può tenerlo in cache a lungo.
      */
-    public function chunk(string $server, int $cx, int $cy): Response
+    public function chunk(string $server, string $source, int $cx, int $cy): Response
     {
         Gate::authorize('server', [$server, ServerAbility::View]);
 
-        return $this->image("/servers/{$server}/map/chunks/{$cx}/{$cy}");
+        return $this->image("/servers/{$server}/map/{$source}/chunks/{$cx}/{$cy}");
     }
 
-    public function overview(string $server): Response
+    public function overview(string $server, string $source): Response
     {
         Gate::authorize('server', [$server, ServerAbility::View]);
 
-        return $this->image("/servers/{$server}/map/overview");
+        return $this->image("/servers/{$server}/map/{$source}/overview");
     }
 
     private function image(string $path): Response

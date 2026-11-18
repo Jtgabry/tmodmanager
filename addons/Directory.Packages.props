@@ -5,5 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="TShock" Version="6.2.1" />
+    <!-- Terraria (via OTAPI) per tools/MapColors: la stessa versione che usa TShock 6.2.1 -->
+    <PackageVersion Include="OTAPI.Upcoming" Version="3.3.14" />
   </ItemGroup>
 </Project>

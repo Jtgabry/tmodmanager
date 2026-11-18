@@ -92,8 +92,9 @@ Route::prefix('v1')
 
             Route::controller(ServerMapController::class)->prefix('/servers/{server}/map')->name('servers.map.')->group(function () {
                 Route::get('/', 'show')->name('show');
-                Route::get('/chunks/{cx}/{cy}', 'chunk')->whereNumber(['cx', 'cy'])->name('chunk');
-                Route::get('/overview', 'overview')->name('overview');
+                // {source}: livemap (add-on LiveMap, server TShock) o world (dal file del mondo)
+                Route::get('/{source}/chunks/{cx}/{cy}', 'chunk')->whereIn('source', ['livemap', 'world'])->whereNumber(['cx', 'cy'])->name('chunk');
+                Route::get('/{source}/overview', 'overview')->whereIn('source', ['livemap', 'world'])->name('overview');
             });
 
             Route::controller(ServerPluginController::class)->prefix('/servers/{server}/plugins')->name('servers.plugins.')->group(function () {

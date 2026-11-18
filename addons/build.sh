@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Compila gli add-on (plugin TShock distribuiti con tModManager) in addons/dist/<Nome>.dll.
+# Compila gli add-on (plugin TShock distribuiti con tModManager) in addons/dist/<Nome>.dll, e ricava i
+# colori della mappa di Terraria in addons/dist/map-colors.json (tools/MapColors).
 # L'agent li prende da lì (AGENT_ADDONS_DIR; nell'immagine Docker sono già compilati in /app/addons).
 #   addons/build.sh               tutti
 #   addons/build.sh LiveMap       solo quelli indicati
@@ -26,3 +27,8 @@ for project in "${projects[@]}"; do
   cp "obj/out/$project/$project.dll" dist/
   echo "addons/dist/$project.dll"
 done
+
+# Colori della minimappa di Terraria, per disegnare la mappa dai file del mondo (.wld) nell'agent
+if ((!$#)); then
+  "$DOTNET" run --project tools/MapColors -c Release -v quiet -- dist/map-colors.json
+fi

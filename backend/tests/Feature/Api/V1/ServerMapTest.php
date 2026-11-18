@@ -30,7 +30,7 @@ class ServerMapTest extends TestCase
         Sanctum::actingAs(User::factory()->create());
 
         $this->getJson(route('api.v1.servers.map.show', 'alfa'))->assertForbidden();
-        $this->get(route('api.v1.servers.map.chunk', ['alfa', 1, 2]))->assertForbidden();
+        $this->get(route('api.v1.servers.map.chunk', ['alfa', 'world', 1, 2]))->assertForbidden();
 
         Http::assertNothingSent();
     }
@@ -50,19 +50,20 @@ class ServerMapTest extends TestCase
     public function test_chunks_are_images_cached_by_the_browser(): void
     {
         $this->actingAsMember([]);
-        Http::fake([self::AGENT_URL.'/servers/alfa/map/chunks/3/1' => Http::response('PNG', 200, ['Content-Type' => 'image/png'])]);
+        Http::fake([self::AGENT_URL.'/servers/alfa/map/livemap/chunks/3/1' => Http::response('PNG', 200, ['Content-Type' => 'image/png'])]);
 
-        $this->get(route('api.v1.servers.map.chunk', ['alfa', 3, 1, 'v' => 123]))
+        $this->get(route('api.v1.servers.map.chunk', ['alfa', 'livemap', 3, 1, 'v' => 123]))
             ->assertOk()
             ->assertHeader('Content-Type', 'image/png')
             ->assertHeader('Cache-Control', 'immutable, max-age=31536000, private');
     }
 
-    public function test_chunk_coordinates_must_be_numbers(): void
+    public function test_chunk_source_and_coordinates_are_validated(): void
     {
         $this->actingAsMember([]);
 
-        $this->get('/api/v1/servers/alfa/map/chunks/x/1')->assertNotFound();
+        $this->get('/api/v1/servers/alfa/map/world/chunks/x/1')->assertNotFound();
+        $this->get('/api/v1/servers/alfa/map/altro/chunks/1/1')->assertNotFound();
 
         Http::assertNothingSent();
     }

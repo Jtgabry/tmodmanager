@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { chunkUrl, overviewUrl } from '../../lib/worldMap'
-import type { MapPlayer, WorldMapManifest } from '../../lib/types'
+import type { MapPlayer, MapSource, WorldMapManifest } from '../../lib/types'
 
 /** Vista: tile in alto a sinistra e pixel dello schermo per tile. */
 type View = { x: number; y: number; zoom: number }
@@ -25,11 +25,13 @@ function layerOf(world: WorldMapManifest['world'], y: number) {
  */
 export default function MapViewer({
   serverId,
+  source,
   manifest,
   players,
   focus,
 }: {
   serverId: string
+  source: MapSource
   manifest: WorldMapManifest
   players: MapPlayer[]
   /** Giocatore su cui centrarsi (cambia → la vista si sposta). */
@@ -212,13 +214,13 @@ export default function MapViewer({
             style={{ width: world.width, height: world.height, transform: `translate(${-v.x * v.zoom}px, ${-v.y * v.zoom}px) scale(${v.zoom})` }}
           >
             {overview.version > 0 && (
-              <img className="world-map-overview" src={overviewUrl(serverId, overview.version)} alt="" draggable={false} style={{ width: world.width, height: world.height }} />
+              <img className="world-map-overview" src={overviewUrl(serverId, source, overview.version)} alt="" draggable={false} style={{ width: world.width, height: world.height }} />
             )}
             {visible.map(({ cx, cy, version }) => (
               <img
                 key={`${cx}_${cy}`}
                 className="world-map-chunk"
-                src={chunkUrl(serverId, cx, cy, version)}
+                src={chunkUrl(serverId, source, cx, cy, version)}
                 alt=""
                 draggable={false}
                 style={{ left: cx * cw, top: cy * ch }}

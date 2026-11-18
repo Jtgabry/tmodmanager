@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { WorldMapState } from './types'
+import type { MapSource, WorldMapState } from './types'
 
 export const worldMapKey = (serverId: string) => ['servers', serverId, 'map']
 
@@ -17,7 +17,7 @@ export function useWorldMap(serverId: string) {
   })
 }
 
-export const chunkUrl = (serverId: string, cx: number, cy: number, version: number) =>
-  `/api/v1/servers/${serverId}/map/chunks/${cx}/${cy}?v=${version}`
+export const chunkUrl = (serverId: string, source: MapSource, cx: number, cy: number, version: number) =>
+  `/api/v1/servers/${serverId}/map/${source}/chunks/${cx}/${cy}?v=${version}`
 
-export const overviewUrl = (serverId: string, version: number) => `/api/v1/servers/${serverId}/map/overview?v=${version}`
+export const overviewUrl = (serverId: string, source: MapSource, version: number) => `/api/v1/servers/${serverId}/map/${source}/overview?v=${version}`

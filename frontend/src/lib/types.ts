@@ -205,10 +205,15 @@ export type WorldMapManifest = {
 
 export type MapPlayer = { name: string; x: number; y: number; team: number; life: number; lifeMax: number; dead: boolean }
 
+/** livemap = add-on LiveMap (TShock, in tempo reale); world = dal file del mondo (tutti i server, a ogni salvataggio). */
+export type MapSource = 'livemap' | 'world'
+
 export type WorldMapState = {
-  source: 'livemap' | null
-  unavailable: 'unsupported-game' | 'addon-missing' | 'addon-disabled' | 'no-data' | null
+  source: MapSource | null
+  unavailable: 'no-world' | 'no-colors' | 'world-error' | 'loading' | null
+  /** Solo per i server TShock. */
   liveMap: { available: boolean; enabled: boolean } | null
+  worldFile: { generating: boolean; error: string | null; savedAt: string | null } | null
   updatedAt: string | null
   manifest: WorldMapManifest | null
   players: MapPlayer[]

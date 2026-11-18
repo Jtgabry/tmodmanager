@@ -2862,3 +2862,21 @@ html:has(.sheet[open]) {
     height: 60vh;
   }
 }
+
+.world-map-hint {
+  max-width: none;
+}
+
+.world-map-callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.world-map-callout > span:first-child {
+  flex: 1 1 22rem;
+}

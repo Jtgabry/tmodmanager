@@ -4,7 +4,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import { findServer, type ServerDefinition } from '../registry.js'
 import { mapChunkPath, mapOverviewPath, worldMap } from '../worldMap.js'
 
-type Params = { Params: { id: string; cx?: string; cy?: string }; Querystring: { watching?: string } }
+type Params = { Params: { id: string; source?: string; cx?: string; cy?: string }; Querystring: { watching?: string } }
 
 /** Mappa del mondo (sezione "Mondo"): stato, riquadri e panoramica. */
 export async function mapRoutes(app: FastifyInstance) {
@@ -25,13 +25,14 @@ export async function mapRoutes(app: FastifyInstance) {
     if (s) return { data: await worldMap(s, { watching: req.query.watching === '1' }) }
   })
 
-  app.get<Params>('/servers/:id/map/chunks/:cx/:cy', async (req, reply) => {
+  // :source = livemap | world (la sorgente indicata nello stato della mappa)
+  app.get<Params>('/servers/:id/map/:source/chunks/:cx/:cy', async (req, reply) => {
     const s = await server(req.params.id, reply)
-    if (s) return png(reply, await mapChunkPath(s, String(req.params.cx), String(req.params.cy)))
+    if (s) return png(reply, await mapChunkPath(s, String(req.params.source), String(req.params.cx), String(req.params.cy)))
   })
 
-  app.get<Params>('/servers/:id/map/overview', async (req, reply) => {
+  app.get<Params>('/servers/:id/map/:source/overview', async (req, reply) => {
     const s = await server(req.params.id, reply)
-    if (s) return png(reply, await mapOverviewPath(s))
+    if (s) return png(reply, await mapOverviewPath(s, String(req.params.source)))
   })
 }
