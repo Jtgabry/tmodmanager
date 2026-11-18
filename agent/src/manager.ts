@@ -20,6 +20,7 @@ import {
   ticksToSeconds,
 } from './procfs.js'
 import { modsFingerprint } from './mods.js'
+import { pluginsFingerprint } from './plugins.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { listSessions, quitSession, type ScreenSession, sendLine, startSession } from './screen.js'
@@ -215,19 +216,19 @@ export class ServerManager {
       version,
       gameVersion: terrariaVersion,
       tmlVersion: server.game === 'tmodloader' ? version : null,
-      restartRequired: server.game === 'tmodloader' && state === 'running' && main ? await this.modsChangedSinceStart(server, main.pid) : false,
+      restartRequired: server.game !== 'terraria' && state === 'running' && main ? await this.modsChangedSinceStart(server, main.pid) : false,
       screenSession: server.screenSession,
       lastError: this.errors.get(server.id) ?? null,
     }
   }
 
   /**
-   * La prima volta che si vede il server acceso (per quel pid) si salva l'impronta delle mod;
+   * La prima volta che si vede il server acceso (per quel pid) si salva l'impronta delle mod (dei plugin per TShock);
    * le volte successive si confronta. Su file, così regge anche ai riavvii dell'agent.
    */
   private async modsChangedSinceStart(server: ServerDefinition, pid: number): Promise<boolean> {
     const file = paths.modsState(server.id)
-    const current = await modsFingerprint(server)
+    const current = server.game === 'tshock' ? await pluginsFingerprint(server) : await modsFingerprint(server)
     let saved: { pid: number; fingerprint: string } | null = null
     try {
       saved = JSON.parse(await readFile(file, 'utf8'))

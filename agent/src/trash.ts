@@ -26,10 +26,10 @@ export const TRASH_ID = /^[0-9]{13}-[0-9a-f]{8}$/
 
 const TrashMeta = z.object({
   id: z.string().regex(TRASH_ID),
-  kind: z.enum(['file', 'mod']),
+  kind: z.enum(['file', 'mod', 'plugin']),
   /** Nome originale del file o della cartella. */
   name: z.string(),
-  /** Solo per kind=file: radice e percorso relativo originali. */
+  /** kind=file: radice e percorso relativo originali; kind=plugin: path = 'enabled' | 'disabled'. */
   root: z.string().nullable().default(null),
   path: z.string().nullable().default(null),
   /** Solo per kind=mod. */

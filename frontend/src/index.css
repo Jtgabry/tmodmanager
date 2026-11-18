@@ -1982,6 +1982,18 @@ html:has(.sheet[open]) {
   font-weight: 500;
 }
 
+/* Pill che apre qualcosa (es. «3 versioni» nella card di un plugin) */
+.pill-button {
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pill-button:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .mod-description-short {
   margin: 0;
   font-size: 0.87rem;

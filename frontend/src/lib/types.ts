@@ -137,7 +137,7 @@ export type UploadResult = {
 
 export type TrashItem = {
   id: string
-  kind: 'file' | 'mod'
+  kind: 'file' | 'mod' | 'plugin'
   name: string
   root: string | null
   path: string | null
@@ -149,6 +149,42 @@ export type TrashItem = {
   deletedAt: string
   expiresAt: string
   daysLeft: number
+}
+
+/** Versione salvata di un plugin TShock (id = impronta del contenuto). */
+export type PluginVersion = {
+  id: string
+  version: string | null
+  size: number
+  uploadedAt: string
+}
+
+export type Plugin = {
+  name: string
+  /** plugin = contiene un TerrariaPlugin; library = dipendenza di altri plugin; null = file illeggibile. */
+  kind: 'plugin' | 'library' | null
+  title: string | null
+  author: string | null
+  description: string | null
+  /** Il suo file è in ServerPlugins/: TShock lo carica al prossimo avvio. */
+  enabled: boolean
+  /** Versione scelta (quella attiva, o quella che verrà attivata). */
+  selected: string | null
+  /** Versioni salvate, dalla più recente. */
+  versions: PluginVersion[]
+  error: string | null
+  file: string | null
+}
+
+export type BundledPlugin = Pick<Plugin, 'kind' | 'title' | 'author' | 'description'> & { file: string; version: string | null; size: number }
+
+export type PluginList = { plugins: Plugin[]; bundled: BundledPlugin[] }
+
+export type PluginUploadResult = {
+  plugin: Plugin
+  versionId: string
+  duplicate: boolean
+  previousVersion: PluginVersion | null
 }
 
 export type ImportablePack = { name: string; format: 'json' | 'folder'; mods: number; files: number }

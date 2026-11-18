@@ -1,0 +1,31 @@
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class UploadPluginRequest extends FormRequest
+{
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public function rules(): array
+    {
+        return [
+            // 100 MB (in KB). Che sia un assembly .NET lo controlla l'agent leggendo il file.
+            'file' => ['required', 'file', 'extensions:dll', 'max:102400'],
+            'enable' => ['sometimes', 'boolean'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'file.extensions' => 'Il file deve essere un plugin .dll.',
+            'file.uploaded' => 'Caricamento fallito: il file supera il limite consentito dal server.',
+        ];
+    }
+}

@@ -8,8 +8,17 @@ import type { TrashItem } from '../lib/types'
 
 const ROOT_LABEL: Record<string, string> = { save: 'SaveData', worlds: 'Mondi', tml: 'tModLoader' }
 
-const origin = (item: TrashItem) =>
-  item.kind === 'mod' ? `Mods/${item.modName}.tmod` : `${ROOT_LABEL[item.root ?? ''] ?? item.root}/${item.path}`
+const origin = (item: TrashItem) => {
+  if (item.kind === 'mod') return `Mods/${item.modName}.tmod`
+  if (item.kind === 'plugin') {
+    if (item.path === 'file') return `ServerPlugins/${item.name}`
+    if (item.path === 'plugin') return `Plugin ${item.modName}, con tutte le versioni`
+    return `Versione di ${item.modName}`
+  }
+  return `${ROOT_LABEL[item.root ?? ''] ?? item.root}/${item.path}`
+}
+
+const KIND_ICON: Record<TrashItem['kind'], string> = { mod: '🧩 ', plugin: '🔌 ', file: '📄 ' }
 
 /** Colore del conto alla rovescia: rosso negli ultimi 3 giorni, giallo negli ultimi 7. */
 const daysClass = (days: number) => (days <= 3 ? 'tag tag-danger' : days <= 7 ? 'tag tag-warning' : 'tag')
@@ -21,7 +30,7 @@ export default function TrashTab() {
   const { can } = useAuth()
   const trash = useTrash(server.id)
   const actions = useTrashActions(server.id)
-  const [kind, setKind] = useState<'all' | 'file' | 'mod'>('all')
+  const [kind, setKind] = useState<'all' | 'file' | 'mod' | 'plugin'>('all')
   const [conflict, setConflict] = useState<{ id: string; message: string } | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
   const [confirmEmpty, setConfirmEmpty] = useState(false)
@@ -45,10 +54,23 @@ export default function TrashTab() {
       { id: item.id, overwrite },
       {
         onSuccess: (r) => {
-          const what = item.kind === 'mod' ? `La mod ${item.modName}` : `"${item.path}"`
+          const what =
+            item.kind === 'mod'
+              ? `La mod ${item.modName}`
+              : item.kind === 'plugin'
+                ? item.path === 'plugin'
+                  ? `Il plugin ${item.name}`
+                  : item.path === 'file'
+                    ? `"${item.name}"`
+                    : `La versione ${item.modVersion ? `v${item.modVersion} ` : ''}di ${item.modName}`
+                : `"${item.path}"`
           const extra =
             item.kind === 'mod'
               ? ' È disabilitata: abilitala dalla scheda Mod.'
+              : item.kind === 'plugin' && item.path === 'plugin'
+                ? ' È disattivato: attivalo dalla scheda Plugin.'
+                : item.kind === 'plugin' && item.path?.startsWith('version:')
+                  ? ' È di nuovo tra le versioni del plugin.'
               : r.replaced
                 ? ' La versione che c\'era prima è finita nel cestino.'
                 : ''
@@ -75,6 +97,7 @@ export default function TrashTab() {
               <option value="all">Tutto</option>
               <option value="file">File</option>
               <option value="mod">Mod</option>
+              <option value="plugin">Plugin</option>
             </select>
           )}
           {(trash.data?.length ?? 0) > 0 &&
@@ -106,7 +129,7 @@ export default function TrashTab() {
         </div>
       </div>
       <p className="muted small">
-        File e mod eliminati, e le versioni sostituite da un caricamento, restano qui per 30 giorni; poi vengono
+        File, mod e plugin eliminati, e le versioni sostituite da un caricamento, restano qui per 30 giorni; poi vengono
         cancellati definitivamente in automatico.
         {items.length > 0 && ` ${items.length} elementi, ${formatBytes(total)}.`}
       </p>
@@ -133,7 +156,7 @@ export default function TrashTab() {
                 <tr key={item.id}>
                   <td>
                     <div>
-                      <span aria-hidden>{item.kind === 'mod' ? '🧩 ' : item.isDir ? '📁 ' : '📄 '}</span>
+                      <span aria-hidden>{item.kind === 'file' && item.isDir ? '📁 ' : KIND_ICON[item.kind]}</span>
                       <strong>{item.kind === 'mod' ? item.modName : item.name}</strong>
                       {item.modVersion && <span className="muted small"> v{item.modVersion}</span>}
                       {item.reason === 'replaced' && <span className="tag tag-accent"> versione sostituita</span>}

@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\ServerModpackActivationController;
 use App\Http\Controllers\Api\V1\ServerModpackController;
 use App\Http\Controllers\Api\V1\ServerModpackImportController;
 use App\Http\Controllers\Api\V1\ServerModWorkshopController;
+use App\Http\Controllers\Api\V1\ServerPluginController;
 use App\Http\Controllers\Api\V1\ServerPowerController;
 use App\Http\Controllers\Api\V1\ServerTrashController;
 use App\Services\Agent\ServerPowerAction;
@@ -33,6 +34,8 @@ Route::prefix('v1')
     ->where([
         'server' => '[a-z0-9][a-z0-9-]{0,31}',
         'mod' => '[A-Za-z0-9_]{1,64}',
+        'plugin' => '[A-Za-z0-9_][A-Za-z0-9_.+-]{0,95}',
+        'pluginVersion' => '[0-9a-f]{16}',
         'modpack' => '[a-z0-9]{8}',
         'item' => '[0-9]{13}-[0-9a-f]{8}',
         'installation' => '[0-9a-f]{8}',
@@ -85,6 +88,17 @@ Route::prefix('v1')
             Route::delete('/servers/{server}/mods/{mod}', [ServerModController::class, 'destroy'])->name('servers.mods.destroy');
             Route::get('/servers/{server}/mods/{mod}/download', [ServerModController::class, 'download'])->name('servers.mods.download');
             Route::get('/servers/{server}/mods/{mod}/icon', [ServerModController::class, 'icon'])->name('servers.mods.icon');
+
+            Route::controller(ServerPluginController::class)->prefix('/servers/{server}/plugins')->name('servers.plugins.')->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('/', 'store')->name('store');
+                Route::patch('/{plugin}', 'update')->name('update');
+                Route::delete('/{plugin}', 'destroy')->name('destroy');
+                Route::delete('/{plugin}/versions', 'destroyOldVersions')->name('versions.prune');
+                Route::post('/{plugin}/versions/{pluginVersion}/use', 'useVersion')->name('versions.use');
+                Route::delete('/{plugin}/versions/{pluginVersion}', 'destroyVersion')->name('versions.destroy');
+                Route::get('/{plugin}/versions/{pluginVersion}/download', 'download')->name('versions.download');
+            });
 
             Route::controller(ServerModArchiveController::class)->prefix('/servers/{server}/archive')->name('servers.archive.')->group(function () {
                 Route::get('/', 'index')->name('index');

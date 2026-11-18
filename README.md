@@ -106,7 +106,7 @@ data/
 ├── update-check.json               ultimo controllo giornaliero degli aggiornamenti
 ├── steamcmd/                       scaricato al primo uso
 ├── servers/<id>/                   serverconfig.txt, save/ (Mods, ModConfigs, Worlds), logs/,
-│                                   modpacks.json, archive/, trash/
+│                                   modpacks.json, archive/, plugins/ (versioni dei plugin TShock), trash/
 ├── cache/                          download del Workshop
 └── tmp/
 ```
@@ -135,7 +135,7 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
   `Mods/ModPacks` del server, oppure upload del `.json` o della cartella del pack in `.zip`).
 - **File**: SaveData e mondi: naviga, carica, scarica (cartelle come `.zip`), rinomina, elimina (cestino), modifica i
   file di testo. Della cartella di tModLoader si vedono solo i `.txt` di primo livello e `tModLoader-Logs/`.
-- **Cestino**: file e mod eliminati o sostituiti, con ripristino; cancellazione automatica dopo 30 giorni.
+- **Cestino**: file, mod e plugin eliminati o sostituiti, con ripristino; cancellazione automatica dopo 30 giorni.
 - **Gestione server** (admin): creazione di nuovi server (cartella in `data/servers/<id>`, mondo generato al primo
   avvio, mod copiabili da un altro server), impostazioni (porta, giocatori, password, motd), rimozione dal pannello.
 - **TShock** (admin): server Terraria con plugin, a cui i giocatori si collegano con Terraria normale. Installazione e
@@ -144,6 +144,12 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
   varrebbero quelli del `config.json` di TShock). Configurazione, database (account, gruppi, regioni, SSC), log e plugin
   di ogni server stanno nel suo `save/` (`tshock/` e `ServerPlugins/`, dalla sezione File): restano passando a vanilla
   o tModLoader e tornando indietro.
+- **Plugin** (server TShock, permesso `mods`): caricamento delle `.dll` (anche trascinandole sulla pagina), attivazione e
+  disattivazione, elenco dei plugin inclusi in TShock. Ogni caricamento resta salvato in `data/servers/<id>/plugins/`
+  (le versioni sono riconosciute dal contenuto, quindi anche due build con lo stesso numero restano distinte): da
+  *Versioni* si sceglie quale usare, si scaricano, si eliminano una alla volta o tutte tranne quella scelta (nel
+  cestino). In `ServerPlugins/` c'è solo la versione scelta dei plugin attivi; le `.dll` messe lì a mano entrano
+  nell'elenco da sole. Le modifiche valgono al riavvio del server.
 - **Versioni** (admin): per ogni gioco c'è un'installazione principale, condivisa (aggiornandola si aggiornano tutti i
   server che la usano), più le versioni fisse, che non si aggiornano. Dalla Panoramica di un server si sceglie gioco e
   versione, anche una non ancora installata: il pannello la installa come versione fissa, spegne il server salvando il

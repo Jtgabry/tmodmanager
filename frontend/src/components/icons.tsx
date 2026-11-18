@@ -33,6 +33,15 @@ export const IconMods = () => (
   </Icon>
 )
 
+/** Spina: i plugin si "innestano" nel server. */
+export const IconPlugins = () => (
+  <Icon>
+    <path d="M9 2v5M15 2v5" />
+    <path d="M6 7h12v4a6 6 0 0 1-12 0z" />
+    <path d="M12 17v5" />
+  </Icon>
+)
+
 export const IconModpacks = () => (
   <Icon>
     <rect x="3" y="3" width="8" height="8" rx="1" />

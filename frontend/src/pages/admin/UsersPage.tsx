@@ -10,7 +10,7 @@ const ABILITY_LABELS: Record<ServerAbility, string> = {
   view: 'Accesso',
   console: 'Console',
   power: 'Avvio/stop',
-  mods: 'Mod',
+  mods: 'Mod e plugin',
   files: 'File',
   backups: 'Backup',
 }

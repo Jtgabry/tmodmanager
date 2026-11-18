@@ -60,7 +60,7 @@ class ServerTrashTest extends TestCase
             ->assertJsonPath('data.replaced', true);
 
         Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
-            && $request->url() === self::AGENT_URL.'/servers/alfa/trash/'.self::ITEM.'/restore?kinds=file%2Cmod&overwrite=1');
+            && $request->url() === self::AGENT_URL.'/servers/alfa/trash/'.self::ITEM.'/restore?kinds=file%2Cmod%2Cplugin&overwrite=1');
     }
 
     public function test_conflicts_from_the_agent_are_returned(): void
@@ -82,9 +82,9 @@ class ServerTrashTest extends TestCase
         $this->deleteJson(route('api.v1.servers.trash.clear', 'alfa'))->assertOk()->assertJsonPath('data.removed', 2);
 
         Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
-            && $request->url() === self::AGENT_URL.'/servers/alfa/trash/'.self::ITEM.'?kinds=mod');
+            && $request->url() === self::AGENT_URL.'/servers/alfa/trash/'.self::ITEM.'?kinds=mod%2Cplugin');
         Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
-            && $request->url() === self::AGENT_URL.'/servers/alfa/trash?kinds=mod');
+            && $request->url() === self::AGENT_URL.'/servers/alfa/trash?kinds=mod%2Cplugin');
     }
 
     public function test_invalid_item_ids_do_not_match_the_route(): void

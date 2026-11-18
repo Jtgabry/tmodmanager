@@ -11,7 +11,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Cestino di un server: file eliminati o sovrascritti (permesso "files") e mod eliminate (permesso "mods").
+ * Cestino di un server: file eliminati o sovrascritti (permesso "files") e mod e plugin eliminati (permesso "mods").
  * Gli elementi vengono cancellati dall'agent dopo 30 giorni.
  */
 class ServerTrashController extends Controller
@@ -61,6 +61,7 @@ class ServerTrashController extends Controller
         $kinds = array_keys(array_filter([
             'file' => $user->can('server', [$server, ServerAbility::Files]),
             'mod' => $user->can('server', [$server, ServerAbility::Mods]),
+            'plugin' => $user->can('server', [$server, ServerAbility::Mods]),
         ]));
         abort_if($kinds === [], 403);
 

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { FileError, restoreEntry } from '../files.js'
 import { ModError, restoreMod, withServerLock } from '../mods.js'
+import { restorePlugin } from '../plugins.js'
 import { findServer, type ServerDefinition } from '../registry.js'
 import { emptyTrash, forgetTrashItem, getTrashItem, listTrash, removeTrashItem, type TrashKind, TrashError } from '../trash.js'
 
@@ -9,9 +10,9 @@ type Req = {
   Querystring: { kinds?: string; overwrite?: string }
 }
 
-/** Tipi di elementi visibili a chi chiede (Laravel li passa in base ai permessi: file e/o mod). */
+/** Tipi di elementi visibili a chi chiede (Laravel li passa in base ai permessi: file e/o mod e plugin). */
 const parseKinds = (raw: string | undefined): TrashKind[] => {
-  const kinds = (raw ?? 'file,mod').split(',').filter((k): k is TrashKind => k === 'file' || k === 'mod')
+  const kinds = (raw ?? 'file,mod,plugin').split(',').filter((k): k is TrashKind => k === 'file' || k === 'mod' || k === 'plugin')
   return [...new Set(kinds)]
 }
 
@@ -46,7 +47,9 @@ export async function trashRoutes(app: FastifyInstance) {
       const restored =
         meta.kind === 'mod'
           ? await restoreMod(s, meta.modName ?? '', itemPath, overwrite)
-          : await restoreEntry(s, meta, itemPath, overwrite)
+          : meta.kind === 'plugin'
+            ? await restorePlugin(s, meta, itemPath, overwrite)
+            : await restoreEntry(s, meta, itemPath, overwrite)
       await forgetTrashItem(s, id)
       return { item: meta, ...restored }
     })

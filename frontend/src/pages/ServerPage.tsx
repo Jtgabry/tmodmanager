@@ -14,6 +14,7 @@ const TITLES: Record<string, string> = {
   mods: 'Mod',
   workshop: 'Workshop',
   modpacks: 'Modpack',
+  plugins: 'Plugin',
   files: 'File',
   backups: 'Backup',
   trash: 'Cestino',
@@ -38,6 +39,8 @@ export default function ServerPage() {
   const section = pathname.split('/')[3] ?? ''
   // Mod, Workshop e modpack solo per tModLoader (es. dopo il passaggio a vanilla con la pagina aperta)
   if (server.game !== 'tmodloader' && MOD_SECTIONS.includes(section)) return <Navigate to={`/servers/${server.id}`} replace />
+  // Plugin solo per TShock
+  if (server.game !== 'tshock' && section === 'plugins') return <Navigate to={`/servers/${server.id}`} replace />
   const title = TITLES[section] ?? 'Panoramica'
 
   return (
@@ -56,7 +59,7 @@ export default function ServerPage() {
 
       {server.restartRequired && (
         <div className="alert alert-warning">
-          Le mod sono cambiate dopo l'avvio: riavvia il server per applicare le modifiche.
+          {server.game === 'tshock' ? 'I plugin sono cambiati' : 'Le mod sono cambiate'} dopo l'avvio: riavvia il server per applicare le modifiche.
         </div>
       )}
 

@@ -15,6 +15,7 @@ import {
   IconModpacks,
   IconMods,
   IconOverview,
+  IconPlugins,
   IconServers,
   IconSettings,
   IconTrash,
@@ -81,6 +82,11 @@ function ServerNav({ serverId, server }: { serverId: string; server: Server | un
               Modpack
             </NavItem>
           </>
+        )}
+        {can(serverId, 'mods') && server?.game === 'tshock' && (
+          <NavItem to={`${base}/plugins`} icon={<IconPlugins />}>
+            Plugin
+          </NavItem>
         )}
         {can(serverId, 'files') && (
           <NavItem to={`${base}/files`} icon={<IconFiles />}>

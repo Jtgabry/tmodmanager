@@ -12,6 +12,7 @@ import { adminRoutes } from './routes/admin.js'
 import { backupRoutes } from './routes/backups.js'
 import { fileRoutes } from './routes/files.js'
 import { modRoutes } from './routes/mods.js'
+import { pluginRoutes } from './routes/plugins.js'
 import { serverRoutes } from './routes/servers.js'
 import { trashRoutes } from './routes/trash.js'
 import { workshopRoutes } from './routes/workshop.js'
@@ -80,6 +81,7 @@ app.get<{ Params: { id: string } }>('/ws/servers/:id/console', { websocket: true
 
 await app.register(serverRoutes, { manager })
 await app.register(modRoutes)
+await app.register(pluginRoutes)
 await app.register(fileRoutes)
 await app.register(trashRoutes)
 await app.register(backupRoutes, { manager })

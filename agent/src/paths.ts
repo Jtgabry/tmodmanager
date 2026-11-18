@@ -27,6 +27,7 @@ import type { Game } from './games.js'
  *   │   ├── modpacks.json
  *   │   ├── mods-state.json      impronta delle mod all'avvio (avviso "riavvio necessario")
  *   │   ├── archive/<Mod>/<versione>.tmod
+ *   │   ├── plugins/<Plugin>/    TShock: tutte le versioni caricate (<impronta>.dll) e state.json (versione scelta)
  *   │   ├── backups/             backup dei mondi (<Mondo>_backup_<YmdHis>.zip)
  *   │   └── trash/<elemento>/
  *   ├── cache/                   download del Workshop, screenrc
