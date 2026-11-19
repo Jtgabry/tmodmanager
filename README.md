@@ -159,9 +159,10 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
   Da vicino blocchi e muri hanno i loro sprite: quelli delle mod presi dai `.tmod`, quelli di Terraria dalle texture
   del gioco se sono in `data/terraria-assets/<versione>/Images/` (`Tiles_*.xnb` e `Wall_*.xnb`, da un'installazione
   di Terraria: il pannello non li distribuisce). Con LiveMap i pezzi degli sprite li sceglie il gioco (anche gli
-  schemi propri delle mod); senza, i dati delle tile si ricavano dal `.wld` e dal `.twld` e i pezzi li sceglie il
-  pannello con lo schema standard di Terraria (bordi squadrati tra materiali diversi, e per le mod con uno schema
-  proprio pezzi sbagliati).
+  schemi propri delle mod); senza, i dati delle tile si ricavano dal `.wld` e dal `.twld`, e i pezzi di blocchi e
+  muri di Terraria li calcola comunque il codice del gioco (`addons/tools/WorldFrames`, con OTAPI, nell'agent dopo
+  ogni salvataggio del mondo: fusioni tra materiali comprese). Restano a uno schema standard solo i blocchi delle mod
+  senza LiveMap.
 - **Add-on** (`addons/`): scritti per tModManager e distribuiti con il pannello, come **LiveMap** (mappa del mondo in
   tempo reale). Per TShock è un plugin, già tra i plugin di ogni server, disattivato: si attiva con un clic. Per
   tModLoader è una mod solo lato server, che compare nel **Workshop** del pannello (anche senza la chiave di Steam):

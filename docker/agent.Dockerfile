@@ -30,6 +30,11 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && rm -f /etc/localtime /etc/timezone
 
+# Runtime .NET per gli strumenti degli add-on (WorldFrames: frame delle tile con il codice di Terraria, per gli sprite
+# della mappa senza LiveMap). I server di gioco usano il proprio (tModLoader lo scarica, TShock lo porta con sé)
+COPY --from=mcr.microsoft.com/dotnet/runtime:9.0 /usr/share/dotnet /usr/share/dotnet
+RUN ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet
+
 WORKDIR /app/agent
 COPY --from=build /app/agent/node_modules ./node_modules
 COPY --from=build /app/agent/dist ./dist

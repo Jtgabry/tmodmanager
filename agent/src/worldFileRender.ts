@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { modBlockColors } from './modMapColors.js'
 import { encodePng } from './png.js'
@@ -29,12 +31,81 @@ export type RenderJob = {
   /** tModLoader: il .twld accanto al .wld (blocchi delle mod) e la cartella delle mod (per i loro colori). */
   twldPath?: string | null
   modsDir?: string | null
+  /** Strumento che calcola i frame delle tile con il codice di Terraria (addons/tools/WorldFrames), se c'è. */
+  frames?: { dotnet: string; dll: string } | null
 }
 
 /** Esito della lettura dei blocchi delle mod (.twld). */
 export type ModBlocksInfo = { tiles: number; walls: number; fromTextures: number; error: string | null }
 
-type PreviousManifest = { cols?: number; rows?: number; chunks?: number[]; hashes?: string[]; tileData?: number; overview?: { version?: number; hash?: string } }
+type PreviousManifest = {
+  cols?: number
+  rows?: number
+  chunks?: number[]
+  hashes?: string[]
+  tileData?: number
+  /** Impronte dei dati delle tile prima e dopo il calcolo dei frame, e se i frame li ha calcolati il gioco. */
+  rawHashes?: string[]
+  tileHashes?: string[]
+  framed?: boolean
+  overview?: { version?: number; hash?: string }
+}
+
+/**
+ * Frame delle tile dei riquadri indicati, calcolati da WorldFrames con il codice di Terraria (con i vicini: servono
+ * anche i loro dati). Restituisce i dati con i frame, compressi, per indice; un errore lascia i riquadri senza.
+ */
+async function computeFrames(
+  tool: { dotnet: string; dll: string },
+  sink: WorldTileSink,
+  targets: Set<number>,
+  grid: { cols: number; rows: number; width: number; height: number },
+): Promise<Map<number, Buffer>> {
+  const work = await mkdtemp(join(tmpdir(), 'tmm-frames-'))
+  try {
+    const input = join(work, 'in')
+    const output = join(work, 'out')
+    await mkdir(input)
+    const needed = new Set<number>()
+    for (const i of targets) for (const n of neighbours(i, grid)) needed.add(n)
+    for (const i of needed) {
+      const chunk = sink.chunks.get(i)
+      if (chunk) await writeFile(join(input, `${i % grid.cols}_${Math.floor(i / grid.cols)}.bin`), chunk.gzip)
+    }
+    const list = [...targets].map((i) => `${i % grid.cols} ${Math.floor(i / grid.cols)}`).join('\n')
+    await new Promise<void>((resolve, reject) => {
+      const child = execFile(
+        tool.dotnet,
+        [tool.dll, input, output, String(grid.width), String(grid.height), String(CHUNK_WIDTH), String(CHUNK_HEIGHT)],
+        { timeout: 15 * 60 * 1000, maxBuffer: 1024 * 1024 },
+        (err) => (err ? reject(err) : resolve()),
+      )
+      child.stdin?.end(`${list}\n`)
+    })
+    const framed = new Map<number, Buffer>()
+    for (const i of targets) {
+      const data = await readFile(join(output, `${i % grid.cols}_${Math.floor(i / grid.cols)}.bin`)).catch(() => null)
+      if (data) framed.set(i, data)
+    }
+    return framed
+  } finally {
+    await rm(work, { recursive: true, force: true })
+  }
+}
+
+/** Il riquadro e i suoi 8 vicini (quelli dentro il mondo). */
+function neighbours(i: number, grid: { cols: number; rows: number }): number[] {
+  const cx = i % grid.cols
+  const cy = Math.floor(i / grid.cols)
+  const out: number[] = []
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = cx + dx
+      const y = cy + dy
+      if (x >= 0 && y >= 0 && x < grid.cols && y < grid.rows) out.push(y * grid.cols + x)
+    }
+  return out
+}
 
 const nextVersion = (previous: number) => Math.max(previous + 1, Date.now())
 const hashOf = (png: Buffer) => createHash('sha256').update(png).digest('hex').slice(0, 16)
@@ -97,6 +168,28 @@ export async function renderWorldFile(job: RenderJob): Promise<{ width: number; 
   // Riquadri del formato vecchio (senza dati delle tile): si riscrivono tutti
   const sameFormat = sameGrid && previous.tileData === TILE_FORMAT
 
+  // Frame con il codice di Terraria: per i riquadri i cui dati sono cambiati e per i loro vicini (i bordi dipendono
+  // dalle tile accanto); gli altri restano come sono. Se lo strumento non c'è o fallisce, li sceglie il pannello
+  const rawHashes = Array.from({ length: cols * rows }, (_, i) => sink.chunks.get(i)?.hash ?? '')
+  const reuseFrames = sameFormat && previous.framed === true && previous.rawHashes?.length === rawHashes.length
+  let framed = new Map<number, Buffer>()
+  let frameError: string | null = null
+  if (job.frames) {
+    const targets = new Set<number>()
+    for (let i = 0; i < rawHashes.length; i++) {
+      if (!reuseFrames || previous.rawHashes![i] !== rawHashes[i]) for (const n of neighbours(i, { cols, rows })) targets.add(n)
+    }
+    if (targets.size) {
+      try {
+        framed = await computeFrames(job.frames, sink, targets, { cols, rows, width, height })
+      } catch (err) {
+        frameError = err instanceof Error ? err.message : String(err)
+      }
+    }
+  }
+  const usedFrames = job.frames != null && frameError === null
+  const tileHashes: string[] = []
+
   const versions: number[] = []
   const hashes: string[] = []
   for (let cy = 0; cy < rows; cy++) {
@@ -105,13 +198,18 @@ export async function renderWorldFile(job: RenderJob): Promise<{ width: number; 
       const w = Math.min(CHUNK_WIDTH, width - cx * CHUNK_WIDTH)
       const h = Math.min(CHUNK_HEIGHT, height - cy * CHUNK_HEIGHT)
       const png = encodePng(pixels, w, h, width, cy * CHUNK_HEIGHT * width + cx * CHUNK_WIDTH)
-      const tiles = sink.chunks.get(i)
-      const hash = tiles ? `${hashOf(png)}${tiles.hash}` : hashOf(png)
+      // Dati delle tile: con i frame appena calcolati, quelli di prima (riquadro e vicini non cambiati) o senza frame
+      const fresh = framed.get(i)
+      const kept = usedFrames && reuseFrames && !fresh && previous.tileHashes?.[i] ? previous.tileHashes[i] : null
+      const tiles = fresh ?? (kept ? null : (sink.chunks.get(i)?.gzip ?? null))
+      const tileHash = kept ?? (tiles ? hashOf(tiles) : '')
+      tileHashes.push(tileHash)
+      const hash = `${hashOf(png)}${tileHash}`
       if (sameFormat && previous.hashes?.[i] === hash && previous.chunks?.[i]) {
         versions.push(previous.chunks[i])
       } else {
         await writeAtomic(join(chunksDir, `${cx}_${cy}.png`), png)
-        if (tiles) await writeAtomic(join(tilesDir, `${cx}_${cy}.bin`), tiles.gzip)
+        if (tiles) await writeAtomic(join(tilesDir, `${cx}_${cy}.bin`), tiles)
         versions.push(nextVersion(sameGrid ? (previous.chunks?.[i] ?? 0) : 0))
       }
       hashes.push(hash)
@@ -143,6 +241,10 @@ export async function renderWorldFile(job: RenderJob): Promise<{ width: number; 
     overview: { scale: OVERVIEW_SCALE, width: ow, height: oh, version: overviewVersion, hash: overviewHash },
     progress: { drawn: cols * rows, total: cols * rows },
     tileData: TILE_FORMAT,
+    rawHashes,
+    tileHashes,
+    framed: usedFrames,
+    frameError,
     // Da quale file: se cambia (salvataggio del mondo), la mappa si ridisegna
     source: job.source,
     terraria: colors.terraria,

@@ -19,6 +19,8 @@ import { TILE_FORMAT } from './worldTiles.js'
 
 export const worldMapDir = (serverId: string) => join(paths.server(serverId), 'worldmap')
 export const mapColorsPath = () => join(config.addonsDir, 'map-colors.json')
+/** Strumento che calcola i frame delle tile con il codice di Terraria (addons/tools/WorldFrames), se c'è. */
+const worldFramesPath = () => join(config.addonsDir, 'WorldFrames', 'WorldFrames.dll')
 
 /** Un file appena modificato potrebbe essere ancora in scrittura (salvataggio in corso): si aspetta. */
 const SETTLE_MS = 3000
@@ -76,15 +78,25 @@ export async function refreshWorldFileMap(server: ServerDefinition): Promise<Wor
 
   let drawn: WorldFileSource | null = null
   let tileData = 0
+  let framed = false
   try {
-    const manifest = JSON.parse(await readFile(join(worldMapDir(server.id), 'manifest.json'), 'utf8')) as { source?: WorldFileSource; tileData?: number }
+    const manifest = JSON.parse(await readFile(join(worldMapDir(server.id), 'manifest.json'), 'utf8')) as {
+      source?: WorldFileSource
+      tileData?: number
+      framed?: boolean
+      frameError?: string | null
+    }
     drawn = manifest.source ?? null
     tileData = manifest.tileData ?? 0
+    // Strumento fallito su questo file: si riprova al prossimo salvataggio, non a ogni controllo
+    framed = (manifest.framed ?? false) || Boolean(manifest.frameError)
   } catch {
     // mai disegnata
   }
-  // Stesso file e stesso formato: niente da rifare (una mappa di una versione precedente si ridisegna una volta)
-  if (drawn && sourceKey(drawn) === key && tileData === TILE_FORMAT) return status
+  const frames = await stat(worldFramesPath()).then(() => ({ dotnet: config.dotnet, dll: worldFramesPath() }), () => null)
+  // Stesso file e stesso formato: niente da rifare (una mappa di una versione precedente, o senza i frame calcolati
+  // quando ora lo strumento c'è, si ridisegna una volta)
+  if (drawn && sourceKey(drawn) === key && tileData === TILE_FORMAT && (framed || !frames)) return status
 
   const state = states.get(server.id) ?? { running: false, failed: null }
   states.set(server.id, state)
@@ -100,6 +112,7 @@ export async function refreshWorldFileMap(server: ServerDefinition): Promise<Wor
     colorsPath: mapColorsPath(),
     twldPath: twld ? twldPath : null,
     modsDir: twld ? join(server.saveDir, 'Mods') : null,
+    frames,
   }
   queue = queue
     .then(() => runWorker(job))

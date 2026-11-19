@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compila gli add-on di tModManager in addons/dist/:
+# Compila gli add-on di tModManager in addons/dist/ (più gli strumenti in tools/, vedi in fondo):
 #   - plugin TShock (es. LiveMap)            → dist/<Nome>.dll
 #   - mod tModLoader (es. TmmLiveMap, con build.txt) → dist/<Nome>.tmod
 # e ricava i colori della mappa di Terraria in dist/map-colors.json (tools/MapColors).
@@ -61,7 +61,11 @@ for project in "${projects[@]}"; do
   fi
 done
 
-# Colori della minimappa di Terraria, per disegnare la mappa dai file del mondo (.wld) nell'agent
+# Colori della minimappa di Terraria, per disegnare la mappa dai file del mondo (.wld) nell'agent, e lo strumento che
+# calcola i frame delle tile con il codice di Terraria (sprite della mappa senza LiveMap)
 if ((!$#)); then
   "$DOTNET" run --project tools/MapColors -c Release -v quiet -- dist/map-colors.json
+  rm -rf dist/WorldFrames
+  "$DOTNET" publish tools/WorldFrames -c Release --nologo -v quiet -o dist/WorldFrames >/dev/null
+  echo "addons/dist/WorldFrames/WorldFrames.dll"
 fi

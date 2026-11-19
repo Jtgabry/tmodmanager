@@ -63,6 +63,8 @@ export const config = {
    * /app/addons, in sviluppo addons/dist (creata da addons/build.sh). Se manca, gli add-on non compaiono.
    */
   addonsDir: resolve(projectRoot, process.env.AGENT_ADDONS_DIR ?? 'addons/dist'),
+  /** Runtime .NET per gli strumenti degli add-on (WorldFrames); nell'immagine Docker è nel PATH. */
+  dotnet: process.env.AGENT_DOTNET || 'dotnet',
   /** steamcmd già installato altrove (facoltativo); di default viene scaricato in data/steamcmd. */
   steamcmdOverride: process.env.AGENT_STEAMCMD ? resolve(process.env.AGENT_STEAMCMD) : null,
 }

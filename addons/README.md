@@ -30,6 +30,13 @@ Versioni per la compilazione:
 - Il `.tmod` lo crea `tools/TmodPack` (stesso formato di tModLoader: intestazione, hash SHA1, `Info` con le proprietà
   di `build.txt`, la .dll, la .pdb, `icon.png`), senza avviare tModLoader.
 
+`tools/WorldFrames` non è un add-on: calcola i frame di blocchi e muri (quale parte del foglio di sprite usare) con
+il codice di Terraria, tramite OTAPI, come il client quando riceve il mondo. L'agent lo usa per la mappa ricavata dal
+file del mondo, senza LiveMap: gli passa i dati delle tile dei riquadri cambiati (e dei vicini, i bordi dipendono
+da loro) e riceve gli stessi dati con i frame; un riquadro alla volta, in una finestra con un margine di tile, con un
+seme fisso per le varianti casuali (a parità di mondo, stessi frame). Nell'immagine Docker c'è il runtime .NET apposta.
+I blocchi delle mod non li conosce: per i vicini valgono come pietra, e il loro frame resta al pannello.
+
 `tools/MapColors` non è un add-on: durante la build ricava da Terraria (tramite OTAPI, `MapHelper.Initialize()`)
 i colori della minimappa e li scrive in `dist/map-colors.json`. L'agent li usa per disegnare la mappa dai file del
 mondo (`.wld`) di qualsiasi server, anche senza LiveMap. Nessuna tabella di colori copiata a mano nel repository: si

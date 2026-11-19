@@ -3,11 +3,13 @@ import { mkdir, mkdtemp, readFile, stat, utimes, writeFile } from 'node:fs/promi
 import { gunzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import { test } from 'node:test'
 import { config } from '../src/config.ts'
 import { ServerDefinition } from '../src/registry.ts'
 import { type MapColors, readWorldHeader, renderWorld } from '../src/worldFile.ts'
 import { worldFileMapIdle } from '../src/worldFileMap.ts'
+import { renderWorldFile } from '../src/worldFileRender.ts'
 import { mapChunkPath, mapOverviewPath, worldMap } from '../src/worldMap.ts'
 
 const WIDTH = 240
@@ -184,4 +186,29 @@ test('server TShock: LiveMap ha la precedenza quando ha disegnato, altrimenti la
   assert.deepEqual(live.players.map((p) => p.name), ['Ana'])
   assert.equal('hashes' in (live.manifest ?? {}), false)
   assert.equal(await mapChunkPath(server, 'livemap', '../x', '1'), null)
+})
+
+// Lo strumento lo compila addons/build.sh (nella CI prima dei test); senza, il test si salta
+const WORLD_FRAMES = join(import.meta.dirname, '..', '..', 'addons', 'dist', 'WorldFrames', 'WorldFrames.dll')
+const DOTNET = process.env.AGENT_DOTNET || (existsSync(join(process.env.HOME ?? '', '.dotnet', 'dotnet')) ? join(process.env.HOME ?? '', '.dotnet', 'dotnet') : 'dotnet')
+
+test('frame delle tile calcolati con il codice di Terraria (WorldFrames), e non ricalcolati se il mondo non cambia', { skip: !existsSync(WORLD_FRAMES) }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tmm-frames-'))
+  const world = join(dir, 'Prova.wld')
+  await writeFile(world, fakeWorld('Prova'))
+  const colors = join(dir, 'colors.json')
+  await writeFile(colors, JSON.stringify(COLORS))
+  const out = join(dir, 'map')
+  const job = { worldPath: world, source: { file: 'Prova.wld', mtimeMs: 1, size: 1 }, outDir: out, colorsPath: colors, frames: { dotnet: DOTNET, dll: WORLD_FRAMES } }
+  await renderWorldFile(job)
+  const manifest = JSON.parse(await readFile(join(out, 'manifest.json'), 'utf8'))
+  assert.deepEqual([manifest.framed, manifest.frameError], [true, null])
+  const tiles = gunzipSync(await readFile(join(out, 'tiles', '0_1.bin')))
+  const at = (x: number, y: number) => 10 + ((y - 150) * 200 + x) * 12
+  // Colonna di terra larga una tile: il gioco le dà un frame (non più -1), e al muro il suo
+  assert.ok(tiles.readInt16LE(at(10, 160) + 2) >= 0)
+  assert.notEqual(tiles[at(20, 160) + 10], 0xff)
+
+  await renderWorldFile(job)
+  assert.deepEqual(JSON.parse(await readFile(join(out, 'manifest.json'), 'utf8')).chunks, manifest.chunks)
 })
