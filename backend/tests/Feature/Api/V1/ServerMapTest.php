@@ -75,6 +75,7 @@ class ServerMapTest extends TestCase
             self::AGENT_URL.'/servers/alfa/map/livemap/tiles/2/1' => Http::response("\x1f\x8bdati", 200, ['Content-Type' => 'application/octet-stream']),
             self::AGENT_URL.'/servers/alfa/map/livemap/types' => Http::response(['data' => ['format' => 1, 'modTiles' => ['700' => ['mod' => 'Foo', 'name' => 'Bar', 'texture' => 'Foo/Tiles/Bar']]]]),
             self::AGENT_URL.'/servers/alfa/map/livemap/sprites/tiles/700' => Http::response('PNG', 200, ['Content-Type' => 'image/png']),
+            self::AGENT_URL.'/servers/alfa/map/world/sprites/treetops/2' => Http::response('PNG', 200, ['Content-Type' => 'image/png']),
         ]);
 
         $this->get(route('api.v1.servers.map.tiles', ['alfa', 'livemap', 2, 1, 'v' => 5]))
@@ -83,11 +84,12 @@ class ServerMapTest extends TestCase
             ->assertHeader('Cache-Control', 'immutable, max-age=31536000, private');
         $this->getJson(route('api.v1.servers.map.types', ['alfa', 'livemap', 'v' => 5]))->assertOk()->assertJsonPath('data.modTiles.700.mod', 'Foo');
         $this->get(route('api.v1.servers.map.sprite', ['alfa', 'livemap', 'tiles', 700]))->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get(route('api.v1.servers.map.sprite', ['alfa', 'world', 'treetops', 2]))->assertOk();
 
         $this->get('/api/v1/servers/alfa/map/livemap/sprites/altro/700')->assertNotFound();
         $this->get('/api/v1/servers/alfa/map/livemap/sprites/tiles/x')->assertNotFound();
         $this->get('/api/v1/servers/alfa/map/altro/tiles/0/0')->assertNotFound();
-        Http::assertSentCount(3);
+        Http::assertSentCount(4);
     }
 
     public function test_tile_data_requires_access_to_the_server(): void

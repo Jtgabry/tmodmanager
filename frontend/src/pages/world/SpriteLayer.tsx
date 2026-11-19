@@ -122,7 +122,8 @@ export default function SpriteLayer({
       const have = sheets.current.get(key)
       if (have instanceof HTMLImageElement) return have
       if (have) return null
-      const isVanilla = type < (kind === 'tiles' ? tileTypes.vanillaTiles : tileTypes.vanillaWalls)
+      const tree = kind === 'treetops' || kind === 'treebranches'
+      const isVanilla = tree || type < (kind === 'tiles' ? tileTypes.vanillaTiles : tileTypes.vanillaWalls)
       if (isVanilla ? !vanilla : !(kind === 'tiles' ? tileTypes.modTiles : tileTypes.modWalls)[String(type)]) {
         sheets.current.set(key, 'missing')
         return null

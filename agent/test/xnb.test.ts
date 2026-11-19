@@ -79,4 +79,9 @@ test('sprite di Terraria: dalle texture del gioco in terraria-assets, anche per 
   assert.equal(await spritePng(server, typesPath, 'tiles', 700), png) // blocco di una mod con la texture di Terraria
   assert.equal(await spritePng(server, typesPath, 'tiles', 2), null) // texture non copiata
   assert.equal(await spritePng(server, typesPath, 'walls', 1), null)
+
+  // Chiome e rami degli alberi: texture a parte, per stile
+  await writeFile(join(images, 'Tree_Tops_2.xnb'), xnb(0, payload))
+  assert.equal(await spritePng(server, typesPath, 'treetops', 2), join(config.dataDir, 'terraria-assets', '1.4.5.8', 'png', 'Tree_Tops_2.png'))
+  assert.equal(await spritePng(server, typesPath, 'treebranches', 2), null)
 })

@@ -26,7 +26,7 @@ export const overviewUrl = (serverId: string, source: MapSource, version: number
 export const tilesUrl = (serverId: string, source: MapSource, cx: number, cy: number, version: number) =>
   `/api/v1/servers/${serverId}/map/${source}/tiles/${cx}/${cy}?v=${version}`
 
-export const spriteUrl = (serverId: string, source: MapSource, kind: 'tiles' | 'walls', type: number, version: number) =>
+export const spriteUrl = (serverId: string, source: MapSource, kind: 'tiles' | 'walls' | 'treetops' | 'treebranches', type: number, version: number) =>
   `/api/v1/servers/${serverId}/map/${source}/sprites/${kind}/${type}?v=${version}`
 
 /** Tipi di blocchi e muri della sorgente (cambiano a ogni avvio del server o salvataggio del mondo: `version`). */

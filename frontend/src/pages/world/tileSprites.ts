@@ -92,7 +92,12 @@ export function blockFrame(up: boolean, down: boolean, left: boolean, right: boo
 /** Variante stabile per posizione (il gioco la sceglie a caso e la tiene: qui serve solo che non cambi). */
 const variantAt = (x: number, y: number) => (((x * 73856093) ^ (y * 19349663)) >>> 0) % 3
 
-export type SpriteKind = 'tiles' | 'walls'
+export type SpriteKind = 'tiles' | 'walls' | 'treetops' | 'treebranches'
+
+/** Alberi di Terraria (tipo 5): cima e rami sono tile del tronco con questi frame, disegnate con texture a parte. */
+const TREE = 5
+/** Stile di chioma e rami secondo il blocco sotto il tronco (Tree_Tops_N, Tree_Branches_N); altrimenti la foresta. */
+const TREE_STYLE: Record<number, number> = { 23: 1, 60: 2, 109: 3, 147: 4, 199: 5, 492: 3 }
 
 export type SpriteSource = {
   types: TileTypes
@@ -252,6 +257,14 @@ export function drawSprites(
         fx = col * 18
         fy = row * 18
       }
+      // Tronchi degli alberi: celle da 20×20 (a passi di 22), larghe 2 pixel in più per lato; il foglio ha anche i
+      // legni degli altri biomi affiancati, qui si usa quello della foresta
+      if (type === TREE && vanilla) {
+        if (fx + 20 > sheet.naturalWidth || fy + 20 > sheet.naturalHeight) continue
+        const px = z / 16
+        ctx.drawImage(sheet, fx, fy, 20, 20, Math.round((x - view.x) * z - 2 * px), Math.round((y - view.y) * z), Math.round(20 * px), Math.round(20 * px))
+        continue
+      }
       if (fx + 16 > sheet.naturalWidth || fy + 16 > sheet.naturalHeight) continue
 
       const { sx, sy, w, h } = rect(x, y)
@@ -264,6 +277,55 @@ export function drawSprites(
       // Mezzo blocco: la metà alta dello sprite, nella metà bassa della tile (le pendenze per ora restano piene)
       if ((flags & 0x07) === 1) ctx.drawImage(sheet, fx, fy, 16, 8, sx, sy + Math.round(h / 2), w, h - Math.round(h / 2))
       else ctx.drawImage(sheet, fx, fy, 16, 16, sx, sy, w, h)
+    }
+  }
+
+  // 4. Chiome e rami degli alberi: debordano di qualche tile, quindi si guardano anche le tile appena fuori
+  if (!vanilla) return
+  /** Stile dell'albero: dal blocco sotto il tronco. */
+  const treeStyle = (x: number, y: number) => {
+    for (let k = 0; k < 64 && y + k < grid.worldHeight; k++) {
+      const t = at(x, y + k)
+      if (!t) return 0
+      const type = tileType(t[0], t[1])
+      if (type !== TREE) return TREE_STYLE[type] ?? 0
+    }
+    return 0
+  }
+  const px = z / 16 // pixel dello schermo per pixel della texture
+  for (let y = y0; y <= Math.min(grid.worldHeight - 1, y1 + 6); y++) {
+    for (let x = Math.max(0, x0 - 4); x <= Math.min(grid.worldWidth - 1, x1 + 4); x++) {
+      const t = at(x, y)
+      if (!t || tileType(t[0], t[1]) !== TREE) continue
+      const [chunk, i] = t
+      const fx = chunk.data.getInt16(i * chunk.stride + 2, true)
+      const fy = chunk.data.getInt16(i * chunk.stride + 4, true)
+      if (fy < 198 || (fx !== 22 && fx !== 44 && fx !== 66)) continue
+      const variant = fy >= 242 ? 2 : fy >= 220 ? 1 : 0
+      const top = fx === 22
+      const style = treeStyle(fx === 44 ? x + 1 : fx === 66 ? x - 1 : x, y)
+      const sheet = source.sheet(top ? 'treetops' : 'treebranches', style)
+      if (!sheet) continue
+      if (top) {
+        // Tre varianti affiancate, in celle con 2 pixel di bordo a destra e in basso (il consacrato ne ha nove: tre
+        // varianti per tre tonalità, si usa la prima); la chioma poggia sulla tile, centrata
+        const stride = style === 3 ? 82 : sheet.naturalWidth / 3
+        const w = stride - 2
+        const h = sheet.naturalHeight - 2
+        const sx = (x - view.x) * z + (8 - w / 2) * px
+        const sy = (y - view.y) * z + (16 - h) * px
+        ctx.drawImage(sheet, variant * stride, 0, w, h, Math.round(sx), Math.round(sy), Math.round(w * px), Math.round(h * px))
+      } else {
+        // Due colonne (sinistra, destra) di celle quadrate con 2 pixel di bordo, una riga per variante; il ramo parte
+        // dal tronco, centrato sulla tile in altezza
+        const stride = sheet.naturalWidth / 2
+        const w = stride - 2
+        const h = stride - 2
+        const left = fx === 44
+        const sx = (x - view.x) * z + (left ? 16 - w : 0) * px
+        const sy = (y - view.y) * z + (8 - h / 2) * px
+        ctx.drawImage(sheet, left ? 0 : stride, variant * stride, w, h, Math.round(sx), Math.round(sy), Math.round(w * px), Math.round(h * px))
+      }
     }
   }
 }

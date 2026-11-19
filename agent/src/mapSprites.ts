@@ -18,7 +18,8 @@ import { readXnbTexture } from './xnb.js'
  * gioco), convertiti allo stesso modo in data/terraria-assets/<versione>/png/.
  */
 
-export const SPRITE_KINDS = ['tiles', 'walls'] as const
+/** tiles e walls: per tipo; treetops e treebranches: chiome e rami degli alberi di Terraria, per stile. */
+export const SPRITE_KINDS = ['tiles', 'walls', 'treetops', 'treebranches'] as const
 export type SpriteKind = (typeof SPRITE_KINDS)[number]
 
 const ModType = z.object({ mod: z.string(), name: z.string(), texture: z.string() })
@@ -64,9 +65,9 @@ export async function vanillaAssets(): Promise<{ version: string; dir: string } 
   return null
 }
 
-const VANILLA_TEXTURE = /^(Tiles|Wall)_\d{1,5}$/
+const VANILLA_TEXTURE = /^(Tiles|Wall|Tree_Tops|Tree_Branches)_\d{1,5}$/
 
-/** PNG di una texture di Terraria ("Tiles_1", "Wall_4"), convertita dal .xnb la prima volta. */
+/** PNG di una texture di Terraria ("Tiles_1", "Wall_4", "Tree_Tops_0"), convertita dal .xnb la prima volta. */
 export async function vanillaSpritePng(name: string): Promise<string | null> {
   if (!VANILLA_TEXTURE.test(name)) return null
   const assets = await vanillaAssets()
@@ -144,6 +145,9 @@ export function rawimgToPng(data: Buffer): Buffer | null {
  * (null: mod non installata, texture non trovata). `typesPath`: il types.json di LiveMap del server.
  */
 export async function spritePng(server: ServerDefinition, typesPath: string, kind: SpriteKind, type: number): Promise<string | null> {
+  // Chiome e rami degli alberi: texture di Terraria a parte, per stile (foresta, giungla, neve…)
+  if (kind === 'treetops') return vanillaSpritePng(`Tree_Tops_${type}`)
+  if (kind === 'treebranches') return vanillaSpritePng(`Tree_Branches_${type}`)
   const entry = await readTileTypes(typesPath)
   if (!entry) return null
   const vanilla = kind === 'tiles' ? entry.types.vanillaTiles : entry.types.vanillaWalls
