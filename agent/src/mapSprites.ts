@@ -19,7 +19,8 @@ export type SpriteKind = (typeof SPRITE_KINDS)[number]
 
 const ModType = z.object({ mod: z.string(), name: z.string(), texture: z.string() })
 const Types = z.object({
-  format: z.literal(1),
+  // Formato dei dati delle tile (TileData.Format): i tipi sono gli stessi per tutti i formati
+  format: z.number().int().positive(),
   vanillaTiles: z.number().int(),
   vanillaWalls: z.number().int(),
   frameImportant: z.array(z.boolean()),

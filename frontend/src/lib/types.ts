@@ -478,7 +478,8 @@ export type ApplyPendingResult = { enabled: string[]; failed: { name: string; me
 
 /** Tipi di blocchi e muri di LiveMap (types.json): per scegliere e trovare gli sprite. Indici = tipi. */
 export type TileTypes = {
-  format: 1
+  /** Formato dei dati delle tile di LiveMap. */
+  format: number
   /** Blocchi e muri di Terraria: da qui in poi sono delle mod. */
   vanillaTiles: number
   vanillaWalls: number
