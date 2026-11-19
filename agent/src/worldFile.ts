@@ -180,7 +180,7 @@ function backgroundColors(header: WorldHeader, c: MapColors): Uint32Array {
  */
 /** Chi raccoglie i dati grezzi delle tile, nell'ordine del file (vedi worldTiles.ts). */
 export type TileSink = {
-  put(x: number, y: number, type: number, frameX: number, frameY: number, wall: number, shape: number, actuated: boolean, liquid: boolean, paint: number): void
+  put(x: number, y: number, type: number, frameX: number, frameY: number, wall: number, shape: number, actuated: boolean, liquid: number, amount: number, paint: number): void
 }
 
 export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink?: TileSink): { pixels: Uint32Array; layers: Uint8Array } {
@@ -225,8 +225,9 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink
       }
       const liquidBits = (h1 & 0x18) >> 3
       let liquid = -1
+      let amount = 0
       if (liquidBits) {
-        const amount = r.byte()
+        amount = r.byte()
         if (amount > 0) liquid = h3 & 0x80 ? 3 : liquidBits - 1 // acqua, lava, miele; shimmer
       }
       if (h3 & 0x40) wall |= r.byte() << 8
@@ -254,12 +255,12 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink
       // Senza blocco, liquido o muro: lo sfondo, che cambia con la profondità (anche per le tile ripetute)
       pixels[y * width + x] = color >= 0 ? color : background[y]
       layers[y * width + x] = layer
-      sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid >= 0, paint)
+      sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid, amount, paint)
       while (count-- > 0) {
         y++
         pixels[y * width + x] = color >= 0 ? color : background[y]
         layers[y * width + x] = layer
-        sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid >= 0, paint)
+        sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid, amount, paint)
       }
     }
   }

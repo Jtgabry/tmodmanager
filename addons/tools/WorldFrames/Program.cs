@@ -18,7 +18,7 @@ using Terraria.Utilities;
 // più di 5 tile dal bordo del mondo). Le varianti casuali hanno un seme fisso per riquadro: a parità di dati, a ogni
 // salvataggio del mondo escono gli stessi frame.
 
-const int Size = 12, NoTile = 0xFFFF, Margin = 8;
+const int NoTile = 0xFFFF, Margin = 8;
 const byte UnknownFrame = 0xFF;
 
 if (args.Length != 6)
@@ -52,11 +52,11 @@ Main.dedServ = true;
 (typeof(Framing).GetMethod("Initialize", Static) ?? throw new MissingMethodException("Framing", "Initialize")).Invoke(null, null);
 
 Directory.CreateDirectory(output);
-var chunks = new Dictionary<(int, int), (int W, int H, byte[] Data)?>();
-(int W, int H, byte[] Data)? Load(int cx, int cy)
+var chunks = new Dictionary<(int, int), (int W, int H, byte[] Data, int Size)?>();
+(int W, int H, byte[] Data, int Size)? Load(int cx, int cy)
 {
     if (chunks.TryGetValue((cx, cy), out var hit)) return hit;
-    (int, int, byte[])? chunk = null;
+    (int, int, byte[], int)? chunk = null;
     var path = Path.Combine(input, $"{cx}_{cy}.bin");
     if (File.Exists(path))
     {
@@ -64,8 +64,9 @@ var chunks = new Dictionary<(int, int), (int W, int H, byte[] Data)?>();
         using var ms = new MemoryStream();
         gzip.CopyTo(ms);
         var raw = ms.ToArray();
-        if (raw.Length >= 10 && raw[4] == 2 && raw[5] == Size)
-            chunk = (BinaryPrimitives.ReadUInt16LittleEndian(raw.AsSpan(6)), BinaryPrimitives.ReadUInt16LittleEndian(raw.AsSpan(8)), raw);
+        // Formato 2 (12 byte per tile) o 3 (14, con tipo e quantità del liquido): i campi usati qui sono gli stessi
+        if (raw.Length >= 10 && (raw[4], raw[5]) is (2, 12) or (3, 14))
+            chunk = (BinaryPrimitives.ReadUInt16LittleEndian(raw.AsSpan(6)), BinaryPrimitives.ReadUInt16LittleEndian(raw.AsSpan(8)), raw, raw[5]);
     }
     return chunks[(cx, cy)] = chunk;
 }
@@ -101,8 +102,8 @@ for (var line = Console.ReadLine(); line != null; line = Console.ReadLine())
             var (gx, gy) = (x0 + lx, y0 + ly);
             if (gx < 0 || gy < 0 || gx >= worldW || gy >= worldH) continue;
             if (Load(gx / chunkW, gy / chunkH) is not { } c) continue;
-            var o = 10 + ((gy % chunkH) * c.W + gx % chunkW) * Size;
-            var d = c.Data.AsSpan(o, Size);
+            var o = 10 + ((gy % chunkH) * c.W + gx % chunkW) * c.Size;
+            var d = c.Data.AsSpan(o, c.Size);
             int type = BinaryPrimitives.ReadUInt16LittleEndian(d), wall = BinaryPrimitives.ReadUInt16LittleEndian(d[6..]);
             if (type != NoTile)
             {
@@ -118,7 +119,11 @@ for (var line = Console.ReadLine(); line != null; line = Console.ReadLine())
             }
             // Muri delle mod: per il frame del muro conta solo che ci sia (lo schema è quello di Terraria)
             if (wall != 0) tile.wall = (ushort)(wall < WallID.Count ? wall : WallID.Stone);
-            if ((d[8] & 0x10) != 0) tile.liquid = 255;
+            if ((d[8] & 0x10) != 0)
+            {
+                tile.liquid = c.Size >= 14 ? d[13] : (byte)255;
+                if (c.Size >= 14) tile.liquidType(d[12]);
+            }
         }
     }
 
@@ -130,7 +135,7 @@ for (var line = Console.ReadLine(); line != null; line = Console.ReadLine())
         {
             var (lx, ly) = (x + Margin, y + Margin);
             var tile = tiles[lx, ly];
-            var o = 10 + (y * chunk.W + x) * Size;
+            var o = 10 + (y * chunk.W + x) * chunk.Size;
             int type = BinaryPrimitives.ReadUInt16LittleEndian(chunk.Data.AsSpan(o));
             try
             {

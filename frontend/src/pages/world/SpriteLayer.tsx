@@ -122,7 +122,7 @@ export default function SpriteLayer({
       const have = sheets.current.get(key)
       if (have instanceof HTMLImageElement) return have
       if (have) return null
-      const tree = kind === 'treetops' || kind === 'treebranches'
+      const tree = kind === 'treetops' || kind === 'treebranches' || kind === 'liquids'
       const isVanilla = tree || type < (kind === 'tiles' ? tileTypes.vanillaTiles : tileTypes.vanillaWalls)
       if (isVanilla ? !vanilla : !(kind === 'tiles' ? tileTypes.modTiles : tileTypes.modWalls)[String(type)]) {
         sheets.current.set(key, 'missing')
@@ -139,7 +139,14 @@ export default function SpriteLayer({
       return null
     }
     const spriteSource = { types: tileTypes, vanilla: vanilla !== null, sheet, chunk: (cx: number, cy: number) => chunks.current.get(`${cx}_${cy}`)?.chunk ?? null }
-    const grid = { chunkWidth: manifest.chunkWidth, chunkHeight: manifest.chunkHeight, worldWidth: manifest.world.width, worldHeight: manifest.world.height }
+    const grid = {
+      chunkWidth: manifest.chunkWidth,
+      chunkHeight: manifest.chunkHeight,
+      worldWidth: manifest.world.width,
+      worldHeight: manifest.world.height,
+      surface: manifest.world.surface,
+      rock: manifest.world.rock,
+    }
 
     const now = Date.now()
     const z = view.zoom

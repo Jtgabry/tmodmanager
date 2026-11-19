@@ -60,7 +60,7 @@ le letture di `Main.Map` (la mappa esplorata dal giocatore, che sul server non c
 
 Vista ravvicinata con gli sprite: oltre alla mappa a pixel, per ogni riquadro LiveMap scrive i dati grezzi delle
 tile (`tiles/`, formato in `Shared/TileData.cs`: tipo, frame, muro e suo frame, forma, vernice) e in `types.json`
-quali tipi sono delle mod e con quale texture. Il browser disegna blocchi e muri con i loro sprite, che l'agent
+quali tipi sono delle mod e con quale texture. Il browser disegna blocchi, muri e liquidi con i loro sprite, che l'agent
 prende dai `.tmod` per le mod e, per Terraria, dalle texture del gioco in `data/terraria-assets/<versione>/Images/`
 (`Tiles_*.xnb` e `Wall_*.xnb` copiati da un'installazione del gioco: non sono sul server né nel repository; l'agent
 li decomprime, LZX, e li converte in PNG una volta). I frame (quale parte del foglio di sprite) caricando il mondo

@@ -12,8 +12,8 @@ const NO_TILE = 0xffff
 const ACTUATED = 0x08
 const LIQUID = 0x10
 const UNKNOWN_FRAME = 0xff
-/** Formato → byte per tile (1: senza i frame dei muri). */
-const FORMATS: Record<number, number> = { 1: 10, 2: 12 }
+/** Formato → byte per tile (1: senza i frame dei muri; 2: senza tipo e quantità dei liquidi). */
+const FORMATS: Record<number, number> = { 1: 10, 2: 12, 3: 14 }
 
 export type TileChunk = {
   width: number
@@ -92,7 +92,21 @@ export function blockFrame(up: boolean, down: boolean, left: boolean, right: boo
 /** Variante stabile per posizione (il gioco la sceglie a caso e la tiene: qui serve solo che non cambi). */
 const variantAt = (x: number, y: number) => (((x * 73856093) ^ (y * 19349663)) >>> 0) % 3
 
-export type SpriteKind = 'tiles' | 'walls' | 'treetops' | 'treebranches'
+export type SpriteKind = 'tiles' | 'walls' | 'treetops' | 'treebranches' | 'liquids'
+
+/** Liquidi (texture Liquid_N): lava, miele e shimmer hanno la loro; l'acqua ha uno stile per bioma. */
+const LIQUID_STYLE = [-1, 1, 11, 14]
+/** Trasparenza dei liquidi sopra i muri, circa come nel gioco: acqua, lava, miele, shimmer. */
+const LIQUID_ALPHA = [0.55, 0.95, 0.85, 0.7]
+/** Blocchi tipici dei biomi → stile dell'acqua (Liquid_N); il deserto sotto la superficie ha uno stile suo. */
+const WATER_BIOME: Record<number, number> = {
+  23: 2, 25: 2, 112: 2, 163: 2, 398: 2, 400: 2, // corruzione
+  60: 3, 61: 3, 62: 3, 74: 3, // giungla
+  109: 4, 116: 4, 117: 4, 164: 4, 402: 4, 403: 4, // consacrato
+  147: 5, 148: 5, 161: 5, 162: 5, 200: 5, // neve e ghiaccio
+  53: 6, 396: 6, 397: 6, // deserto
+  199: 10, 203: 10, 234: 10, 399: 10, 401: 10, // cremisi
+}
 
 /** Alberi di Terraria (tipo 5): cima e rami sono tile del tronco con questi frame, disegnate con texture a parte. */
 const TREE = 5
@@ -120,7 +134,7 @@ export function drawSprites(
   ctx: CanvasRenderingContext2D,
   view: { x: number; y: number; zoom: number },
   screen: { w: number; h: number },
-  grid: { chunkWidth: number; chunkHeight: number; worldWidth: number; worldHeight: number },
+  grid: { chunkWidth: number; chunkHeight: number; worldWidth: number; worldHeight: number; surface: number; rock: number },
   source: SpriteSource,
 ) {
   const { types, vanilla } = source
@@ -157,6 +171,40 @@ export function drawSprites(
   /** C'è un blocco che si vede (non disattivato da un attuatore). */
   const blockAt = (chunk: TileChunk, i: number) => tileType(chunk, i) !== NO_TILE && (flagsOf(chunk, i) & ACTUATED) === 0
 
+  /** Stile dell'acqua dai blocchi vicini (zone di 8×8 tile); senza un bioma vicino, dalla profondità. */
+  const waterStyles = new Map<number, number>()
+  const waterStyle = (x: number, y: number) => {
+    const key = (y >> 3) * 4096 + (x >> 3)
+    const hit = waterStyles.get(key)
+    if (hit !== undefined) return hit
+    const counts = new Map<number, number>()
+    for (let dy = -12; dy <= 12; dy += 2) {
+      for (let dx = -12; dx <= 12; dx += 2) {
+        const t = at(x + dx, y + dy)
+        if (!t) continue
+        const style = WATER_BIOME[tileType(t[0], t[1])]
+        if (style !== undefined) counts.set(style, (counts.get(style) ?? 0) + 1)
+      }
+    }
+    let style = y > grid.rock ? 8 : y > grid.surface ? 7 : 0
+    let best = 3 // almeno qualche blocco del bioma
+    for (const [s, n] of counts) {
+      if (n > best) {
+        best = n
+        style = s
+      }
+    }
+    if (style === 6 && y > grid.surface) style = 12 // deserto sotterraneo
+    waterStyles.set(key, style)
+    return style
+  }
+  /** Liquido della tile da disegnare con il suo sprite: tipo e quantità ci sono dal formato 3 dei dati. */
+  const liquidOf = (chunk: TileChunk, i: number) => {
+    if (!vanilla || chunk.stride < 14 || !(flagsOf(chunk, i) & LIQUID)) return null
+    const amount = chunk.data.getUint8(i * chunk.stride + 13)
+    const type = chunk.data.getUint8(i * chunk.stride + 12)
+    return amount > 0 && type < 4 ? { type, amount } : null
+  }
   /** Foglio di sprite del blocco della tile, se c'è (e il blocco si vede). */
   const tileSheet = (chunk: TileChunk, i: number) => {
     if (!blockAt(chunk, i)) return null
@@ -170,7 +218,8 @@ export function drawSprites(
    */
   const wallSheet = (chunk: TileChunk, i: number) => {
     const wall = wallOf(chunk, i)
-    if (!wallSprite(wall) || flagsOf(chunk, i) & LIQUID) return null
+    // Dietro un liquido il muro si vede solo se il liquido ha il suo sprite (trasparente)
+    if (!wallSprite(wall) || (flagsOf(chunk, i) & LIQUID && !liquidOf(chunk, i))) return null
     if (blockAt(chunk, i) && !tileSheet(chunk, i)) return null
     return source.sheet('walls', wall)
   }
@@ -198,7 +247,7 @@ export function drawSprites(
       const t = at(x, y)
       if (!t) continue
       const [chunk, i] = t
-      if (!tileSheet(chunk, i) || wallSheet(chunk, i)) continue
+      if (!(tileSheet(chunk, i) || liquidOf(chunk, i)) || wallSheet(chunk, i)) continue
       // Blocco pieno in mezzo ad altri blocchi: lo sprite lo copre tutto (il caso più comune sottoterra)
       if (types.solid[tileType(chunk, i)] && [[0, -1], [0, 1], [-1, 0], [1, 0]].every(([dx, dy]) => {
         const n = at(x + dx, y + dy)
@@ -255,12 +304,38 @@ export function drawSprites(
         const t = at(x, y)
         if (!t || !t[0].pixels) continue
         const [chunk, i] = t
-        const liquid = (flagsOf(chunk, i) & LIQUID) !== 0
+        const liquid = (flagsOf(chunk, i) & LIQUID) !== 0 && !liquidOf(chunk, i)
         if (!liquid && (!blockAt(chunk, i) || tileSheet(chunk, i))) continue
         const { sx, sy, w, h } = rect(x, y)
         ctx.fillStyle = hex(chunk.pixels![i])
         ctx.fillRect(sx, sy, w, h)
       }
+    }
+  }
+
+  // 3b. Liquidi, sopra i muri e sotto i blocchi: alti quanto la loro quantità, trasparenti come nel gioco. In
+  //     superficie c'è la riga chiara in cima alla texture; sotto un altro liquido la tile è piena, senza
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const t = at(x, y)
+      if (!t) continue
+      const liquid = liquidOf(t[0], t[1])
+      if (!liquid) continue
+      const style = LIQUID_STYLE[liquid.type] >= 0 ? LIQUID_STYLE[liquid.type] : waterStyle(x, y)
+      const sheet = source.sheet('liquids', style)
+      if (!sheet) continue
+      const above = y > 0 ? at(x, y - 1) : null
+      const covered = above !== null && liquidOf(above[0], above[1]) !== null
+      const { sx, sy, w, h } = rect(x, y)
+      ctx.globalAlpha = LIQUID_ALPHA[liquid.type]
+      if (covered) {
+        ctx.drawImage(sheet, 0, 8, 16, 8, sx, sy, w, h)
+      } else {
+        const level = Math.max(1, Math.round((liquid.amount / 255) * 16))
+        const dh = Math.max(1, Math.round((h * level) / 16))
+        ctx.drawImage(sheet, 0, 0, 16, level, sx, sy + h - dh, w, dh)
+      }
+      ctx.globalAlpha = 1
     }
   }
 

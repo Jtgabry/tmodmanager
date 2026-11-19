@@ -18,8 +18,9 @@ import { readXnbTexture } from './xnb.js'
  * gioco), convertiti allo stesso modo in data/terraria-assets/<versione>/png/.
  */
 
-/** tiles e walls: per tipo; treetops e treebranches: chiome e rami degli alberi di Terraria, per stile. */
-export const SPRITE_KINDS = ['tiles', 'walls', 'treetops', 'treebranches'] as const
+/** tiles e walls: per tipo; treetops e treebranches: chiome e rami degli alberi di Terraria, per stile; liquids: i
+ * liquidi di Terraria, per stile (acqua dei vari biomi, lava, miele, shimmer). */
+export const SPRITE_KINDS = ['tiles', 'walls', 'treetops', 'treebranches', 'liquids'] as const
 export type SpriteKind = (typeof SPRITE_KINDS)[number]
 
 const ModType = z.object({ mod: z.string(), name: z.string(), texture: z.string() })
@@ -65,7 +66,7 @@ export async function vanillaAssets(): Promise<{ version: string; dir: string } 
   return null
 }
 
-const VANILLA_TEXTURE = /^(Tiles|Wall|Tree_Tops|Tree_Branches)_\d{1,5}$/
+const VANILLA_TEXTURE = /^(Tiles|Wall|Tree_Tops|Tree_Branches|Liquid)_\d{1,5}$/
 
 /** PNG di una texture di Terraria ("Tiles_1", "Wall_4", "Tree_Tops_0"), convertita dal .xnb la prima volta. */
 export async function vanillaSpritePng(name: string): Promise<string | null> {
@@ -148,6 +149,7 @@ export async function spritePng(server: ServerDefinition, typesPath: string, kin
   // Chiome e rami degli alberi: texture di Terraria a parte, per stile (foresta, giungla, neve…)
   if (kind === 'treetops') return vanillaSpritePng(`Tree_Tops_${type}`)
   if (kind === 'treebranches') return vanillaSpritePng(`Tree_Branches_${type}`)
+  if (kind === 'liquids') return vanillaSpritePng(`Liquid_${type}`)
   const entry = await readTileTypes(typesPath)
   if (!entry) return null
   const vanilla = kind === 'tiles' ? entry.types.vanillaTiles : entry.types.vanillaWalls

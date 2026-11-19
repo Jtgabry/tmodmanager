@@ -99,7 +99,7 @@ Route::prefix('v1')
                 // Vista ravvicinata con gli sprite: dati grezzi delle tile, tipi, sprite (di Terraria e delle mod)
                 Route::get('/{source}/tiles/{cx}/{cy}', 'tiles')->whereIn('source', ['livemap', 'world'])->whereNumber(['cx', 'cy'])->name('tiles');
                 Route::get('/{source}/types', 'types')->whereIn('source', ['livemap', 'world'])->name('types');
-                Route::get('/{source}/sprites/{kind}/{type}', 'sprite')->whereIn('source', ['livemap', 'world'])->whereIn('kind', ['tiles', 'walls', 'treetops', 'treebranches'])->whereNumber('type')->name('sprite');
+                Route::get('/{source}/sprites/{kind}/{type}', 'sprite')->whereIn('source', ['livemap', 'world'])->whereIn('kind', ['tiles', 'walls', 'treetops', 'treebranches', 'liquids'])->whereNumber('type')->name('sprite');
             });
 
             Route::controller(ServerPluginController::class)->prefix('/servers/{server}/plugins')->name('servers.plugins.')->group(function () {

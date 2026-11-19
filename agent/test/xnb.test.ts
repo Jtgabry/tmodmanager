@@ -84,4 +84,7 @@ test('sprite di Terraria: dalle texture del gioco in terraria-assets, anche per 
   await writeFile(join(images, 'Tree_Tops_2.xnb'), xnb(0, payload))
   assert.equal(await spritePng(server, typesPath, 'treetops', 2), join(config.dataDir, 'terraria-assets', '1.4.5.8', 'png', 'Tree_Tops_2.png'))
   assert.equal(await spritePng(server, typesPath, 'treebranches', 2), null)
+  // Liquidi: acqua dei biomi, lava, miele, shimmer (Liquid_N)
+  await writeFile(join(images, 'Liquid_3.xnb'), xnb(0, payload))
+  assert.ok(await spritePng(server, typesPath, 'liquids', 3))
 })
