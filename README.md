@@ -156,7 +156,8 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
   (TShock e tModLoader) è in tempo reale, con i giocatori, solo finché la pagina è aperta. Senza, con tModLoader si
   legge anche il `.twld` accanto al mondo, con i blocchi e i muri delle mod: il loro colore è la media della texture
   nel `.tmod`, con un colore fisso se la texture manca (LiveMap invece usa i colori veri della minimappa).
-  Da vicino blocchi, muri, alberi e liquidi hanno i loro sprite (l'acqua nello stile del bioma, dai blocchi vicini): quelli delle mod presi dai `.tmod`, quelli di Terraria dalle texture
+  Da vicino blocchi, muri, alberi (anche palme, funghi giganti, alberi gemma; tronchi e chiome del loro bioma) e
+  liquidi hanno i loro sprite, con la vernice (l'acqua nello stile del bioma, dai blocchi vicini): quelli delle mod presi dai `.tmod`, quelli di Terraria dalle texture
   del gioco se sono in `data/terraria-assets/<versione>/Images/` (`Tiles_*.xnb` e `Wall_*.xnb`, da un'installazione
   di Terraria: il pannello non li distribuisce). Con LiveMap i pezzi degli sprite li sceglie il gioco (anche gli
   schemi propri delle mod); senza, i dati delle tile si ricavano dal `.wld` e dal `.twld`, e i pezzi di blocchi e

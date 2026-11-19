@@ -87,4 +87,10 @@ test('sprite di Terraria: dalle texture del gioco in terraria-assets, anche per 
   // Liquidi: acqua dei biomi, lava, miele, shimmer (Liquid_N)
   await writeFile(join(images, 'Liquid_3.xnb'), xnb(0, payload))
   assert.ok(await spritePng(server, typesPath, 'liquids', 3))
+  // Tronchi dei biomi e cappelli dei funghi giganti
+  await writeFile(join(images, 'Tiles_5_2.xnb'), xnb(0, payload))
+  await writeFile(join(images, 'Shroom_Tops.xnb'), xnb(0, payload))
+  assert.ok(await spritePng(server, typesPath, 'trunks', 2))
+  assert.ok(await spritePng(server, typesPath, 'shroomtops', 0))
+  assert.equal(await spritePng(server, typesPath, 'trunks', 9), null)
 })

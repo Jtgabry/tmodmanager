@@ -13,8 +13,8 @@ import type { ModBlocks } from './twld.js'
  * dal nome (vedi mapSprites.ts).
  */
 
-export const TILE_FORMAT = 3
-const SIZE = 14
+export const TILE_FORMAT = 4
+const SIZE = 16
 const NO_TILE = 0xffff
 
 export type WorldTileTypes = {
@@ -125,7 +125,21 @@ export class WorldTileSink {
    * `type` -1 = nessun blocco; frame -1 = da calcolare; `shape` 0 pieno, 1 mezzo blocco, 2–5 pendenze;
    * `liquid` -1 = niente, 0 acqua, 1 lava, 2 miele, 3 shimmer, con la sua quantità (0–255).
    */
-  put(x: number, y: number, type: number, frameX: number, frameY: number, wall: number, shape: number, actuated: boolean, liquid: number, amount: number, paint: number) {
+  put(
+    x: number,
+    y: number,
+    type: number,
+    frameX: number,
+    frameY: number,
+    wall: number,
+    shape: number,
+    actuated: boolean,
+    liquid: number,
+    amount: number,
+    paint: number,
+    wallPaint: number,
+    coatings: number,
+  ) {
     const mod = this.modTiles?.next()
     const modWall = this.modWalls?.next()
     if (mod) {
@@ -134,7 +148,10 @@ export class WorldTileSink {
       frameY = mod.frameY
       paint = mod.paint
     }
-    if (modWall) wall = modWall.id
+    if (modWall) {
+      wall = modWall.id
+      wallPaint = modWall.paint
+    }
     const o = ((y * this.chunkWidth) + (x - this.stripX)) * SIZE
     const s = this.strip
     s.writeUInt16LE(type < 0 ? NO_TILE : type, o)
@@ -148,6 +165,8 @@ export class WorldTileSink {
     s[o + 11] = 0xff
     s[o + 12] = wet ? liquid : 0
     s[o + 13] = wet ? amount : 0
+    s[o + 14] = wallPaint
+    s[o + 15] = coatings
     if (y === this.height - 1 && (x - this.stripX === this.chunkWidth - 1 || x === this.width - 1)) this.flush()
   }
 

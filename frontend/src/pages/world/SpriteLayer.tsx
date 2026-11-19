@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MapSource, WorldMapManifest } from '../../lib/types'
 import { chunkUrl, spriteUrl, tilesUrl, useTileTypes } from '../../lib/worldMap'
-import { decodeTileChunk, drawSprites, imagePixels, type SpriteKind, type TileChunk } from './tileSprites'
+import { decodeTileChunk, drawSprites, imagePixels, paintPixels, paints, type Sheet, type SpriteKind, type TileChunk } from './tileSprites'
 
 /** Da quanti pixel dello schermo per tile si vedono gli sprite (sotto sarebbero illeggibili). */
 export const SPRITE_ZOOM = 8
@@ -45,6 +45,8 @@ export default function SpriteLayer({
   const chunks = useRef(new Map<string, Loaded>())
   const loading = useRef(new Set<string>())
   const sheets = useRef(new Map<string, HTMLImageElement | 'loading' | 'missing'>())
+  /** Copie colorate dalle vernici, fatte quando servono. */
+  const painted = useRef(new Map<string, Sheet | null>())
   const blocks = useRef(new Map<string, Block>())
   /** Cresce quando arrivano dati o sprite: i blocchi disegnati prima vanno rifatti. */
   const stamp = useRef(0)
@@ -117,12 +119,35 @@ export default function SpriteLayer({
     const tileTypes = types.data
     if (!tileTypes) return
 
-    const sheet = (kind: SpriteKind, type: number) => {
+    /** Copia del foglio colorata dalla vernice (una volta per foglio e vernice). */
+    const paintedSheet = (key: string, image: HTMLImageElement, paint: number): Sheet | null => {
+      const pkey = `${key}:${paint}`
+      if (painted.current.has(pkey)) return painted.current.get(pkey)!
+      let result: Sheet | null = null
+      try {
+        const c = document.createElement('canvas')
+        c.width = image.naturalWidth
+        c.height = image.naturalHeight
+        const pctx = c.getContext('2d', { willReadFrequently: true })
+        if (pctx) {
+          pctx.drawImage(image, 0, 0)
+          const data = pctx.getImageData(0, 0, c.width, c.height)
+          paintPixels(data.data, paint)
+          pctx.putImageData(data, 0, 0)
+          result = Object.assign(c, { naturalWidth: c.width, naturalHeight: c.height })
+        }
+      } catch {
+        result = null
+      }
+      painted.current.set(pkey, result)
+      return result
+    }
+    const sheet = (kind: SpriteKind, type: number, paint = 0): Sheet | null => {
       const key = `${kind}:${type}`
       const have = sheets.current.get(key)
-      if (have instanceof HTMLImageElement) return have
+      if (have instanceof HTMLImageElement) return paints(paint) ? (paintedSheet(key, have, paint) ?? have) : have
       if (have) return null
-      const tree = kind === 'treetops' || kind === 'treebranches' || kind === 'liquids'
+      const tree = kind !== 'tiles' && kind !== 'walls'
       const isVanilla = tree || type < (kind === 'tiles' ? tileTypes.vanillaTiles : tileTypes.vanillaWalls)
       if (isVanilla ? !vanilla : !(kind === 'tiles' ? tileTypes.modTiles : tileTypes.modWalls)[String(type)]) {
         sheets.current.set(key, 'missing')

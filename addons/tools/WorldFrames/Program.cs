@@ -64,8 +64,9 @@ var chunks = new Dictionary<(int, int), (int W, int H, byte[] Data, int Size)?>(
         using var ms = new MemoryStream();
         gzip.CopyTo(ms);
         var raw = ms.ToArray();
-        // Formato 2 (12 byte per tile) o 3 (14, con tipo e quantità del liquido): i campi usati qui sono gli stessi
-        if (raw.Length >= 10 && (raw[4], raw[5]) is (2, 12) or (3, 14))
+        // Formato 2 (12 byte per tile), 3 (14, con il liquido) o 4 (16, con vernice del muro e rivestimenti): i campi
+        // usati qui sono gli stessi
+        if (raw.Length >= 10 && (raw[4], raw[5]) is (2, 12) or (3, 14) or (4, 16))
             chunk = (BinaryPrimitives.ReadUInt16LittleEndian(raw.AsSpan(6)), BinaryPrimitives.ReadUInt16LittleEndian(raw.AsSpan(8)), raw, raw[5]);
     }
     return chunks[(cx, cy)] = chunk;

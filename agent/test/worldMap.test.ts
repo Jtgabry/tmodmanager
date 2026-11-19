@@ -135,15 +135,15 @@ test('mappa dal file del mondo per un server vanilla: disegnata in un worker, si
   assert.equal(await mapChunkPath(server, 'livemap', '0', '0'), null)
 
   // Dati grezzi delle tile per gli sprite (senza LiveMap): stesso formato, frame da calcolare (-1, muri 0xFF)
-  assert.equal(state.manifest?.tileData, 3)
+  assert.equal(state.manifest?.tileData, 4)
   assert.ok((state.typesVersion ?? 0) > 0)
   const tiles = gunzipSync(await readFile(join(config.dataDir, 'servers', 'm', 'worldmap', 'tiles', '0_1.bin')))
-  assert.deepEqual([tiles.toString('latin1', 0, 4), tiles[4], tiles[5], tiles.readUInt16LE(6), tiles.readUInt16LE(8)], ['TMMT', 3, 14, 200, 150])
-  const at = (x: number, y: number) => 10 + ((y - 150) * 200 + x) * 14
+  assert.deepEqual([tiles.toString('latin1', 0, 4), tiles[4], tiles[5], tiles.readUInt16LE(6), tiles.readUInt16LE(8)], ['TMMT', 4, 16, 200, 150])
+  const at = (x: number, y: number) => 10 + ((y - 150) * 200 + x) * 16
   assert.deepEqual([tiles.readUInt16LE(at(10, 160)), tiles.readInt16LE(at(10, 160) + 2), tiles[at(10, 160) + 10]], [0, -1, 0xff]) // terra
   assert.deepEqual([tiles.readUInt16LE(at(20, 160)), tiles.readUInt16LE(at(20, 160) + 6), tiles[at(20, 160) + 8] & 0x10, tiles[at(20, 160) + 12], tiles[at(20, 160) + 13]], [0xffff, 1, 0x10, 0, 255]) // muro e acqua piena
   const types = JSON.parse(await readFile(join(config.dataDir, 'servers', 'm', 'worldmap', 'types.json'), 'utf8'))
-  assert.deepEqual([types.format, types.vanillaTiles, types.vanillaWalls], [3, 2, 2])
+  assert.deepEqual([types.format, types.vanillaTiles, types.vanillaWalls], [4, 2, 2])
 
   // Stesso file: niente da rifare; mondo salvato di nuovo: si ridisegna, i riquadri uguali tengono la versione
   assert.equal((await worldMap(server)).worldFile?.generating, false)
@@ -204,7 +204,7 @@ test('frame delle tile calcolati con il codice di Terraria (WorldFrames), e non 
   const manifest = JSON.parse(await readFile(join(out, 'manifest.json'), 'utf8'))
   assert.deepEqual([manifest.framed, manifest.frameError], [true, null])
   const tiles = gunzipSync(await readFile(join(out, 'tiles', '0_1.bin')))
-  const at = (x: number, y: number) => 10 + ((y - 150) * 200 + x) * 14
+  const at = (x: number, y: number) => 10 + ((y - 150) * 200 + x) * 16
   // Colonna di terra larga una tile: il gioco le dà un frame (non più -1), e al muro il suo
   assert.ok(tiles.readInt16LE(at(10, 160) + 2) >= 0)
   assert.notEqual(tiles[at(20, 160) + 10], 0xff)

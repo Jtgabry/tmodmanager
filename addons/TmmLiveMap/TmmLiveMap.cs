@@ -128,7 +128,9 @@ public class LiveMapSystem : ModSystem
         var t = Main.tile[x, y];
         var wallFramed = t.WallType > 0 && _wallFramed?[y * Main.maxTilesX + x] == true;
         TileData.Write(dest, t.HasTile, t.TileType, t.TileFrameX, t.TileFrameY, t.WallType, (int)t.BlockType, t.IsActuated, t.LiquidType, t.LiquidAmount,
-            t.TileColor, wallFramed ? t.WallFrameX : -1, wallFramed ? t.WallFrameY : -1);
+            t.TileColor, wallFramed ? t.WallFrameX : -1, wallFramed ? t.WallFrameY : -1, t.WallColor,
+            (t.IsTileFullbright ? TileData.TileGlow : 0) | (t.IsWallFullbright ? TileData.WallGlow : 0)
+            | (t.IsTileInvisible ? TileData.TileEcho : 0) | (t.IsWallInvisible ? TileData.WallEcho : 0));
     }
 
     /// <summary>Tipi di blocchi e muri, con mod e texture di quelli delle mod (types.json).</summary>

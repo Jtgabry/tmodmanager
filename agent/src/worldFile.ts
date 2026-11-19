@@ -180,7 +180,7 @@ function backgroundColors(header: WorldHeader, c: MapColors): Uint32Array {
  */
 /** Chi raccoglie i dati grezzi delle tile, nell'ordine del file (vedi worldTiles.ts). */
 export type TileSink = {
-  put(x: number, y: number, type: number, frameX: number, frameY: number, wall: number, shape: number, actuated: boolean, liquid: number, amount: number, paint: number): void
+  put(x: number, y: number, type: number, frameX: number, frameY: number, wall: number, shape: number, actuated: boolean, liquid: number, amount: number, paint: number, wallPaint: number, coatings: number): void
 }
 
 export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink?: TileSink): { pixels: Uint32Array; layers: Uint8Array } {
@@ -198,11 +198,12 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink
       const h1 = r.byte()
       let h2 = 0
       let h3 = 0
+      let h4 = 0
       if (h1 & 1) {
         h2 = r.byte()
         if (h2 & 1) {
           h3 = r.byte()
-          if (h3 & 1) r.byte() // quarta intestazione (blocchi e muri invisibili, luminosi): non serve
+          if (h3 & 1) h4 = r.byte() // quarta intestazione: rivestimenti (blocchi e muri invisibili, luminosi)
         }
       }
 
@@ -219,9 +220,10 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink
         if (h3 & 8) paint = r.byte() // vernice
       }
       let wall = 0
+      let wallPaint = 0
       if (h1 & 4) {
         wall = r.byte()
-        if (h3 & 0x10) r.byte() // vernice del muro
+        if (h3 & 0x10) wallPaint = r.byte() // vernice del muro
       }
       const liquidBits = (h1 & 0x18) >> 3
       let liquid = -1
@@ -252,15 +254,17 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink
       // Forma (h2): 1 mezzo blocco, 2–5 pendenze; attuatore (h3 & 4)
       const shape = (h2 >> 4) & 7
       const actuated = (h3 & 4) !== 0
+      // Rivestimenti (h4): 0x02 blocco eco, 0x04 muro eco, 0x08 blocco luminoso, 0x10 muro luminoso → TileData
+      const coatings = (h4 & 0x08 ? 0x01 : 0) | (h4 & 0x10 ? 0x02 : 0) | (h4 & 0x02 ? 0x04 : 0) | (h4 & 0x04 ? 0x08 : 0)
       // Senza blocco, liquido o muro: lo sfondo, che cambia con la profondità (anche per le tile ripetute)
       pixels[y * width + x] = color >= 0 ? color : background[y]
       layers[y * width + x] = layer
-      sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid, amount, paint)
+      sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid, amount, paint, wallPaint, coatings)
       while (count-- > 0) {
         y++
         pixels[y * width + x] = color >= 0 ? color : background[y]
         layers[y * width + x] = layer
-        sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid, amount, paint)
+        sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid, amount, paint, wallPaint, coatings)
       }
     }
   }

@@ -19,18 +19,21 @@ namespace TmmLiveMap;
 ///   10 u8  wallFrameX / 36, 11 u8 wallFrameY / 36: quale pezzo (32×32, a passi di 36) del foglio del muro; come i
 ///      frame dei blocchi li calcolano i client, e la mod tModLoader prima di disegnare; 0xFF = non calcolato
 ///   12 u8  tipo del liquido (0 acqua, 1 lava, 2 miele, 3 shimmer), 13 u8 quantità (0–255; 0 = niente liquido)
+///   14 u8  vernice del muro
+///   15 u8  rivestimenti: 0x01 blocco luminoso, 0x02 muro luminoso, 0x04 blocco eco (invisibile), 0x08 muro eco
 /// </summary>
 public static class TileData
 {
-    public const int Format = 3;
-    public const int Size = 14;
+    public const int Format = 4;
+    public const int Size = 16;
+    public const byte TileGlow = 0x01, WallGlow = 0x02, TileEcho = 0x04, WallEcho = 0x08;
     public const byte Unknown = 0xFF;
     public const byte Actuated = 0x08, Liquid = 0x10;
 
     /// <param name="wallFrameX">Frame del muro in pixel (come nel gioco), oppure -1 se non è calcolato.</param>
     /// <param name="liquidAmount">Quantità del liquido (0–255): con 0 non c'è.</param>
     public static void Write(Span<byte> dest, bool hasTile, int type, int frameX, int frameY, int wall, int shape, bool actuated, int liquidType, int liquidAmount,
-        int paint, int wallFrameX, int wallFrameY)
+        int paint, int wallFrameX, int wallFrameY, int wallPaint, int coatings)
     {
         var liquid = liquidAmount > 0;
         BinaryPrimitives.WriteUInt16LittleEndian(dest, hasTile ? (ushort)type : (ushort)0xFFFF);
@@ -43,6 +46,8 @@ public static class TileData
         dest[11] = wallFrameY < 0 ? Unknown : (byte)Math.Min(254, wallFrameY / 36);
         dest[12] = liquid ? (byte)liquidType : (byte)0;
         dest[13] = (byte)Math.Clamp(liquidAmount, 0, 255);
+        dest[14] = (byte)wallPaint;
+        dest[15] = (byte)coatings;
     }
 
     public static void Empty(Span<byte> dest)
@@ -50,6 +55,7 @@ public static class TileData
         dest.Clear();
         BinaryPrimitives.WriteUInt16LittleEndian(dest, 0xFFFF);
         dest[10] = dest[11] = Unknown;
+        // (vernice e rivestimenti a 0)
     }
 }
 

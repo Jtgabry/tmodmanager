@@ -12,8 +12,8 @@ const NO_TILE = 0xffff
 const ACTUATED = 0x08
 const LIQUID = 0x10
 const UNKNOWN_FRAME = 0xff
-/** Formato → byte per tile (1: senza i frame dei muri; 2: senza tipo e quantità dei liquidi). */
-const FORMATS: Record<number, number> = { 1: 10, 2: 12, 3: 14 }
+/** Formato → byte per tile (1: senza i frame dei muri; 2: senza i liquidi; 3: senza vernice dei muri e rivestimenti). */
+const FORMATS: Record<number, number> = { 1: 10, 2: 12, 3: 14, 4: 16 }
 
 export type TileChunk = {
   width: number
@@ -62,6 +62,8 @@ export async function imagePixels(url: string): Promise<Uint32Array | null> {
 
 export const tileType = (chunk: TileChunk, i: number) => chunk.data.getUint16(i * chunk.stride, true)
 const flagsOf = (chunk: TileChunk, i: number) => chunk.data.getUint8(i * chunk.stride + 8)
+const tilePaint = (chunk: TileChunk, i: number) => chunk.data.getUint8(i * chunk.stride + 9)
+const wallPaint = (chunk: TileChunk, i: number) => (chunk.stride >= 16 ? chunk.data.getUint8(i * chunk.stride + 14) : 0)
 const wallOf = (chunk: TileChunk, i: number) => chunk.data.getUint16(i * chunk.stride + 6, true)
 
 /**
@@ -92,7 +94,10 @@ export function blockFrame(up: boolean, down: boolean, left: boolean, right: boo
 /** Variante stabile per posizione (il gioco la sceglie a caso e la tiene: qui serve solo che non cambi). */
 const variantAt = (x: number, y: number) => (((x * 73856093) ^ (y * 19349663)) >>> 0) % 3
 
-export type SpriteKind = 'tiles' | 'walls' | 'treetops' | 'treebranches' | 'liquids'
+/** Un foglio di sprite: l'immagine, o una sua copia colorata dalla vernice (un canvas), con le sue dimensioni. */
+export type Sheet = CanvasImageSource & { naturalWidth: number; naturalHeight: number }
+
+export type SpriteKind = 'tiles' | 'walls' | 'treetops' | 'treebranches' | 'trunks' | 'shroomtops' | 'liquids'
 
 /** Liquidi (texture Liquid_N): lava, miele e shimmer hanno la loro; l'acqua ha uno stile per bioma. */
 const LIQUID_STYLE = [-1, 1, 11, 14]
@@ -111,17 +116,38 @@ const SAND = 53
 /** Larghezza della zona dell'oceano ai lati del mondo, come nel gioco (circa 380 tile). */
 const OCEAN_ZONE = 380
 
-/** Alberi di Terraria (tipo 5): cima e rami sono tile del tronco con questi frame, disegnate con texture a parte. */
+/**
+ * Alberi di Terraria. I tronchi hanno celle da 20×20 (a passi di 22); cima e rami sono tile del tronco con frame
+ * speciali, disegnate con texture a parte (Tree_Tops_N, Tree_Branches_N). L'albero normale (tipo 5) prende tronco e
+ * chioma dal bioma; gemma, sakura, salice e cenere hanno i loro.
+ */
 const TREE = 5
-/** Stile di chioma e rami secondo il blocco sotto il tronco (Tree_Tops_N, Tree_Branches_N); altrimenti la foresta. */
-const TREE_STYLE: Record<number, number> = { 23: 1, 60: 2, 109: 3, 147: 4, 199: 5, 492: 3 }
+const TREE_TOPS: Record<number, number> = { 583: 22, 584: 23, 585: 24, 586: 25, 587: 26, 588: 27, 589: 28, 596: 29, 616: 30, 634: 31 }
+const isTree = (type: number) => type === TREE || TREE_TOPS[type] !== undefined
+/** Variante dell'albero normale dal blocco sotto (come TileDrawing.GetTreeVariant): tronco Tiles_5_N, -1 = foresta. */
+const treeVariant = (ground: number, y: number, surface: number) => {
+  if (ground === 23 || ground === 661) return 0 // corruzione
+  if (ground === 60) return y <= surface ? 1 : 5 // giungla, in superficie o sotto
+  if (ground === 109 || ground === 492) return 2 // consacrato
+  if (ground === 147) return 3 // neve
+  if (ground === 199 || ground === 662) return 4 // cremisi
+  if (ground === 70) return 6 // funghi
+  return -1
+}
+/** Chioma e rami dell'albero normale per variante: foresta, corruzione, giungla, consacrato, neve, cremisi, giungla sotterranea, funghi. */
+const TOPS_BY_VARIANT: Record<number, number> = { [-1]: 0, 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 13, 6: 14 }
+/** Palme (Tiles_323): una riga per bioma della sabbia, +4 per le oasi (lontano dal mare); frameY è la piega del tronco. */
+const PALM = 323
+const PALM_GROUND: Record<number, number> = { 53: 0, 234: 1, 116: 2, 112: 3 }
+/** Funghi giganti (Tiles_72): il cappello è Shroom_Tops, sopra la tile con frameX da 36 in su. */
+const MUSHROOM = 72
 
 export type SpriteSource = {
   types: TileTypes
   /** Ci sono anche gli sprite di Terraria. */
   vanilla: boolean
-  /** Foglio di sprite del tipo, se è caricato (null: non ancora, o non c'è). */
-  sheet: (kind: SpriteKind, type: number) => HTMLImageElement | null
+  /** Foglio di sprite del tipo, con la vernice indicata (0 = nessuna), se è pronto (null: non ancora, o non c'è). */
+  sheet: (kind: SpriteKind, type: number, paint?: number) => Sheet | null
   /** Riquadro (cx, cy) già caricato, oppure null. */
   chunk: (cx: number, cy: number) => TileChunk | null
 }
@@ -215,7 +241,7 @@ export function drawSprites(
   const tileSheet = (chunk: TileChunk, i: number) => {
     if (!blockAt(chunk, i)) return null
     const type = tileType(chunk, i)
-    return tileSprite(type) ? source.sheet('tiles', type) : null
+    return tileSprite(type) ? source.sheet('tiles', type, tilePaint(chunk, i)) : null
   }
   /**
    * Il muro della tile si disegna: ha uno sprite, non c'è un liquido davanti (lì il gioco non lo mostra) e il blocco
@@ -227,7 +253,7 @@ export function drawSprites(
     // Dietro un liquido il muro si vede solo se il liquido ha il suo sprite (trasparente)
     if (!wallSprite(wall) || (flagsOf(chunk, i) & LIQUID && !liquidOf(chunk, i))) return null
     if (blockAt(chunk, i) && !tileSheet(chunk, i)) return null
-    return source.sheet('walls', wall)
+    return source.sheet('walls', wall, wallPaint(chunk, i))
   }
   /** Colore dello sfondo (cielo, caverne) vicino: quello di una tile vicina senza blocco, muro né liquido. */
   const airAround = (x: number, y: number): number | null => {
@@ -353,6 +379,30 @@ export function drawSprites(
     return tileType(t[0], t[1]) === type && (flagsOf(t[0], t[1]) & ACTUATED) === 0
   }
 
+  /** Primo blocco sotto il tronco (che non sia lo stesso albero): da lì vengono legno e chioma. */
+  const treeGround = (x: number, y: number, trunk: number) => {
+    for (let k = 0; k < 64 && y + k < grid.worldHeight; k++) {
+      const t = at(x, y + k)
+      if (!t) return -1
+      const type = tileType(t[0], t[1])
+      if (type !== trunk) return type
+    }
+    return -1
+  }
+  /** Colonna del tronco per le tile dei rami e dei monconi (come TileDrawing.GetTreeBiome). */
+  const trunkX = (x: number, fx: number, fy: number) => {
+    if (fx === 66 && fy <= 45) x++
+    if (fx === 88 && fy >= 66 && fy <= 110) x--
+    if (fy >= 198) return fx === 66 ? x - 1 : fx === 44 ? x + 1 : x
+    if (fy >= 132) return fx === 22 ? x - 1 : fx === 44 ? x + 1 : x
+    return x
+  }
+  /** Bioma della palma (riga del foglio): dalla sabbia sotto, +4 per le oasi, lontano dalla zona dell'oceano. */
+  const palmBiome = (x: number, y: number) => {
+    const base = PALM_GROUND[treeGround(x, y, PALM)] ?? 0
+    return x > OCEAN_ZONE && x < grid.worldWidth - OCEAN_ZONE ? base + 4 : base
+  }
+
   // 4. Blocchi
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
@@ -368,18 +418,29 @@ export function drawSprites(
       let fy = chunk.data.getInt16(i * chunk.stride + 4, true)
       // I frame li calcola il gioco (LiveMap, o WorldFrames per il file del mondo). Se mancano ancora, la tabella dei
       // blocchi di Terraria, che va bene per le mod che non hanno uno schema proprio
-      if (fx < 0 || fy < 0) {
+      // (Nelle palme frameY è lo spostamento della piega del tronco: può essere negativo)
+      if (fx < 0 || (fy < 0 && type !== PALM)) {
         if (types.frameImportant[type]) continue
         const [col, row] = blockFrame(same(x, y - 1, type), same(x, y + 1, type), same(x - 1, y, type), same(x + 1, y, type), variantAt(x, y))
         fx = col * 18
         fy = row * 18
       }
-      // Tronchi degli alberi: celle da 20×20 (a passi di 22), larghe 2 pixel in più per lato; il foglio ha anche i
-      // legni degli altri biomi affiancati, qui si usa quello della foresta
-      if (type === TREE && vanilla) {
-        if (fx + 20 > sheet.naturalWidth || fy + 20 > sheet.naturalHeight) continue
+      // Tronchi degli alberi e delle palme: celle da 20×20 (a passi di 22), larghe 2 pixel in più per lato. Il tronco
+      // normale ha il legno del bioma (Tiles_5_N); la palma ha una riga per bioma e si piega di frameY pixel
+      if (vanilla && (isTree(type) || type === PALM)) {
+        let trunk: Sheet | null = sheet
+        let srcY = fy
+        let shift = 0
+        if (type === TREE) {
+          const variant = treeVariant(treeGround(trunkX(x, fx, fy), y, TREE), y, grid.surface)
+          if (variant >= 0) trunk = source.sheet('trunks', variant, tilePaint(chunk, i))
+        } else if (type === PALM) {
+          srcY = palmBiome(x, y) * 22
+          shift = fy
+        }
+        if (!trunk || fx + 20 > trunk.naturalWidth || srcY + 20 > trunk.naturalHeight) continue
         const px = z / 16
-        ctx.drawImage(sheet, fx, fy, 20, 20, Math.round((x - view.x) * z - 2 * px), Math.round((y - view.y) * z), Math.round(20 * px), Math.round(20 * px))
+        ctx.drawImage(trunk, fx, srcY, 20, 20, Math.round((x - view.x) * z + (shift - 2) * px), Math.round((y - view.y) * z), Math.round(20 * px), Math.round(20 * px))
         continue
       }
       if (fx + 16 > sheet.naturalWidth || fy + 16 > sheet.naturalHeight) continue
@@ -390,31 +451,48 @@ export function drawSprites(
     }
   }
 
-  // 5. Chiome e rami degli alberi: debordano di qualche tile, quindi si guardano anche le tile appena fuori
+  // 5. Chiome e rami degli alberi, chiome delle palme e cappelli dei funghi: debordano di qualche tile, quindi si
+  //    guardano anche le tile appena fuori
   if (!vanilla) return
-  /** Stile dell'albero: dal blocco sotto il tronco. */
-  const treeStyle = (x: number, y: number) => {
-    for (let k = 0; k < 64 && y + k < grid.worldHeight; k++) {
-      const t = at(x, y + k)
-      if (!t) return 0
-      const type = tileType(t[0], t[1])
-      if (type !== TREE) return TREE_STYLE[type] ?? 0
-    }
-    return 0
-  }
   const px = z / 16 // pixel dello schermo per pixel della texture
-  for (let y = y0; y <= Math.min(grid.worldHeight - 1, y1 + 6); y++) {
-    for (let x = Math.max(0, x0 - 4); x <= Math.min(grid.worldWidth - 1, x1 + 4); x++) {
+  /** Disegna una parte di una texture con l'angolo in alto a sinistra in (x, y) del mondo, più `dx`, `dy` pixel. */
+  const put = (sheet: Sheet, sx: number, sy: number, w: number, h: number, x: number, y: number, dx: number, dy: number) =>
+    ctx.drawImage(sheet, sx, sy, w, h, Math.round((x - view.x) * z + dx * px), Math.round((y - view.y) * z + dy * px), Math.round(w * px), Math.round(h * px))
+  for (let y = y0; y <= Math.min(grid.worldHeight - 1, y1 + 7); y++) {
+    for (let x = Math.max(0, x0 - 5); x <= Math.min(grid.worldWidth - 1, x1 + 5); x++) {
       const t = at(x, y)
-      if (!t || tileType(t[0], t[1]) !== TREE) continue
+      if (!t) continue
       const [chunk, i] = t
+      const type = tileType(chunk, i)
+      if (!isTree(type) && type !== PALM && type !== MUSHROOM) continue
+      if ((flagsOf(chunk, i) & ACTUATED) !== 0) continue
       const fx = chunk.data.getInt16(i * chunk.stride + 2, true)
       const fy = chunk.data.getInt16(i * chunk.stride + 4, true)
+
+      if (type === MUSHROOM) {
+        // Cappello: tre varianti da 60×42 (celle da 62), 22 pixel a sinistra e 26 sopra la tile
+        if (fx < 36) continue
+        const sheet = source.sheet('shroomtops', 0, tilePaint(chunk, i))
+        if (sheet) put(sheet, Math.min(2, Math.floor(fy / 18)) * 62, 0, 60, 42, x, y, -22, -26)
+        continue
+      }
+      if (type === PALM) {
+        // Chioma: frameX 88, 110, 132 (variante); spiaggia 80×80 (Tree_Tops_15), oasi 114×98 (Tree_Tops_21), una riga
+        // per bioma; si sposta con la piega del tronco
+        if (fx < 88 || fx > 132) continue
+        const variant = fx === 110 ? 1 : fx === 132 ? 2 : 0
+        const biome = palmBiome(x, y)
+        const oasis = biome >= 4
+        const [style, w, h, offX, offY] = oasis ? [21, 114, 98, 48, 2] : [15, 80, 80, 32, 0]
+        const sheet = source.sheet('treetops', style, tilePaint(chunk, i))
+        if (sheet) put(sheet, variant * (w + 2), (oasis ? biome - 4 : biome) * (h + 2), w, h, x, y, fy - offX, 16 + offY - h)
+        continue
+      }
       if (fy < 198 || (fx !== 22 && fx !== 44 && fx !== 66)) continue
       const variant = fy >= 242 ? 2 : fy >= 220 ? 1 : 0
       const top = fx === 22
-      const style = treeStyle(fx === 44 ? x + 1 : fx === 66 ? x - 1 : x, y)
-      const sheet = source.sheet(top ? 'treetops' : 'treebranches', style)
+      const style = type === TREE ? TOPS_BY_VARIANT[treeVariant(treeGround(trunkX(x, fx, fy), y, TREE), y, grid.surface)] : TREE_TOPS[type]
+      const sheet = source.sheet(top ? 'treetops' : 'treebranches', style, tilePaint(chunk, i))
       if (!sheet) continue
       if (top) {
         // Tre varianti affiancate, in celle con 2 pixel di bordo a destra e in basso (il consacrato ne ha nove: tre
@@ -422,20 +500,67 @@ export function drawSprites(
         const stride = style === 3 ? 82 : sheet.naturalWidth / 3
         const w = stride - 2
         const h = sheet.naturalHeight - 2
-        const sx = (x - view.x) * z + (8 - w / 2) * px
-        const sy = (y - view.y) * z + (16 - h) * px
-        ctx.drawImage(sheet, variant * stride, 0, w, h, Math.round(sx), Math.round(sy), Math.round(w * px), Math.round(h * px))
+        put(sheet, variant * stride, 0, w, h, x, y, 8 - w / 2, 16 - h)
       } else {
         // Due colonne (sinistra, destra) di celle quadrate con 2 pixel di bordo, una riga per variante; il ramo parte
         // dal tronco, centrato sulla tile in altezza
         const stride = sheet.naturalWidth / 2
         const w = stride - 2
-        const h = stride - 2
         const left = fx === 44
-        const sx = (x - view.x) * z + (left ? 16 - w : 0) * px
-        const sy = (y - view.y) * z + (8 - h / 2) * px
-        ctx.drawImage(sheet, left ? 0 : stride, variant * stride, w, h, Math.round(sx), Math.round(sy), Math.round(w * px), Math.round(h * px))
+        put(sheet, left ? 0 : stride, variant * stride, w, w, x, y, left ? 16 - w : 0, 8 - w / 2)
       }
     }
+  }
+}
+
+/** Colori delle vernici di Terraria (WorldGen.paintColor), per numero: 1–12 normali, 13–24 intense, poi le speciali. */
+const PAINT_COLORS: [number, number, number][] = [
+  [255, 255, 255], [255, 0, 0], [255, 127, 0], [255, 255, 0], [127, 255, 0], [0, 255, 0], [0, 255, 127], [0, 255, 255],
+  [0, 127, 255], [0, 0, 255], [127, 0, 255], [255, 0, 255], [255, 0, 127], [255, 0, 0], [255, 127, 0], [255, 255, 0],
+  [127, 255, 0], [0, 255, 0], [0, 255, 127], [0, 255, 255], [0, 127, 255], [0, 0, 255], [127, 0, 255], [255, 0, 255],
+  [255, 0, 127], [75, 75, 75], [255, 255, 255], [175, 175, 175], [255, 178, 125], [25, 25, 25], [200, 200, 200], [255, 255, 255],
+]
+const SHADOW = 29
+const NEGATIVE = 30
+const ILLUMINANT = 31
+
+/** La vernice cambia l'aspetto dello sprite (la luminosa no: nel gioco cambia solo la luce). */
+export const paints = (paint: number) => paint > 0 && paint < PAINT_COLORS.length && paint !== ILLUMINANT
+
+/**
+ * Colora i pixel RGBA di un foglio di sprite con una vernice, imitando lo shader del gioco: la luminosità dello sprite
+ * tinta del colore della vernice (le normali più chiare, le intense più sature), l'ombra quasi nera, la negativa
+ * con i colori invertiti.
+ */
+export function paintPixels(data: Uint8ClampedArray, paint: number) {
+  const [pr, pg, pb] = PAINT_COLORS[paint]
+  const deep = paint >= 13 && paint <= 24
+  const normal = paint >= 1 && paint <= 12
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    if (paint === NEGATIVE) {
+      data[i] = 255 - r
+      data[i + 1] = 255 - g
+      data[i + 2] = 255 - b
+      continue
+    }
+    if (paint === SHADOW) {
+      data[i] = r * 0.15
+      data[i + 1] = g * 0.15
+      data[i + 2] = b * 0.15
+      continue
+    }
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    // Normali: tinta a metà con il bianco (più tenue); intense e speciali: il colore pieno
+    const k = deep ? 1.3 : 1.15
+    const tr = normal ? (pr + 255) / 2 : pr
+    const tg = normal ? (pg + 255) / 2 : pg
+    const tb = normal ? (pb + 255) / 2 : pb
+    data[i] = lum * tr * k
+    data[i + 1] = lum * tg * k
+    data[i + 2] = lum * tb * k
   }
 }

@@ -18,7 +18,7 @@ namespace LiveMap;
 public class LiveMap : TerrariaPlugin
 {
     public override string Name => "LiveMap";
-    public override Version Version => new(1, 5, 0);
+    public override Version Version => new(1, 6, 0);
     public override string Author => "tModManager";
     public override string Description => "Mappa del mondo in tempo reale per il pannello di tModManager.";
 
@@ -135,7 +135,9 @@ public class LiveMap : TerrariaPlugin
         var shape = t.halfBrick() ? 1 : t.slope() == 0 ? 0 : t.slope() + 1;
         var wallFramed = t.wall > 0 && _wallFramed?[y * Main.maxTilesX + x] == true;
         TileData.Write(dest, t.active(), t.type, t.frameX, t.frameY, t.wall, shape, t.inActive(), t.liquidType(), t.liquid,
-            t.color(), wallFramed ? t.wallFrameX() : -1, wallFramed ? t.wallFrameY() : -1);
+            t.color(), wallFramed ? t.wallFrameX() : -1, wallFramed ? t.wallFrameY() : -1, t.wallColor(),
+            (t.fullbrightBlock() ? TileData.TileGlow : 0) | (t.fullbrightWall() ? TileData.WallGlow : 0)
+            | (t.invisibleBlock() ? TileData.TileEcho : 0) | (t.invisibleWall() ? TileData.WallEcho : 0));
     }
 
     /// <summary>Tipi di blocchi e muri (solo quelli di Terraria: TShock non ha mod).</summary>

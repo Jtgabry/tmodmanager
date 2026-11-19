@@ -18,9 +18,12 @@ import { readXnbTexture } from './xnb.js'
  * gioco), convertiti allo stesso modo in data/terraria-assets/<versione>/png/.
  */
 
-/** tiles e walls: per tipo; treetops e treebranches: chiome e rami degli alberi di Terraria, per stile; liquids: i
- * liquidi di Terraria, per stile (acqua dei vari biomi, lava, miele, shimmer). */
-export const SPRITE_KINDS = ['tiles', 'walls', 'treetops', 'treebranches', 'liquids'] as const
+/**
+ * tiles e walls: per tipo; dalle texture di Terraria, per stile: treetops e treebranches (chiome e rami degli alberi),
+ * trunks (tronchi degli alberi dei biomi, Tiles_5_N), shroomtops (cappelli dei funghi giganti, uno solo), liquids
+ * (acqua dei vari biomi, lava, miele, shimmer).
+ */
+export const SPRITE_KINDS = ['tiles', 'walls', 'treetops', 'treebranches', 'trunks', 'shroomtops', 'liquids'] as const
 export type SpriteKind = (typeof SPRITE_KINDS)[number]
 
 const ModType = z.object({ mod: z.string(), name: z.string(), texture: z.string() })
@@ -66,7 +69,7 @@ export async function vanillaAssets(): Promise<{ version: string; dir: string } 
   return null
 }
 
-const VANILLA_TEXTURE = /^(Tiles|Wall|Tree_Tops|Tree_Branches|Liquid)_\d{1,5}$/
+const VANILLA_TEXTURE = /^((Tiles|Wall|Tree_Tops|Tree_Branches|Liquid)_\d{1,5}|Tiles_5_\d|Shroom_Tops)$/
 
 /** PNG di una texture di Terraria ("Tiles_1", "Wall_4", "Tree_Tops_0"), convertita dal .xnb la prima volta. */
 export async function vanillaSpritePng(name: string): Promise<string | null> {
@@ -150,6 +153,8 @@ export async function spritePng(server: ServerDefinition, typesPath: string, kin
   if (kind === 'treetops') return vanillaSpritePng(`Tree_Tops_${type}`)
   if (kind === 'treebranches') return vanillaSpritePng(`Tree_Branches_${type}`)
   if (kind === 'liquids') return vanillaSpritePng(`Liquid_${type}`)
+  if (kind === 'trunks') return vanillaSpritePng(`Tiles_5_${type}`)
+  if (kind === 'shroomtops') return vanillaSpritePng('Shroom_Tops')
   const entry = await readTileTypes(typesPath)
   if (!entry) return null
   const vanilla = kind === 'tiles' ? entry.types.vanillaTiles : entry.types.vanillaWalls
