@@ -9,9 +9,10 @@ namespace TmmLiveMap;
 /// Ogni tile, little endian:
 ///   0  u16 tipo del blocco (0xFFFF = nessun blocco)
 ///   2  i16 frameX, 4 i16 frameY: quale parte del foglio di sprite. Caricando il mondo il gioco li tiene solo per
-///      i blocchi "frame important" (mobili, oggetti di più tile) e mette -1 agli altri, che calcolano i client:
-///      la mod tModLoader li calcola con il codice del gioco prima di disegnare (TmmLiveMap.EnsureFramed); il
-///      plugin TShock per ora no (-1: il pannello usa lo schema standard dei blocchi)
+///      i blocchi "frame important" (mobili, oggetti di più tile); per gli altri mette -1 (Terraria) o 0 (mod, dal
+///      .twld) e li calcolano i client. La mod tModLoader li calcola con il codice del gioco prima di disegnare
+///      (TmmLiveMap.EnsureFramed), una volta per tile a ogni caricamento del mondo; il plugin TShock per ora no
+///      (-1: il pannello usa lo schema standard dei blocchi)
 ///   6  u16 tipo del muro (0 = nessuno)
 ///   8  u8  forma (0 pieno, 1 mezzo blocco, 2–5 pendenze) | 0x08 disattivato da un attuatore | 0x10 liquido
 ///   9  u8  vernice del blocco

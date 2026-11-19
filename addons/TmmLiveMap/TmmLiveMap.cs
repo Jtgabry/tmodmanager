@@ -53,6 +53,7 @@ public class LiveMapSystem : ModSystem
         if (!MapColors.Prepare()) return;
 
         Directory.CreateDirectory(MapDir);
+        _tileFramed = new System.Collections.BitArray(Main.maxTilesX * Main.maxTilesY);
         _wallFramed = new System.Collections.BitArray(Main.maxTilesX * Main.maxTilesY);
         var config = Config.Load(ConfigPath);
         Engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players, ReadTile, Types());
@@ -62,7 +63,7 @@ public class LiveMapSystem : ModSystem
 
     public override void OnWorldUnload()
     {
-        _wallFramed = null;
+        _tileFramed = _wallFramed = null;
         Engine?.Dispose();
         Engine = null;
     }
@@ -80,29 +81,36 @@ public class LiveMapSystem : ModSystem
 
     /// <summary>
     /// Frame della tile (quale parte del foglio di sprite usare). Caricando il mondo il gioco li mette a -1 per i
-    /// blocchi normali, e li calcolano i client; sul server servono per gli sprite del pannello (e per il colore di
-    /// alcuni blocchi). Si calcolano come WorldGen.EveryTileFrame, che il server usa dopo aver generato un mondo:
+    /// blocchi normali di Terraria e a 0 per quelli delle mod (letti dal .twld), e li calcolano i client; sul server
+    /// servono per gli sprite del pannello (e per il colore di alcuni blocchi). Dato che 0 è anche un frame valido,
+    /// come per i muri si tiene il conto delle tile già calcolate (i blocchi "frame important", mobili e oggetti di
+    /// più tile, hanno i frame salvati nel mondo e non si toccano). Si calcolano come WorldGen.EveryTileFrame, che il server usa dopo aver generato un mondo:
     /// TileFrame senza "azioni" (sabbia che cade, liquidi, oggetti che si rompono). Lo fa il codice del gioco e
     /// delle mod, quindi anche gli schemi di frame delle mod sono giusti. Una volta sola per tile.
     /// </summary>
     private static void EnsureFramed(int x, int y)
     {
         var t = Main.tile[x, y];
-        var tile = t.HasTile && (t.TileFrameX < 0 || t.TileFrameY < 0);
+        var index = y * Main.maxTilesX + x;
+        var tile = t.HasTile && !Main.tileFrameImportant[t.TileType] && _tileFramed is { } tiles && !tiles[index];
         // Muri: per sapere se il frame è calcolato non c'è un valore apposta (0 è un frame valido): si tiene il conto qui.
         // Dopo, quando un muro cambia, il gioco lo ricalcola da sé
-        var wall = t.WallType > 0 && _wallFramed is { } framed && !framed[y * Main.maxTilesX + x];
+        var wall = t.WallType > 0 && _wallFramed is { } framed && !framed[index];
         if (!tile && !wall) return;
         var (liquid, actions) = (WorldGen.noLiquidCheck, WorldGen.noTileActions);
         WorldGen.noLiquidCheck = true;
         WorldGen.noTileActions = true;
         try
         {
-            if (tile) WorldGen.TileFrame(x, y, resetFrame: true, noBreak: true);
+            if (tile)
+            {
+                WorldGen.TileFrame(x, y, resetFrame: true, noBreak: true);
+                _tileFramed![index] = true;
+            }
             if (wall)
             {
                 Framing.WallFrame(x, y, resetFrame: true);
-                _wallFramed![y * Main.maxTilesX + x] = true;
+                _wallFramed![index] = true;
             }
         }
         finally
@@ -111,8 +119,8 @@ public class LiveMapSystem : ModSystem
         }
     }
 
-    /// <summary>Muri a cui LiveMap ha già calcolato il frame da questo caricamento del mondo (un bit per tile).</summary>
-    private static System.Collections.BitArray? _wallFramed;
+    /// <summary>Blocchi e muri a cui LiveMap ha già calcolato il frame da questo caricamento del mondo (un bit per tile).</summary>
+    private static System.Collections.BitArray? _tileFramed, _wallFramed;
 
     /// <summary>Dati grezzi della tile, per gli sprite nel pannello (TileData).</summary>
     private static void ReadTile(int x, int y, Span<byte> dest)
