@@ -107,6 +107,9 @@ const WATER_BIOME: Record<number, number> = {
   53: 6, 396: 6, 397: 6, // deserto
   199: 10, 203: 10, 234: 10, 399: 10, 401: 10, // cremisi
 }
+const SAND = 53
+/** Larghezza della zona dell'oceano ai lati del mondo, come nel gioco (circa 380 tile). */
+const OCEAN_ZONE = 380
 
 /** Alberi di Terraria (tipo 5): cima e rami sono tile del tronco con questi frame, disegnate con texture a parte. */
 const TREE = 5
@@ -182,7 +185,10 @@ export function drawSprites(
       for (let dx = -12; dx <= 12; dx += 2) {
         const t = at(x + dx, y + dy)
         if (!t) continue
-        const style = WATER_BIOME[tileType(t[0], t[1])]
+        const type = tileType(t[0], t[1])
+        // La sabbia delle spiagge è quella del deserto: nella zona dell'oceano, vicino ai bordi del mondo, non conta
+        if (type === SAND && (x < OCEAN_ZONE || x > grid.worldWidth - OCEAN_ZONE)) continue
+        const style = WATER_BIOME[type]
         if (style !== undefined) counts.set(style, (counts.get(style) ?? 0) + 1)
       }
     }
