@@ -22,8 +22,8 @@ function layerOf(world: WorldMapManifest['world'], y: number) {
 /**
  * Mappa a riquadri: trascinamento, zoom con rotella, pizzico o pulsanti, giocatori sopra.
  * Da lontano si vede la panoramica (un'immagine sola); avvicinandosi si caricano solo i riquadri visibili,
- * e ciascuno si ricarica quando la sua versione cambia. Molto da vicino, con LiveMap, i blocchi delle mod hanno
- * i loro sprite (SpriteLayer).
+ * e ciascuno si ricarica quando la sua versione cambia. Molto da vicino, con LiveMap, blocchi e muri delle mod
+ * hanno i loro sprite (SpriteLayer).
  */
 export default function MapViewer({
   serverId,

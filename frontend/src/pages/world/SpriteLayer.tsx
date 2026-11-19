@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { WorldMapManifest } from '../../lib/types'
 import { chunkUrl, spriteUrl, tilesUrl, useTileTypes } from '../../lib/worldMap'
-import { decodeTileChunk, drawSprites, imagePixels, type TileChunk } from './tileSprites'
+import { decodeTileChunk, drawSprites, imagePixels, type SpriteKind, type TileChunk } from './tileSprites'
 
 /** Da quanti pixel dello schermo per tile si vedono gli sprite (sotto sarebbero illeggibili). */
 export const SPRITE_ZOOM = 8
@@ -11,7 +11,7 @@ const MAX_CHUNKS = 24
 type Loaded = { version: number; chunk: TileChunk | null; usedAt: number }
 
 /**
- * Sprite dei blocchi sopra la mappa a pixel, da vicino (LiveMap con i dati delle tile). Carica i dati solo dei
+ * Sprite di blocchi e muri sopra la mappa a pixel, da vicino (LiveMap con i dati delle tile). Carica i dati solo dei
  * riquadri visibili; finché non arrivano, e per i blocchi senza sprite, resta il colore della mappa.
  */
 export default function SpriteLayer({
@@ -32,7 +32,7 @@ export default function SpriteLayer({
   const canvas = useRef<HTMLCanvasElement>(null)
   const chunks = useRef(new Map<string, Loaded>())
   const loading = useRef(new Set<string>())
-  const sheets = useRef(new Map<number, HTMLImageElement | 'loading' | 'missing'>())
+  const sheets = useRef(new Map<string, HTMLImageElement | 'loading' | 'missing'>())
   const [tick, setTick] = useState(0)
   const types = useTileTypes(serverId, typesVersion)
 
@@ -87,22 +87,23 @@ export default function SpriteLayer({
     ctx.clearRect(0, 0, size.w, size.h)
     if (!types.data) return
 
-    const sheet = (type: number) => {
-      const have = sheets.current.get(type)
+    const sheet = (kind: SpriteKind, type: number) => {
+      const key = `${kind}:${type}`
+      const have = sheets.current.get(key)
       if (have instanceof HTMLImageElement) return have
       if (have) return null
-      if (!types.data.modTiles[String(type)]) {
-        sheets.current.set(type, 'missing')
+      if (!(kind === 'tiles' ? types.data.modTiles : types.data.modWalls)[String(type)]) {
+        sheets.current.set(key, 'missing')
         return null
       }
-      sheets.current.set(type, 'loading')
+      sheets.current.set(key, 'loading')
       const image = new Image()
       image.onload = () => {
-        sheets.current.set(type, image)
+        sheets.current.set(key, image)
         setTick((t) => t + 1)
       }
-      image.onerror = () => sheets.current.set(type, 'missing')
-      image.src = spriteUrl(serverId, 'tiles', type, typesVersion)
+      image.onerror = () => sheets.current.set(key, 'missing')
+      image.src = spriteUrl(serverId, kind, type, typesVersion)
       return null
     }
     drawSprites(

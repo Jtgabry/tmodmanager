@@ -52,12 +52,13 @@ minimappa: le prepara la mod (`MapColors` in `TmmLiveMap.cs`), e una modifica IL
 le letture di `Main.Map` (la mappa esplorata dal giocatore, che sul server non c'è).
 
 Vista ravvicinata con gli sprite: oltre alla mappa a pixel, per ogni riquadro LiveMap scrive i dati grezzi delle
-tile (`tiles/`, formato in `Shared/TileData.cs`: tipo, frame, muro, forma, vernice) e in `types.json` quali tipi
-sono delle mod e con quale texture. Il browser disegna i blocchi con i loro sprite, che l'agent prende dai `.tmod`
-(per ora solo quelli delle mod: gli sprite di Terraria non sono sul server). I frame (quale parte del foglio di
-sprite) caricando il mondo restano solo per mobili e oggetti di più tile: la mod li calcola per gli altri blocchi
-con `WorldGen.TileFrame` senza "azioni", come `WorldGen.EveryTileFrame` dopo la generazione di un mondo, una volta
-per tile e dentro il limite di tempo per tick; così anche gli schemi di frame delle mod sono quelli giusti.
+tile (`tiles/`, formato in `Shared/TileData.cs`: tipo, frame, muro e suo frame, forma, vernice) e in `types.json`
+quali tipi sono delle mod e con quale texture. Il browser disegna blocchi e muri con i loro sprite, che l'agent
+prende dai `.tmod` (per ora solo quelli delle mod: gli sprite di Terraria non sono sul server). I frame (quale parte
+del foglio di sprite) caricando il mondo restano solo per mobili e oggetti di più tile: la mod li calcola per gli
+altri blocchi e per i muri con `WorldGen.TileFrame` e `Framing.WallFrame` senza "azioni", come
+`WorldGen.EveryTileFrame` dopo la generazione di un mondo, una volta per tile e dentro il limite di tempo per tick;
+così anche gli schemi di frame delle mod sono quelli giusti.
 
 File scritti:
 

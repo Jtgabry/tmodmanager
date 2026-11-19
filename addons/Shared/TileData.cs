@@ -15,14 +15,19 @@ namespace TmmLiveMap;
 ///   6  u16 tipo del muro (0 = nessuno)
 ///   8  u8  forma (0 pieno, 1 mezzo blocco, 2–5 pendenze) | 0x08 disattivato da un attuatore | 0x10 liquido
 ///   9  u8  vernice del blocco
+///   10 u8  wallFrameX / 36, 11 u8 wallFrameY / 36: quale pezzo (32×32, a passi di 36) del foglio del muro; come i
+///      frame dei blocchi li calcolano i client, e la mod tModLoader prima di disegnare; 0xFF = non calcolato
 /// </summary>
 public static class TileData
 {
-    public const int Format = 1;
-    public const int Size = 10;
+    public const int Format = 2;
+    public const int Size = 12;
+    public const byte Unknown = 0xFF;
     public const byte Actuated = 0x08, Liquid = 0x10;
 
-    public static void Write(Span<byte> dest, bool hasTile, int type, int frameX, int frameY, int wall, int shape, bool actuated, bool liquid, int paint)
+    /// <param name="wallFrameX">Frame del muro in pixel (come nel gioco), oppure -1 se non è calcolato.</param>
+    public static void Write(Span<byte> dest, bool hasTile, int type, int frameX, int frameY, int wall, int shape, bool actuated, bool liquid, int paint,
+        int wallFrameX, int wallFrameY)
     {
         BinaryPrimitives.WriteUInt16LittleEndian(dest, hasTile ? (ushort)type : (ushort)0xFFFF);
         BinaryPrimitives.WriteInt16LittleEndian(dest[2..], (short)frameX);
@@ -30,12 +35,15 @@ public static class TileData
         BinaryPrimitives.WriteUInt16LittleEndian(dest[6..], (ushort)wall);
         dest[8] = (byte)((shape & 0x07) | (actuated ? Actuated : 0) | (liquid ? Liquid : 0));
         dest[9] = (byte)paint;
+        dest[10] = wallFrameX < 0 ? Unknown : (byte)Math.Min(254, wallFrameX / 36);
+        dest[11] = wallFrameY < 0 ? Unknown : (byte)Math.Min(254, wallFrameY / 36);
     }
 
     public static void Empty(Span<byte> dest)
     {
         dest.Clear();
         BinaryPrimitives.WriteUInt16LittleEndian(dest, 0xFFFF);
+        dest[10] = dest[11] = Unknown;
     }
 }
 

@@ -53,6 +53,7 @@ public class LiveMapSystem : ModSystem
         if (!MapColors.Prepare()) return;
 
         Directory.CreateDirectory(MapDir);
+        _wallFramed = new System.Collections.BitArray(Main.maxTilesX * Main.maxTilesY);
         var config = Config.Load(ConfigPath);
         Engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players, ReadTile, Types());
         Log.Info($"Mappa pronta: {Engine.Cols}×{Engine.Rows} riquadri in {MapDir}" +
@@ -61,6 +62,7 @@ public class LiveMapSystem : ModSystem
 
     public override void OnWorldUnload()
     {
+        _wallFramed = null;
         Engine?.Dispose();
         Engine = null;
     }
@@ -86,13 +88,22 @@ public class LiveMapSystem : ModSystem
     private static void EnsureFramed(int x, int y)
     {
         var t = Main.tile[x, y];
-        if (!t.HasTile || (t.TileFrameX >= 0 && t.TileFrameY >= 0)) return;
+        var tile = t.HasTile && (t.TileFrameX < 0 || t.TileFrameY < 0);
+        // Muri: per sapere se il frame è calcolato non c'è un valore apposta (0 è un frame valido): si tiene il conto qui.
+        // Dopo, quando un muro cambia, il gioco lo ricalcola da sé
+        var wall = t.WallType > 0 && _wallFramed is { } framed && !framed[y * Main.maxTilesX + x];
+        if (!tile && !wall) return;
         var (liquid, actions) = (WorldGen.noLiquidCheck, WorldGen.noTileActions);
         WorldGen.noLiquidCheck = true;
         WorldGen.noTileActions = true;
         try
         {
-            WorldGen.TileFrame(x, y, resetFrame: true, noBreak: true);
+            if (tile) WorldGen.TileFrame(x, y, resetFrame: true, noBreak: true);
+            if (wall)
+            {
+                Framing.WallFrame(x, y, resetFrame: true);
+                _wallFramed![y * Main.maxTilesX + x] = true;
+            }
         }
         finally
         {
@@ -100,11 +111,16 @@ public class LiveMapSystem : ModSystem
         }
     }
 
+    /// <summary>Muri a cui LiveMap ha già calcolato il frame da questo caricamento del mondo (un bit per tile).</summary>
+    private static System.Collections.BitArray? _wallFramed;
+
     /// <summary>Dati grezzi della tile, per gli sprite nel pannello (TileData).</summary>
     private static void ReadTile(int x, int y, Span<byte> dest)
     {
         var t = Main.tile[x, y];
-        TileData.Write(dest, t.HasTile, t.TileType, t.TileFrameX, t.TileFrameY, t.WallType, (int)t.BlockType, t.IsActuated, t.LiquidAmount > 0, t.TileColor);
+        var wallFramed = t.WallType > 0 && _wallFramed?[y * Main.maxTilesX + x] == true;
+        TileData.Write(dest, t.HasTile, t.TileType, t.TileFrameX, t.TileFrameY, t.WallType, (int)t.BlockType, t.IsActuated, t.LiquidAmount > 0, t.TileColor,
+            wallFramed ? t.WallFrameX : -1, wallFramed ? t.WallFrameY : -1);
     }
 
     /// <summary>Tipi di blocchi e muri, con mod e texture di quelli delle mod (types.json).</summary>
