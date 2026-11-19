@@ -139,7 +139,8 @@ const infoCache = new Map<string, { key: string; value: FileInfo }>()
 async function fileInfo(path: string): Promise<FileInfo | null> {
   const s = await stat(path).catch(() => null)
   if (!s?.isFile()) return null
-  const key = `${s.size}:${s.mtimeMs}`
+  // Con l'inode: un file sostituito (rename) nello stesso millisecondo e con la stessa dimensione è un altro file
+  const key = `${s.ino}:${s.size}:${s.mtimeMs}`
   const hit = infoCache.get(path)
   if (hit?.key === key) return hit.value
   let value: FileInfo

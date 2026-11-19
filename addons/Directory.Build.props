@@ -1,19 +1,55 @@
-<!-- Impostazioni comuni agli add-on (plugin TShock distribuiti con tModManager). -->
+<!--
+  Impostazioni comuni agli add-on. Due tipi:
+   - plugin TShock (es. LiveMap): .NET 9, riferimento al pacchetto TShock → dist/<Nome>.dll;
+   - mod tModLoader (es. TmmLiveMap, riconoscibili dal build.txt): .NET 8, riferimenti a tModLoader e alle sue
+     librerie in $(TmlPath) (scaricato da build.sh, versione in tmodloader.version) → dist/<Nome>.tmod.
+  Shared/ contiene il codice comune (il motore della mappa), compilato in entrambi.
+-->
 <Project>
   <PropertyGroup>
-    <!-- TShock 6 gira su .NET 9 -->
-    <TargetFramework>net9.0</TargetFramework>
+    <IsTmlMod Condition="Exists('$(MSBuildProjectDirectory)/build.txt')">true</IsTmlMod>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
     <!-- Finiscono nella risorsa di versione della .dll: il pannello li mostra nell'elenco dei plugin -->
     <Company>tModManager</Company>
     <Product>tModManager</Product>
   </PropertyGroup>
 
-  <ItemGroup>
+  <!-- Plugin TShock: TShock 6 gira su .NET 9 -->
+  <PropertyGroup Condition="'$(IsTmlMod)' != 'true'">
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsTmlMod)' != 'true'">
     <!-- Serve solo per compilare: sul server TShock c'è già (niente .dll di TShock accanto all'add-on) -->
     <PackageReference Include="TShock" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <!-- Mod tModLoader: come tMLMod.targets di tModLoader (ma senza avviarlo: il .tmod lo crea tools/TmodPack) -->
+  <PropertyGroup Condition="'$(IsTmlMod)' == 'true'">
+    <TmlPath Condition="'$(TmlPath)' == ''">$(MSBuildThisFileDirectory).tml/</TmlPath>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <LangVersion>12.0</LangVersion>
+    <DebugType>portable</DebugType>
+    <!-- Conflitti di versione tra le librerie di tModLoader e quelle di .NET: innocui -->
+    <MSBuildWarningsAsMessages>MSB3277;MSB3243</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsTmlMod)' == 'true'">
+    <Reference Include="$(TmlPath)tModLoader.dll" Private="false" />
+    <Reference Include="$(TmlPath)Libraries/**/*.dll" Private="false" />
+    <Reference Remove="$(TmlPath)Libraries/Native/**" />
+    <Reference Remove="$(TmlPath)Libraries/**/runtime*/**" />
+    <Reference Remove="$(TmlPath)Libraries/**/*.resources.dll" />
+    <Reference Remove="$(TmlPath)Libraries/tModCodeAssist/**" />
+    <Reference Remove="$(TmlPath)Libraries/basic.reference.assemblies.net80/**" />
+    <!-- build.txt, descrizione e icona finiscono nel .tmod, non nella .dll -->
+    <None Remove="**/*" />
+  </ItemGroup>
+
+  <!-- Il motore della mappa, comune a LiveMap (TShock) e TmmLiveMap (tModLoader) -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'LiveMap' Or '$(MSBuildProjectName)' == 'TmmLiveMap'">
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/*.cs" LinkBase="Shared" />
   </ItemGroup>
 </Project>

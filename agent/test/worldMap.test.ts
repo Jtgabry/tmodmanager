@@ -147,7 +147,7 @@ test('server TShock: LiveMap ha la precedenza quando ha disegnato, altrimenti la
   await worldFileMapIdle()
 
   const off = await worldMap(server, { watching: true })
-  assert.deepEqual([off.source, off.liveMap], ['world', { available: true, enabled: false }])
+  assert.deepEqual([off.source, off.liveMap], ['world', { available: true, installed: true, enabled: false }])
   await assert.rejects(stat(join(liveMap, 'viewer'))) // LiveMap spento: nessun segnale
 
   await mkdir(plugins, { recursive: true })

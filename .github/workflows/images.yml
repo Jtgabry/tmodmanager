@@ -57,7 +57,7 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Add-on (plugin TShock)
+      - name: Add-on (plugin TShock e mod tModLoader)
         run: bash addons/build.sh
 
       - name: Agent

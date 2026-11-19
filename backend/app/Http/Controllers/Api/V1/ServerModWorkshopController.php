@@ -163,6 +163,7 @@ class ServerModWorkshopController extends Controller
 
     /**
      * Installa dal Workshop gli elementi indicati. Se c'è già un download in corso si mettono in coda.
+     * Gli add-on di tModManager (ID "tmm-<Nome>", es. LiveMap) non si scaricano: l'agent li copia subito.
      */
     public function install(Request $request, string $server): JsonResponse
     {
@@ -170,7 +171,7 @@ class ServerModWorkshopController extends Controller
 
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1', 'max:50'],
-            'ids.*' => ['required', 'string', 'distinct', 'regex:/^\\d{1,20}$/'],
+            'ids.*' => ['required', 'string', 'distinct', 'regex:/^(\\d{1,20}|tmm-[A-Za-z0-9_]{1,64})$/'],
         ]);
 
         $job = $this->agent->json('post', "/servers/{$server}/workshop/install", ['ids' => array_values($data['ids'])], timeout: 30);

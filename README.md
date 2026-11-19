@@ -152,13 +152,16 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
   nell'elenco da sole. Le modifiche valgono al riavvio del server.
 - **Mondo**: mappa del mondo del server, trascinabile e con zoom (anche a due dita), con lo spawn. Per tutti i server
   si ricava dal file del mondo (`.wld`) a ogni salvataggio, con i colori della minimappa di Terraria (estratti dal gioco
-  durante la build, `addons/tools/MapColors`); il disegno gira in un worker thread dell'agent. Sui server TShock
-  l'add-on LiveMap la rende in tempo reale, con i giocatori, solo finché la pagina è aperta. Con tModLoader si legge
-  anche il `.twld` accanto al mondo, con i blocchi e i muri delle mod: il loro colore è la media della texture nel
-  `.tmod` (il codice della mod che lo decide nel gioco non si può leggere), con un colore fisso se la texture manca.
-- **Add-on** (`addons/`): plugin TShock scritti per tModManager e distribuiti con il pannello, come **LiveMap** (mappa del
-  mondo in tempo reale). Compaiono già tra i plugin di ogni server TShock, disattivati: si attivano con un clic e si
-  aggiornano insieme al pannello. L'immagine dell'agent li compila; in sviluppo `addons/build.sh` (SDK .NET 9).
+  durante la build, `addons/tools/MapColors`); il disegno gira in un worker thread dell'agent. Con l'add-on LiveMap
+  (TShock e tModLoader) è in tempo reale, con i giocatori, solo finché la pagina è aperta. Senza, con tModLoader si
+  legge anche il `.twld` accanto al mondo, con i blocchi e i muri delle mod: il loro colore è la media della texture
+  nel `.tmod`, con un colore fisso se la texture manca (LiveMap invece usa i colori veri della minimappa).
+- **Add-on** (`addons/`): scritti per tModManager e distribuiti con il pannello, come **LiveMap** (mappa del mondo in
+  tempo reale). Per TShock è un plugin, già tra i plugin di ogni server, disattivato: si attiva con un clic. Per
+  tModLoader è una mod solo lato server, che compare nel **Workshop** del pannello (anche senza la chiave di Steam):
+  "Installa" la mette tra le mod, da lì si abilita e si aggiunge ai modpack come le altre, ma non viene mai collegata
+  allo Steam Workshop né esportata con i modpack. Si aggiornano insieme al pannello. L'immagine dell'agent li compila;
+  in sviluppo `addons/build.sh` (SDK .NET 9; per le mod scarica tModLoader, solo per compilare).
 - **Versioni** (admin): per ogni gioco c'è un'installazione principale, condivisa (aggiornandola si aggiornano tutti i
   server che la usano), più le versioni fisse, che non si aggiornano. Dalla Panoramica di un server si sceglie gioco e
   versione, anche una non ancora installata: il pannello la installa come versione fissa, spegne il server salvando il

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { z } from 'zod'
+import { isModAddon } from './addons.js'
 import { hasArchivedVersion, MOD_VERSION, useArchivedVersion } from './archive.js'
 import { paths } from './paths.js'
 import { dependencyClosure, disableMods, enableMods, listMods, MOD_NAME, ModError, readEnabled } from './mods.js'
@@ -64,6 +65,8 @@ export type ModpackView = Modpack & {
   unavailable: string[]
   /** Mod la cui versione bloccata è nell'archivio, diversa da quella installata: l'attivazione la cambia. */
   toSwitch: { name: string; from: string | null; to: string }[]
+  /** Add-on di tModManager nel pack (es. LiveMap): restano sul server, non vengono mai esportati. */
+  addons: string[]
 }
 
 /** Cosa manca o va cambiato per avere il pack com'è definito. */
@@ -93,7 +96,7 @@ export async function listModpacks(server: ServerDefinition): Promise<ModpackVie
     packs.map(async (pack) => {
       const resolved = await resolvePack(server, pack, installed)
       const complete = pack.mods.every((m) => on.has(m)) && !resolved.toSwitch.length && !resolved.unavailable.length
-      return { ...pack, state: !pack.active ? 'disabled' : complete ? 'enabled' : 'partial', ...resolved } satisfies ModpackView
+      return { ...pack, state: !pack.active ? 'disabled' : complete ? 'enabled' : 'partial', ...resolved, addons: pack.mods.filter(isModAddon) } satisfies ModpackView
     }),
   )
 }

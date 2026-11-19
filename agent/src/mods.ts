@@ -4,6 +4,7 @@ import { copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { isModAddon } from './addons.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { type ModInfo, readModInfo, sideName, TmodError } from './tmod.js'
@@ -108,6 +109,8 @@ export type ModEntry = {
   hasIcon: boolean
   /** Il file non è un .tmod leggibile. */
   error: string | null
+  /** Add-on di tModManager (es. LiveMap): si aggiorna con il pannello, mai collegato al Workshop né esportato. */
+  addon: boolean
 }
 
 export async function listMods(server: ServerDefinition): Promise<{ mods: ModEntry[]; missingEnabled: string[] }> {
@@ -141,6 +144,7 @@ export async function listMods(server: ServerDefinition): Promise<{ mods: ModEnt
         enabled: enabled.has(name),
         missingDependencies: [],
         error,
+        addon: isModAddon(name),
       }
     }),
   )

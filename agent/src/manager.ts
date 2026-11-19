@@ -20,6 +20,7 @@ import {
   ticksToSeconds,
 } from './procfs.js'
 import { modsFingerprint } from './mods.js'
+import { refreshInstalledModAddons } from './modAddons.js'
 import { pluginsFingerprint, refreshActiveAddons } from './plugins.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
@@ -338,6 +339,8 @@ export class ServerManager {
       // Add-on di tModManager attivi (es. LiveMap): alla versione di questo pannello
       await refreshActiveAddons(server).catch(() => [])
     }
+    // Add-on di tModManager installati come mod (es. LiveMap): alla versione di questo pannello
+    if (server.game === 'tmodloader') await refreshInstalledModAddons(server).catch(() => [])
     const { command, env } = launchCommand(server, settings)
     await startSession(server.screenSession, server.installDir, logFile, paths.screenrc(), command, env)
 

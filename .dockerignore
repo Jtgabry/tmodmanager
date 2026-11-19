@@ -12,6 +12,7 @@ addons/**/bin
 addons/**/obj
 addons/obj
 addons/dist
+addons/.tml
 frontend/dist
 backend/vendor
 backend/storage/logs/*

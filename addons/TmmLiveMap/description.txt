@@ -1,0 +1,3 @@
+Mappa del mondo in tempo reale per il pannello di tModManager: la sezione Mondo del pannello mostra il mondo del server mentre cambia, con i giocatori.
+
+Lavora solo sul server, solo mentre qualcuno guarda la mappa dal pannello, e con un limite di tempo per ogni tick: il gioco non rallenta. I colori sono quelli della minimappa del gioco, anche per i blocchi delle mod.

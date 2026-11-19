@@ -75,6 +75,8 @@ export type Mod = {
   error: string | null
   /** Il .tmod ha un'icona. */
   hasIcon?: boolean
+  /** Add-on di tModManager (es. LiveMap): si aggiorna con il pannello, mai collegato al Workshop né esportato. */
+  addon?: boolean
   /** ID della pagina del Workshop collegata, se c'è. */
   workshopId: string | null
   /** Dati della pagina del Workshop, dal database del sito (null se non collegata o non trovata). */
@@ -108,6 +110,8 @@ export type Modpack = {
   unavailable: string[]
   /** Versioni che l'attivazione cambierà prendendole dall'archivio. */
   toSwitch: { name: string; from: string | null; to: string }[]
+  /** Add-on di tModManager nel pack (es. LiveMap): restano sul server, mai esportati. */
+  addons?: string[]
 }
 
 export type ModpackActivationResult = {
@@ -212,7 +216,7 @@ export type WorldMapState = {
   source: MapSource | null
   unavailable: 'no-world' | 'no-colors' | 'world-error' | 'loading' | null
   /** Solo per i server TShock. */
-  liveMap: { available: boolean; enabled: boolean } | null
+  liveMap: { available: boolean; installed: boolean; enabled: boolean } | null
   worldFile: { generating: boolean; error: string | null; savedAt: string | null } | null
   /** tModLoader: blocchi e muri delle mod letti dal .twld. */
   modBlocks: { tiles: number; walls: number; fromTextures: number; error: string | null } | null
@@ -445,9 +449,18 @@ export type BrowseItem = {
   requiresTml: string | null
   /** ID delle dipendenze dichiarate nel Workshop. */
   dependencies: string[]
+  /** Add-on di tModManager (es. LiveMap): non viene da Steam, "Installa" lo copia dal pannello. */
+  addon?: boolean
 }
 
-export type BrowsePage = { tmlVersion: string | null; total: number; nextCursor: string | null; items: BrowseItem[] }
+export type BrowsePage = {
+  tmlVersion: string | null
+  total: number
+  nextCursor: string | null
+  items: BrowseItem[]
+  /** Perché mancano le mod di Steam (senza chiave, Steam non risponde): restano gli add-on del pannello. */
+  steamError?: string | null
+}
 
 export type BrowseDetails = BrowseItem & {
   images: string[]

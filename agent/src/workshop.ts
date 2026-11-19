@@ -6,9 +6,11 @@ import { promisify } from 'node:util'
 import { randomBytes } from 'node:crypto'
 import { access, constants, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { ADDON_ITEM_ID, addonItemId, findModAddon, isModAddon, modAddonByItemId } from './addons.js'
 import { config } from './config.js'
 import { paths } from './paths.js'
 import { enableMods, installModFile, listMods, MOD_NAME, ModError, type ModEntry, modsDir, readEnabled, withServerLock } from './mods.js'
+import { installModAddon, isModAddonInstalled, type ShippedModAddon, shippedModAddon, shippedModAddons } from './modAddons.js'
 import type { ServerDefinition } from './registry.js'
 import { compareVersions, installedVersion } from './tml.js'
 import { type ModInfo, readModInfo } from './tmod.js'
@@ -260,9 +262,18 @@ export type BrowseItem = WorkshopItem & {
   requiresTml: string | null
   /** ID degli elementi collegati nel Workshop (le dipendenze dichiarate). */
   dependencies: string[]
+  /** Add-on di tModManager (es. LiveMap): non viene da Steam, "installarlo" lo copia dal pannello. */
+  addon: boolean
 }
 
-export type BrowsePage = { tmlVersion: string | null; total: number; nextCursor: string | null; items: BrowseItem[] }
+export type BrowsePage = {
+  tmlVersion: string | null
+  total: number
+  nextCursor: string | null
+  items: BrowseItem[]
+  /** Perché i risultati di Steam mancano (senza chiave, Steam non risponde): restano gli add-on del pannello. */
+  steamError: string | null
+}
 
 export type BrowseDetails = BrowseItem & {
   /** Immagini aggiuntive della pagina. */
@@ -305,21 +316,77 @@ function browseItem(raw: RawDetails, tml: string | null, description: string | u
     timeCreated: raw.time_created ? new Date(raw.time_created * 1000).toISOString() : null,
     ...compatibility(item.versions, tml),
     dependencies: (raw.children ?? []).flatMap((c) => (c.publishedfileid && /^\d{1,20}$/.test(String(c.publishedfileid)) ? [String(c.publishedfileid)] : [])),
+    addon: false,
   }
+}
+
+/** Un add-on di tModManager come elemento del Workshop del pannello. */
+function addonBrowseItem(shipped: ShippedModAddon, tml: string | null): BrowseItem {
+  // tModLoader rifiuta le mod compilate per una versione più nuova della sua
+  const tooOld = tml !== null && compareVersions(tml, shipped.info.tmlVersion) < 0
+  return {
+    id: addonItemId(shipped.addon),
+    found: true,
+    title: shipped.info.displayName ?? shipped.addon.name,
+    modName: shipped.addon.name,
+    versions: [],
+    timeUpdated: shipped.mtime.toISOString(),
+    fileSize: shipped.size,
+    url: '',
+    tags: shipped.addon.tags,
+    previewUrl: shipped.icon,
+    subscriptions: null,
+    description: shipped.info.description,
+    timeCreated: null,
+    compatibleVersion: tooOld ? null : shipped.info.version,
+    requiresTml: tooOld ? shipped.info.tmlVersion : null,
+    dependencies: [],
+    addon: true,
+  }
+}
+
+/** Add-on che rispondono ai filtri della pagina del Workshop (ricerca e categoria). */
+async function matchingAddons(tml: string | null, q: string, tag: string | undefined): Promise<BrowseItem[]> {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean)
+  return (await shippedModAddons())
+    .filter(({ addon, info }) => {
+      if (tag && !addon.tags.some((t) => t.toLowerCase() === tag.toLowerCase())) return false
+      const text = [info.displayName, info.description, addon.name, ...addon.keywords].join(' ').toLowerCase()
+      return words.every((w) => text.includes(w))
+    })
+    .map((shipped) => addonBrowseItem(shipped, tml))
 }
 
 const needKey = () => {
   if (!config.steamApiKey) throw new WorkshopError('Sfogliare il Workshop richiede la chiave Steam Web API (STEAM_API_KEY nel file .env dell\'agent)', 503)
 }
 
-/** Una pagina di risultati del Workshop di tModLoader (30 alla volta, si prosegue con `cursor`). */
+/**
+ * Una pagina di risultati del Workshop di tModLoader (30 alla volta, si prosegue con `cursor`). In cima alla
+ * prima pagina gli add-on di tModManager (es. LiveMap), che ci sono anche senza la chiave di Steam.
+ */
 export async function browseWorkshop(
   server: ServerDefinition,
   opts: { q?: string; sort?: BrowseSort; tag?: string; cursor?: string },
 ): Promise<BrowsePage> {
-  needKey()
   const q = (opts.q ?? '').trim()
   if (q.length > 100) throw new WorkshopError('Ricerca troppo lunga (massimo 100 caratteri)', 422)
+  const tml = await installedVersion(server.installDir)
+  const addons = opts.cursor ? [] : await matchingAddons(tml, q, opts.tag)
+  const onlyAddons = (steamError: string): BrowsePage => ({ tmlVersion: tml, total: addons.length, nextCursor: null, items: addons, steamError })
+  if (!config.steamApiKey) {
+    return onlyAddons("Per vedere le mod dello Steam Workshop serve la chiave Steam Web API (STEAM_API_KEY nel file .env dell'agent)")
+  }
+  try {
+    const page = await browseSteam(tml, q, opts)
+    return { ...page, total: page.total + addons.length, items: [...addons, ...page.items] }
+  } catch (err) {
+    if (!addons.length) throw err
+    return onlyAddons(err instanceof Error ? err.message : String(err))
+  }
+}
+
+async function browseSteam(tml: string | null, q: string, opts: { sort?: BrowseSort; tag?: string; cursor?: string }): Promise<BrowsePage> {
   const sort: BrowseSort = opts.sort ?? (q ? 'relevance' : 'popular')
   const input: Record<string, unknown> = {
     appid: TML_APP_ID,
@@ -335,18 +402,24 @@ export async function browseWorkshop(
   if (sort === 'trend') input.days = 7
   if (opts.tag) input.requiredtags = [opts.tag]
 
-  const [res, tml] = await Promise.all([steamService('QueryFiles', input), installedVersion(server.installDir)])
+  const res = await steamService('QueryFiles', input)
   const items = (res.publishedfiledetails ?? []).map((raw) => browseItem(raw, tml, raw.short_description)).filter((i) => i.found)
   const at = Date.now()
   for (const item of items) detailsCache.set(item.id, { at, item: withoutBrowseFields(item) })
   const next = res.next_cursor && res.next_cursor !== input.cursor && (res.publishedfiledetails ?? []).length > 0 ? res.next_cursor : null
-  return { tmlVersion: tml, total: res.total ?? items.length, nextCursor: next, items }
+  return { tmlVersion: tml, total: res.total ?? items.length, nextCursor: next, items, steamError: null }
 }
 
-const withoutBrowseFields = ({ description: _d, timeCreated: _t, compatibleVersion: _c, requiresTml: _r, dependencies: _p, ...item }: BrowseItem): WorkshopItem => item
+const withoutBrowseFields = ({ description: _d, timeCreated: _t, compatibleVersion: _c, requiresTml: _r, dependencies: _p, addon: _a, ...item }: BrowseItem): WorkshopItem => item
 
 /** Pagina completa di un elemento: descrizione, immagini e dipendenze dichiarate. */
 export async function workshopItemDetails(server: ServerDefinition, id: string): Promise<BrowseDetails> {
+  const addon = modAddonByItemId(id)
+  if (addon) {
+    const shipped = await shippedModAddon(addon.name)
+    if (!shipped) throw new WorkshopError('Add-on non disponibile in questa installazione del pannello', 404)
+    return { ...addonBrowseItem(shipped, await installedVersion(server.installDir)), images: [], dependencyItems: [] }
+  }
   needKey()
   const [res, tml] = await Promise.all([
     steamService('GetDetails', {
@@ -432,7 +505,9 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
  * Collega in automatico al Workshop le mod che non lo sono ancora (serve la chiave):
  * prima con gli ID di install.txt, poi cercando il nome interno.
  */
-async function autoLink(server: ServerDefinition, names: string[], force: boolean): Promise<Store> {
+async function autoLink(server: ServerDefinition, allNames: string[], force: boolean): Promise<Store> {
+  // Gli add-on di tModManager non sono nel Workshop: una mod di Steam con lo stesso nome non è la stessa
+  const names = allNames.filter((n) => !isModAddon(n))
   let store = await readStore()
   if (!config.steamApiKey) return store
   const now = Date.now()
@@ -466,6 +541,7 @@ async function autoLink(server: ServerDefinition, names: string[], force: boolea
 
 /** Collega a mano una mod a un elemento del Workshop (`input` = link o ID), o la segna come "non nel Workshop" (null). */
 export async function setLink(server: ServerDefinition, modName: string, input: string | null): Promise<WorkshopItem | null> {
+  if (isModAddon(modName)) throw new WorkshopError('È un add-on di tModManager: non è nello Steam Workshop e si aggiorna con il pannello', 422)
   const mod = (await listMods(server)).mods.find((m) => m.name === modName)
   if (!mod) throw new WorkshopError(`Mod "${modName}" non trovata`, 404)
   let id: string | null = null
@@ -598,7 +674,7 @@ export function modStatus(mod: ModEntry, link: Link | undefined, item: WorkshopI
 }
 
 export async function checkUpdates(server: ServerDefinition, force = false): Promise<UpdateReport> {
-  const mods = (await listMods(server)).mods.filter((m) => m.error === null)
+  const mods = (await listMods(server)).mods.filter((m) => m.error === null && !m.addon)
   const store = await autoLink(
     server,
     mods.map((m) => m.name),
@@ -973,6 +1049,8 @@ export async function startUpdate(server: ServerDefinition, names: string[]): Pr
   const store = await readStore()
   const unknown = unique.filter((n) => !mods.some((m) => m.name === n))
   if (unknown.length) throw new WorkshopError(`Mod non installate: ${unknown.join(', ')}`, 404)
+  const addons = unique.filter(isModAddon)
+  if (addons.length) throw new WorkshopError(`${addons.join(', ')}: add-on di tModManager, si aggiorna con il pannello`, 422)
   const unlinked = unique.filter((n) => !store.links[n]?.id)
   if (unlinked.length) throw new WorkshopError(`Mod non collegate al Workshop: ${unlinked.join(', ')}`, 422)
 
@@ -994,46 +1072,131 @@ export async function startUpdate(server: ServerDefinition, names: string[]): Pr
 /**
  * Installa dal Workshop gli elementi indicati (ID). Le mod nuove non vengono abilitate: restano
  * "in attesa" finché non si abilitano tutte insieme (applyPending). Una mod già presente si aggiorna.
+ * Gli add-on di tModManager (ID "tmm-…") non si scaricano: si copiano subito dal pannello.
  */
 export async function startInstall(server: ServerDefinition, ids: string[]): Promise<UpdateJob> {
-  needKey()
-  const problem = await steamcmdProblem()
-  if (problem) throw new WorkshopError(problem, 503)
   const unique = [...new Set(ids)]
   if (!unique.length) throw new WorkshopError('Nessun elemento indicato', 422)
+  const addonIds = unique.filter((id) => ADDON_ITEM_ID.test(id))
+  const steamIds = unique.filter((id) => !ADDON_ITEM_ID.test(id))
 
-  const details = await fetchDetails(unique, true)
-  const { mods } = await listMods(server)
-  const requests: JobRequest[] = unique.map((id) => {
-    const item = details.get(id)
-    if (!item?.found) throw new WorkshopError(`Elemento ${id} non trovato nel Workshop di tModLoader`, 404)
-    if (!item.modName || !MOD_NAME.test(item.modName)) {
-      throw new WorkshopError(`"${item.title ?? id}" non dichiara il nome interno della mod: scaricala da Steam e caricala a mano`, 422)
+  // Prima tutti i controlli: se qualcosa non va non si installa niente
+  let requests: JobRequest[] = []
+  if (steamIds.length) {
+    needKey()
+    const problem = await steamcmdProblem()
+    if (problem) throw new WorkshopError(problem, 503)
+    const details = await fetchDetails(steamIds, true)
+    const { mods } = await listMods(server)
+    requests = steamIds.map((id) => {
+      const item = details.get(id)
+      if (!item?.found) throw new WorkshopError(`Elemento ${id} non trovato nel Workshop di tModLoader`, 404)
+      if (!item.modName || !MOD_NAME.test(item.modName)) {
+        throw new WorkshopError(`"${item.title ?? id}" non dichiara il nome interno della mod: scaricala da Steam e caricala a mano`, 422)
+      }
+      if (isModAddon(item.modName)) throw new WorkshopError(`"${item.title ?? id}" ha lo stesso nome di un add-on di tModManager: non si può installare`, 409)
+      const installed = mods.find((m) => m.name === item.modName)
+      return { name: item.modName, workshopId: id, install: !installed, from: installed?.version ?? null, totalBytes: item.fileSize }
+    })
+  }
+  const tml = await installedVersion(server.installDir)
+  const addons = await Promise.all(
+    addonIds.map(async (id) => {
+      const addon = modAddonByItemId(id)
+      const shipped = addon ? await shippedModAddon(addon.name) : null
+      if (!shipped) throw new WorkshopError(`Elemento ${id} non disponibile in questa installazione del pannello`, 404)
+      if (tml && compareVersions(tml, shipped.info.tmlVersion) < 0) {
+        throw new WorkshopError(`${shipped.info.displayName ?? shipped.addon.name} richiede tModLoader ${shipped.info.tmlVersion} o successiva: aggiorna prima tModLoader`, 422)
+      }
+      return shipped
+    }),
+  )
+
+  const addonItems: JobItem[] = []
+  for (const shipped of addons) addonItems.push(await installAddonItem(server, shipped))
+
+  if (requests.length) {
+    // Le mod vengono collegate subito alla loro pagina, così poi si possono aggiornare (un collegamento manuale resta)
+    const checkedAt = new Date().toISOString()
+    await updateStore((s) => {
+      for (const r of requests) if (s.links[r.name]?.source !== 'manual') s.links[r.name] = { id: r.workshopId, source: 'auto', checkedAt }
+    })
+    const job = enqueue(server, requests)
+    job.items.push(...addonItems)
+    return job
+  }
+  return withFinishedItems(server, addonItems)
+}
+
+/** Installa un add-on di tModManager come se fosse stato appena scaricato: in Mods/, in attesa di essere abilitato. */
+async function installAddonItem(server: ServerDefinition, shipped: ShippedModAddon): Promise<JobItem> {
+  const item: JobItem = {
+    name: shipped.addon.name,
+    workshopId: addonItemId(shipped.addon),
+    dependency: false,
+    install: true,
+    from: null,
+    to: shipped.info.version,
+    state: 'done',
+    message: null,
+    bytes: shipped.size,
+    totalBytes: shipped.size,
+  }
+  if (await isModAddonInstalled(server, shipped.addon)) {
+    item.install = false
+    item.state = 'skipped'
+    item.message = 'Già installata'
+    return item
+  }
+  try {
+    item.message = (await installModAddon(server, shipped)).warning
+    await addPending(server.id, shipped.addon.name)
+  } catch (err) {
+    item.state = 'error'
+    item.message = err instanceof Error ? err.message : String(err)
+  }
+  return item
+}
+
+/** Elementi già conclusi (gli add-on): nel lavoro in corso, se c'è, altrimenti in un lavoro già finito. */
+function withFinishedItems(server: ServerDefinition, items: JobItem[]): UpdateJob {
+  const running = jobs.get(server.id)
+  if (running?.state === 'running') {
+    for (const item of items) {
+      const index = running.items.findIndex((i) => i.name === item.name)
+      if (index >= 0 && FINISHED.includes(running.items[index].state)) running.items.splice(index, 1)
+      if (!running.items.some((i) => i.name === item.name)) running.items.push(item)
     }
-    const installed = mods.find((m) => m.name === item.modName)
-    return { name: item.modName, workshopId: id, install: !installed, from: installed?.version ?? null, totalBytes: item.fileSize }
-  })
-
-  // Le mod vengono collegate subito alla loro pagina, così poi si possono aggiornare (un collegamento manuale resta)
-  const checkedAt = new Date().toISOString()
-  await updateStore((s) => {
-    for (const r of requests) if (s.links[r.name]?.source !== 'manual') s.links[r.name] = { id: r.workshopId, source: 'auto', checkedAt }
-  })
-  return enqueue(server, requests)
+    return running
+  }
+  const now = new Date().toISOString()
+  const job: UpdateJob = {
+    serverId: server.id,
+    state: items.some((i) => i.state === 'error') ? 'error' : 'done',
+    startedAt: now,
+    finishedAt: now,
+    items,
+    warnings: [],
+  }
+  jobs.set(server.id, job)
+  return job
 }
 
 /** Installa dal Workshop le mod indicate per nome interno (es. quelle di un modpack che mancano). */
 export async function startInstallByName(server: ServerDefinition, names: string[]): Promise<UpdateJob> {
-  needKey()
   const unique = [...new Set(names)]
   if (!unique.length) throw new WorkshopError('Nessuna mod indicata', 422)
-  const store = await autoLink(server, unique, true)
-  const unknown = unique.filter((n) => !store.links[n]?.id)
+  const addonIds = unique.flatMap((n) => {
+    const addon = findModAddon(n)
+    return addon ? [addonItemId(addon)] : []
+  })
+  const rest = unique.filter((n) => !isModAddon(n))
+  if (!rest.length) return startInstall(server, addonIds)
+  needKey()
+  const store = await autoLink(server, rest, true)
+  const unknown = rest.filter((n) => !store.links[n]?.id)
   if (unknown.length) throw new WorkshopError(`Non trovate nel Workshop: ${unknown.join(', ')}. Caricale a mano.`, 404)
-  return startInstall(
-    server,
-    unique.map((n) => store.links[n].id!),
-  )
+  return startInstall(server, [...rest.map((n) => store.links[n].id!), ...addonIds])
 }
 
 /** Installa una mod appena scaricata (cartella `dir`), poi cancella il download. */

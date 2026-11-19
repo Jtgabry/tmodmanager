@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { isModAddon } from './addons.js'
 import { archivedVersionPath } from './archive.js'
 import { findModpack } from './modpacks.js'
 import { dependencyClosure, listMods, ModError, modsDir, tmpDir } from './mods.js'
@@ -15,6 +16,7 @@ import { writeZip, type ZipEntry } from './zip.js'
  *   └── ModConfigs/  le configurazioni di quelle mod (<NomeMod>_<Config>.json)
  *
  * È lo stesso formato dei pack in Mods/ModPacks/ di tModLoader: si può importare lì o in un altro pannello.
+ * Gli add-on di tModManager (es. LiveMap) restano fuori: sono del server, non devono finire su nessun client.
  */
 
 /** Nome valido come cartella (e file) su Windows, macOS e Linux. */
@@ -31,6 +33,7 @@ export type PackExport = { path: string; filename: string; size: number; cleanup
 export async function exportModpackZip(server: ServerDefinition, id: string): Promise<PackExport> {
   const pack = await findModpack(server, id)
   if (!pack.mods.length) throw new ModError('Il modpack è vuoto: non c\'è niente da esportare', 422)
+  if (pack.mods.every(isModAddon)) throw new ModError('Il modpack contiene solo add-on di tModManager, che restano sul server: non c\'è niente da esportare', 422)
   const { mods } = await listMods(server)
   const installed = new Map(mods.map((m) => [m.name, m]))
   const graph = new Map(mods.map((m) => [m.name, m.dependencies]))
@@ -40,7 +43,7 @@ export async function exportModpackZip(server: ServerDefinition, id: string): Pr
   const entries: ZipEntry[] = []
   const included: string[] = []
   const missing: string[] = []
-  for (const name of [...dependencyClosure(graph, pack.mods)].sort()) {
+  for (const name of [...dependencyClosure(graph, pack.mods)].filter((n) => !isModAddon(n)).sort()) {
     const mod = installed.get(name)
     const pinned = pack.versions[name]
     let file: string | null = null

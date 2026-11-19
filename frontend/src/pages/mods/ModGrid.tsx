@@ -461,10 +461,19 @@ function ModDetails(props: {
       </div>
 
       <dl className="details">
-        <dt>Workshop</dt>
-        <dd>
-          <WorkshopLinkEditor serverId={props.serverId} modName={mod.name} update={props.update} canSearch={props.canSearch} />
-        </dd>
+        {mod.addon ? (
+          <>
+            <dt>Aggiornamenti</dt>
+            <dd>Si aggiorna insieme al pannello</dd>
+          </>
+        ) : (
+          <>
+            <dt>Workshop</dt>
+            <dd>
+              <WorkshopLinkEditor serverId={props.serverId} modName={mod.name} update={props.update} canSearch={props.canSearch} />
+            </dd>
+          </>
+        )}
         {mod.workshop?.subscriptions != null && (
           <>
             <dt>Iscritti</dt>

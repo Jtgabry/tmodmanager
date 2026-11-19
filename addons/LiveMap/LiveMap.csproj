@@ -3,6 +3,6 @@
   <PropertyGroup>
     <AssemblyTitle>LiveMap</AssemblyTitle>
     <Description>Mappa del mondo in tempo reale per il pannello di tModManager.</Description>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 </Project>

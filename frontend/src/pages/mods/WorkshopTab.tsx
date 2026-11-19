@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Sheet from '../../components/Sheet'
@@ -60,6 +61,7 @@ export default function WorkshopTab() {
   const job = useUpdateJob(server.id)
   const pending = usePendingMods(server.id)
   const install = useInstallFromWorkshop(server.id)
+  const queryClient = useQueryClient()
   const cancel = useCancelJobItem(server.id)
   // Arrivando da un modpack («Cerca nel Workshop»): le mod installate vengono aggiunte a quel pack
   const [params] = useSearchParams()
@@ -107,7 +109,17 @@ export default function WorkshopTab() {
   }
   const onInstall = (id: string) => {
     const item = items.find((i) => i.id === id)
-    install.mutate([id], { onSuccess: () => addToPack(item?.modName ?? null) })
+    install.mutate([id], {
+      onSuccess: () => {
+        addToPack(item?.modName ?? null)
+        // Un add-on di tModManager è installato subito (niente download da seguire): si ricaricano le mod
+        if (item?.addon) {
+          void queryClient.invalidateQueries({ queryKey: ['servers', server.id, 'mods'], exact: true })
+          void queryClient.invalidateQueries({ queryKey: ['servers', server.id, 'workshop', 'pending'] })
+          void queryClient.invalidateQueries({ queryKey: ['servers', server.id], exact: true })
+        }
+      },
+    })
   }
   const packAction = (item: BrowseItem) =>
     targetPack && item.modName && (statusOf(item).kind === 'installed' || statusOf(item).kind === 'pending')
@@ -174,6 +186,7 @@ export default function WorkshopTab() {
       {install.error ? <div className="alert alert-error">{errorMessage(install.error)}</div> : null}
       {cancel.error ? <div className="alert alert-error">{errorMessage(cancel.error)}</div> : null}
       {browse.error && <div className="alert alert-error">{errorMessage(browse.error)}</div>}
+      {browse.data?.pages[0]?.steamError && <div className="alert alert-info">{browse.data.pages[0].steamError}</div>}
       {browse.isLoading && <div className="spinner" />}
 
       {browse.data && items.length === 0 && <div className="empty">Nessuna mod trovata.</div>}
@@ -346,6 +359,7 @@ function workshopActions(
       ),
     })
   }
+  if (item.addon) return actions // add-on di tModManager: non è su Steam
   actions.push({
     key: 'steam',
     priority: 1,
@@ -389,7 +403,11 @@ function WorkshopCard(props: {
               {title}
             </button>
           </h3>
-          {item.subscriptions != null && <div className="mod-author">{item.subscriptions.toLocaleString('it')} iscritti</div>}
+          {item.addon ? (
+            <div className="mod-author">di tModManager</div>
+          ) : (
+            item.subscriptions != null && <div className="mod-author">{item.subscriptions.toLocaleString('it')} iscritti</div>
+          )}
           <StatusPills item={item} status={status} />
         </div>
       </div>
@@ -448,9 +466,11 @@ function WorkshopDetails(props: {
           <StatusPills item={item} status={status} />
           <div className="btn-row">
             <InstallButton status={status} installing={props.installing} onInstall={props.onInstall} />
-            <a className="btn btn-sm" href={item.url} target="_blank" rel="noreferrer noopener">
-              Apri su Steam
-            </a>
+            {!item.addon && (
+              <a className="btn btn-sm" href={item.url} target="_blank" rel="noreferrer noopener">
+                Apri su Steam
+              </a>
+            )}
           </div>
         </div>
       </div>
@@ -506,6 +526,12 @@ function WorkshopDetails(props: {
           {formatDate(item.timeUpdated)}
           {item.timeCreated ? ` · pubblicata ${formatDate(item.timeCreated)}` : ''}
         </dd>
+        {item.addon && (
+          <>
+            <dt>Autore</dt>
+            <dd>tModManager · si aggiorna insieme al pannello</dd>
+          </>
+        )}
       </dl>
 
       {full.error ? <div className="alert alert-error">{errorMessage(full.error)}</div> : null}

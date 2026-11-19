@@ -22,7 +22,9 @@ function download(href: string, filename?: string) {
 
 /** Scarica l'elenco delle mod come .json (lo stesso formato che «Importa da tModLoader» accetta). */
 export function downloadPackJson(pack: Modpack) {
-  const blob = new Blob([`${JSON.stringify(pack.mods, null, 2)}\n`], { type: 'application/json' })
+  // Gli add-on di tModManager (es. LiveMap) restano sul server: fuori anche dall'elenco
+  const mods = pack.mods.filter((m) => !(pack.addons ?? []).includes(m))
+  const blob = new Blob([`${JSON.stringify(mods, null, 2)}\n`], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   download(url, `${pack.name.replace(/[\\/:*?"<>|]+/g, '_')}.json`)
   setTimeout(() => URL.revokeObjectURL(url), 1000)

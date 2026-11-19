@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, writeFile, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -185,6 +185,12 @@ test('attivazione, file messi a mano, plugin di TShock ed eliminazione completa'
   assert.deepEqual([extra?.enabled, extra?.versions.length], [false, 1])
 })
 
+/** Data della build dell'add-on distribuita, `seconds` secondi dopo adesso. */
+const shipped = (seconds: number) => {
+  const at = new Date(Date.now() + seconds * 1000)
+  return utimes(join(config.addonsDir, 'LiveMap.dll'), at, at)
+}
+
 test('add-on di tModManager: in elenco disattivato, si attiva, si aggiorna con il pannello, non si carica né si elimina', async () => {
   const { server, upload, active } = await setup()
   await mkdir(config.addonsDir, { recursive: true })
@@ -202,11 +208,13 @@ test('add-on di tModManager: in elenco disattivato, si attiva, si aggiorna con i
 
   // Nuova build distribuita con il pannello: il file attivo si aggiorna da solo
   await writeFile(join(config.addonsDir, 'LiveMap.dll'), fakeAssembly({ name: 'LiveMap', version: '1.1.0' }))
+  await shipped(10) // data diversa: due scritture nello stesso millisecondo sembrerebbero lo stesso file
   const updated = (await listPlugins(server)).plugins.find((p) => p.name === 'LiveMap')
   assert.equal(updated?.versions[0].version, '1.1.0')
   assert.equal(readAssemblyInfo(await readFile(join(server.saveDir, 'ServerPlugins', 'LiveMap.dll'))).version, '1.1.0')
   // Prima dell'avvio del server l'add-on attivo si allinea anche senza aprire l'elenco dei plugin
   await writeFile(join(config.addonsDir, 'LiveMap.dll'), fakeAssembly({ name: 'LiveMap', version: '1.2.0' }))
+  await shipped(20) // data diversa: due scritture nello stesso millisecondo sembrerebbero lo stesso file
   assert.deepEqual(await refreshActiveAddons(server), ['LiveMap'])
   assert.equal(readAssemblyInfo(await readFile(join(server.saveDir, 'ServerPlugins', 'LiveMap.dll'))).version, '1.2.0')
   assert.deepEqual(await refreshActiveAddons(server), [])

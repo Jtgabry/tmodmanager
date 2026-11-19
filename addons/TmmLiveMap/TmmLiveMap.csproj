@@ -1,0 +1,3 @@
+<!-- LiveMap per tModLoader. Framework e riferimenti da ../Directory.Build.props; nome, versione e lato da build.txt -->
+<Project Sdk="Microsoft.NET.Sdk">
+</Project>

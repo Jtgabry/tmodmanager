@@ -1,9 +1,8 @@
 using System.Buffers;
 using System.Text.Json;
 using System.Threading.Channels;
-using TShockAPI;
 
-namespace LiveMap;
+namespace TmmLiveMap;
 
 public sealed record WorldInfo(string Name, int Id, int Width, int Height, int SpawnX, int SpawnY, int Surface, int Rock);
 
@@ -14,7 +13,7 @@ public sealed record PlayerInfo(string Name, float X, float Y, int Team, int Lif
 /// Tutto il suo stato è toccato solo dal suo thread (le richieste arrivano in coda), così il thread di gioco
 /// non aspetta mai il disco.
 ///
-/// Cartella (tshock/map/):
+/// Cartella (tshock/map/ con TShock, LiveMap/ nella cartella dei salvataggi con tModLoader):
 ///   manifest.json          mondo, griglia dei riquadri e loro versioni
 ///   chunks/{cx}_{cy}.png   riquadri da 200×150 tile, un pixel per tile
 ///   overview.png           mondo intero ridotto (scritta solo dopo il primo giro completo)
@@ -98,7 +97,7 @@ public sealed class MapWriter : IDisposable
         var queued = _queue.Writer.TryWrite(() =>
         {
             try { action(); }
-            catch (Exception ex) { TShock.Log.ConsoleError($"[LiveMap] Scrittura della mappa non riuscita: {ex.Message}"); }
+            catch (Exception ex) { Log.Error($"Scrittura della mappa non riuscita: {ex.Message}"); }
             finally { if (counted) Interlocked.Decrement(ref _pending); }
         });
         if (!queued && counted) Interlocked.Decrement(ref _pending);
@@ -135,7 +134,7 @@ public sealed class MapWriter : IDisposable
         }
         catch (Exception ex)
         {
-            TShock.Log.ConsoleWarn($"[LiveMap] manifest.json illeggibile, rigenero la mappa: {ex.Message}");
+            Log.Warn($"manifest.json illeggibile, rigenero la mappa: {ex.Message}");
         }
 
         // Mondo diverso (o primo avvio): via i riquadri vecchi

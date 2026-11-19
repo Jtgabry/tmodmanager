@@ -1,9 +1,8 @@
 using System.Text.Json;
-using TShockAPI;
 
-namespace LiveMap;
+namespace TmmLiveMap;
 
-/// <summary>Configurazione in tshock/LiveMap.json (creata al primo avvio, ricaricata con /reload).</summary>
+/// <summary>Configurazione (creata al primo avvio): tshock/LiveMap.json con TShock, LiveMap/config.json con tModLoader.</summary>
 public class Config
 {
     /// <summary>Aggiorna la mappa anche quando nessuno la guarda dal pannello (utile per provarla senza pannello).</summary>
@@ -43,7 +42,7 @@ public class Config
         }
         catch (Exception ex)
         {
-            TShock.Log.ConsoleError($"[LiveMap] {path} non valido, uso i valori di default: {ex.Message}");
+            Log.Error($"{path} non valido, uso i valori di default: {ex.Message}");
             return new Config();
         }
 
@@ -54,7 +53,14 @@ public class Config
         config.SecondiGiocatori = Math.Clamp(config.SecondiGiocatori, 0.25, 60);
         config.ScalaPanoramica = Math.Clamp(config.ScalaPanoramica, 1, 16);
 
-        if (!File.Exists(path)) File.WriteAllText(path, JsonSerializer.Serialize(config, Options));
+        try
+        {
+            if (!File.Exists(path)) File.WriteAllText(path, JsonSerializer.Serialize(config, Options));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{path} non si è potuto creare: {ex.Message}");
+        }
         return config;
     }
 }

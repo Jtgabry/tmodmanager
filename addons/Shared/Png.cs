@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 
-namespace LiveMap;
+namespace TmmLiveMap;
 
 /// <summary>Encoder PNG minimo (RGB 8 bit, filtro Sub): .NET su Linux non ne ha uno incluso.</summary>
 public static class Png

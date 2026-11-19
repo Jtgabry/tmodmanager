@@ -189,11 +189,34 @@ class ServerModWorkshopTest extends TestCase
         $this->postJson(route('api.v1.servers.mods.workshop.install', 'alfa'), ['ids' => ['2619954303']])
             ->assertAccepted()
             ->assertJsonPath('data.state', 'running');
+        // Add-on di tModManager (es. LiveMap): ID "tmm-<Nome>"
+        $this->postJson(route('api.v1.servers.mods.workshop.install', 'alfa'), ['ids' => ['tmm-TmmLiveMap']])->assertAccepted();
         $this->postJson(route('api.v1.servers.mods.workshop.install', 'alfa'), ['ids' => ['abc']])->assertUnprocessable();
+        $this->postJson(route('api.v1.servers.mods.workshop.install', 'alfa'), ['ids' => ['tmm-../x']])->assertUnprocessable();
         $this->postJson(route('api.v1.servers.mods.workshop.install', 'alfa'), ['ids' => []])->assertUnprocessable();
 
-        Http::assertSentCount(1);
+        Http::assertSentCount(2);
         Http::assertSent(fn (Request $request): bool => $request['ids'] === ['2619954303']);
+        Http::assertSent(fn (Request $request): bool => $request['ids'] === ['tmm-TmmLiveMap']);
+    }
+
+    public function test_addon_items_are_shown_but_not_stored_as_steam_items(): void
+    {
+        $this->actingAsMember([ServerAbility::Mods]);
+        $addon = ['id' => 'tmm-TmmLiveMap', 'found' => true, 'title' => 'LiveMap', 'modName' => 'TmmLiveMap', 'tags' => ['Utilities'], 'previewUrl' => 'data:image/png;base64,AA==', 'subscriptions' => null, 'fileSize' => 36000, 'timeUpdated' => null, 'url' => '', 'versions' => [], 'description' => 'x', 'compatibleVersion' => '1.0', 'requiresTml' => null, 'dependencies' => [], 'addon' => true];
+        Http::fake([
+            self::AGENT_URL.'/servers/alfa/workshop/browse*' => Http::response(['data' => ['tmlVersion' => null, 'total' => 1, 'nextCursor' => null, 'items' => [$addon], 'steamError' => 'serve la chiave']]),
+            self::AGENT_URL.'/servers/alfa/workshop/items/tmm-TmmLiveMap' => Http::response(['data' => [...$addon, 'images' => [], 'dependencyItems' => []]]),
+        ]);
+
+        $this->getJson(route('api.v1.servers.mods.workshop.browse', 'alfa'))
+            ->assertOk()
+            ->assertJsonPath('data.items.0.addon', true)
+            ->assertJsonPath('data.steamError', 'serve la chiave');
+        $this->getJson(route('api.v1.servers.mods.workshop.item', ['alfa', 'tmm-TmmLiveMap']))->assertOk()->assertJsonPath('data.title', 'LiveMap');
+        $this->getJson('/api/v1/servers/alfa/workshop/items/tmm-..')->assertNotFound();
+
+        $this->assertDatabaseCount('workshop_items', 0);
     }
 
     public function test_installs_missing_mods_by_name(): void

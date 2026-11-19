@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
+import { ADDON_ITEM_ID } from '../addons.js'
 import { MOD_NAME } from '../mods.js'
 import { modsOnlyForTmodloader } from './modsOnly.js'
 import { findServer, type ServerDefinition } from '../registry.js'
@@ -27,6 +28,8 @@ type Params = { Params: { id: string; name?: string; workshopId?: string } }
 type BrowseQuery = { Querystring: { q?: string; sort?: string; tag?: string; cursor?: string } }
 
 const WORKSHOP_ID = /^\d{1,20}$/
+/** Elemento del Workshop del pannello: di Steam (numerico) o un add-on di tModManager ("tmm-…"). */
+const ITEM_ID = (id: string) => WORKSHOP_ID.test(id) || ADDON_ITEM_ID.test(id)
 
 const truthy = (v: unknown) => v === true || v === 'true' || v === '1'
 
@@ -116,7 +119,7 @@ export async function workshopRoutes(app: FastifyInstance) {
   app.get<Params>('/servers/:id/workshop/items/:workshopId', async (req, reply) => {
     const s = await server(req.params.id, reply)
     if (!s) return
-    if (!WORKSHOP_ID.test(req.params.workshopId ?? '')) throw new WorkshopError('ID del Workshop non valido', 422)
+    if (!ITEM_ID(req.params.workshopId ?? '')) throw new WorkshopError('ID del Workshop non valido', 422)
     return { data: await workshopItemDetails(s, req.params.workshopId!) }
   })
 
@@ -124,7 +127,7 @@ export async function workshopRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const ids = req.body?.ids
-    if (!Array.isArray(ids) || !ids.length || ids.length > 50 || !ids.every((id) => typeof id === 'string' && WORKSHOP_ID.test(id))) {
+    if (!Array.isArray(ids) || !ids.length || ids.length > 50 || !ids.every((id) => typeof id === 'string' && ITEM_ID(id))) {
       throw new WorkshopError('Campo "ids" non valido', 422)
     }
     return reply.code(202).send({ data: await startInstall(s, ids as string[]) })

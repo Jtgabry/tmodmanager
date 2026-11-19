@@ -2,11 +2,13 @@
 # Agent di tModManager: Node + screen + tutto ciò che serve a tModLoader e steamcmd.
 # I server di gioco girano DENTRO questo container (sessioni screen avviate dall'agent).
 
-# Add-on di tModManager (plugin TShock, es. LiveMap): .dll indipendenti dalla piattaforma, compilate una volta
+# Add-on di tModManager (plugin TShock e mod tModLoader, es. LiveMap): indipendenti dalla piattaforma, compilati
+# una volta. Per le mod build.sh scarica tModLoader (solo per compilare: serve unzip)
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS addons
+RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*
 WORKDIR /src/addons
 COPY addons/ ./
-RUN bash build.sh
+RUN bash build.sh && rm -rf .tml
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app/agent

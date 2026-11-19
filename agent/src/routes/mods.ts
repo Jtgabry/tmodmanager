@@ -15,6 +15,7 @@ import {
   updateModpack,
 } from '../modpacks.js'
 import { deleteMod, disableMods, enableMods, listMods, MOD_NAME, ModError, modPath, uploadMod, withServerLock } from '../mods.js'
+import { refreshInstalledModAddons } from '../modAddons.js'
 import { exportModpackZip } from '../modpackExport.js'
 import { importFromFolder, importUpload, listImportable } from '../modpackImport.js'
 import { modsOnlyForTmodloader } from './modsOnly.js'
@@ -57,9 +58,11 @@ export async function modRoutes(app: FastifyInstance) {
   app.get<Params>('/servers/:id/mods', async (req, reply) => {
     const s = await server(req.params.id, reply)
     if (!s) return
+    // Add-on di tModManager installati (es. LiveMap): alla versione di questo pannello
+    await refreshInstalledModAddons(s).catch(() => [])
     // Con l'ID del Workshop di ogni mod il sito può mostrare i dati della pagina (tag, anteprima…)
     const [list, ids] = await Promise.all([listMods(s), workshopIds()])
-    return { data: { ...list, mods: list.mods.map((m) => ({ ...m, workshopId: ids.get(m.name) ?? null })) } }
+    return { data: { ...list, mods: list.mods.map((m) => ({ ...m, workshopId: m.addon ? null : (ids.get(m.name) ?? null) })) } }
   })
 
   app.put<Params & { Querystring: { enable?: string } }>('/servers/:id/mods', async (req, reply) => {

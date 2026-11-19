@@ -6,14 +6,16 @@ import PageActions from '../../components/PageActions'
 import { errorMessage } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
 import { formatDate } from '../../lib/format'
+import { useToggleMod } from '../../lib/mods'
 import { useTogglePlugin } from '../../lib/plugins'
 import type { Server, WorldMapState } from '../../lib/types'
 import { useWorldMap, worldMapKey } from '../../lib/worldMap'
 import MapViewer from './MapViewer'
 
 /**
- * Sezione "Mondo": mappa del mondo del server. Sui server TShock con l'add-on LiveMap è in tempo reale, con i
- * giocatori; altrimenti (e per Terraria vanilla e tModLoader) si ricava dal file del mondo a ogni salvataggio.
+ * Sezione "Mondo": mappa del mondo del server. Con l'add-on LiveMap (plugin sui server TShock, mod sui server
+ * tModLoader) è in tempo reale, con i giocatori; altrimenti (e per Terraria vanilla) si ricava dal file del mondo
+ * a ogni salvataggio.
  */
 export default function WorldTab() {
   const server = useCurrentServer()
@@ -24,7 +26,7 @@ export default function WorldTab() {
   if (map.error) return <div className="alert alert-error">{errorMessage(map.error)}</div>
   const state = map.data
   if (!state) return null
-  if (!state.manifest || !state.source) return <Unavailable server={server} state={state} />
+  if (!state.manifest || !state.source) return <Unavailable state={state} />
 
   const { manifest, players, source } = state
   const { world, progress } = manifest
@@ -104,44 +106,64 @@ function WorldFileNotice({ server, state }: { server: Server; state: WorldMapSta
         <div className="alert alert-warning">I blocchi delle mod non si sono potuti leggere dal file .twld ({state.modBlocks.error}): la mappa mostra solo quelli di Terraria.</div>
       )}
       {file?.error && <div className="alert alert-warning">L'ultimo salvataggio non si è potuto leggere ({file.error}): la mappa è quella precedente.</div>}
-      {server.game === 'tshock' && state.liveMap?.enabled && (
+      {state.liveMap?.enabled && (
         <div className="alert alert-info">
           LiveMap è attivo: la mappa in tempo reale, con i giocatori, compare quando il server lo carica (dopo il riavvio) e ha disegnato i
           primi riquadri.
         </div>
       )}
-      {server.game === 'tshock' && state.liveMap && !state.liveMap.enabled && state.liveMap.available && <ActivateLiveMap server={server} />}
+      {state.liveMap && !state.liveMap.enabled && state.liveMap.available && <ActivateLiveMap server={server} installed={state.liveMap.installed} />}
     </div>
   )
 }
 
-/** Invito ad attivare LiveMap (solo a chi gestisce i plugin del server). */
-function ActivateLiveMap({ server }: { server: Server }) {
+/**
+ * Invito ad attivare LiveMap (solo a chi gestisce plugin e mod del server). TShock: è tra i plugin, si attiva da
+ * qui. tModLoader: è una mod del Workshop del pannello; installata, si abilita da qui come le altre mod.
+ */
+function ActivateLiveMap({ server, installed }: { server: Server; installed: boolean }) {
   const { can } = useAuth()
   const queryClient = useQueryClient()
-  const toggle = useTogglePlugin(server.id)
+  const togglePlugin = useTogglePlugin(server.id)
+  const toggleMod = useToggleMod(server.id)
   if (!can(server.id, 'mods')) return null
+  const tml = server.game === 'tmodloader'
+  const pending = togglePlugin.isPending || toggleMod.isPending
+  const error = togglePlugin.error ?? toggleMod.error
+  const refresh = { onSettled: () => queryClient.invalidateQueries({ queryKey: worldMapKey(server.id) }) }
+  const activate = () =>
+    tml ? toggleMod.mutate({ name: 'TmmLiveMap', enabled: true }, refresh) : togglePlugin.mutate({ name: 'LiveMap', enabled: true }, refresh)
   return (
     <div className="world-map-callout">
       <span className="small">
-        Per vederla in tempo reale, con i giocatori, attiva <strong>LiveMap</strong>: un add-on di tModManager che lavora solo mentre
-        questa pagina è aperta. Si disattiva da <Link to={`/servers/${server.id}/plugins`}>Plugin</Link>.
+        Per vederla in tempo reale, con i giocatori, attiva <strong>LiveMap</strong>: lavora solo sul server, solo mentre questa pagina è
+        aperta.{' '}
+        {tml && !installed ? (
+          <>
+            La trovi nel <Link to={`/servers/${server.id}/workshop`}>Workshop</Link>.
+          </>
+        ) : (
+          <>
+            Si disattiva da <Link to={`/servers/${server.id}/${tml ? 'mods' : 'plugins'}`}>{tml ? 'Mod' : 'Plugin'}</Link>.
+          </>
+        )}
       </span>
-      <button
-        type="button"
-        className="btn btn-sm btn-primary"
-        disabled={toggle.isPending}
-        onClick={() => toggle.mutate({ name: 'LiveMap', enabled: true }, { onSettled: () => queryClient.invalidateQueries({ queryKey: worldMapKey(server.id) }) })}
-      >
-        Attiva LiveMap
-      </button>
-      {toggle.error ? <span className="error-text small">{errorMessage(toggle.error)}</span> : null}
+      {tml && !installed ? (
+        <Link className="btn btn-sm btn-primary" to={`/servers/${server.id}/workshop`}>
+          Vai al Workshop
+        </Link>
+      ) : (
+        <button type="button" className="btn btn-sm btn-primary" disabled={pending} onClick={activate}>
+          Attiva LiveMap
+        </button>
+      )}
+      {error ? <span className="error-text small">{errorMessage(error)}</span> : null}
     </div>
   )
 }
 
 /** Niente mappa da mostrare: perché, e cosa fare. */
-function Unavailable({ server, state }: { server: Server; state: WorldMapState }) {
+function Unavailable({ state }: { state: WorldMapState }) {
   switch (state.unavailable) {
     case 'no-world':
       return <div className="empty">Il mondo non esiste ancora: verrà creato al primo avvio del server, e la mappa comparirà qui.</div>
@@ -159,7 +181,7 @@ function Unavailable({ server, state }: { server: Server; state: WorldMapState }
         <div className="empty stack-sm">
           <div className="spinner" />
           <p>Sto leggendo il file del mondo…</p>
-          {server.game === 'tshock' && state.liveMap?.enabled && <p className="small">LiveMap è attivo: dopo, la mappa sarà in tempo reale.</p>}
+          {state.liveMap?.enabled && <p className="small">LiveMap è attivo: dopo, la mappa sarà in tempo reale.</p>}
         </div>
       )
     default:

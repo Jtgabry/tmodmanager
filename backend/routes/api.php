@@ -73,7 +73,8 @@ Route::prefix('v1')
                 Route::delete('/mods/updates/job/{mod}', 'cancel')->name('cancel');
                 Route::get('/workshop/search', 'search')->name('search');
                 Route::get('/workshop/browse', 'browse')->name('browse');
-                Route::get('/workshop/items/{workshopItem}', 'item')->whereNumber('workshopItem')->name('item');
+                // ID di Steam (numerico) o di un add-on di tModManager ("tmm-<Nome>", es. LiveMap)
+                Route::get('/workshop/items/{workshopItem}', 'item')->where('workshopItem', '\d{1,20}|tmm-[A-Za-z0-9_]{1,64}')->name('item');
                 Route::post('/workshop/install', 'install')->name('install');
                 Route::post('/workshop/install-names', 'installNames')->name('install-names');
                 Route::get('/workshop/pending', 'pending')->name('pending');
