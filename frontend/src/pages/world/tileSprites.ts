@@ -157,7 +157,62 @@ export function drawSprites(
   /** C'è un blocco che si vede (non disattivato da un attuatore). */
   const blockAt = (chunk: TileChunk, i: number) => tileType(chunk, i) !== NO_TILE && (flagsOf(chunk, i) & ACTUATED) === 0
 
-  // 1. Muri: dove non c'è un blocco pieno né un liquido davanti (lì il gioco non li mostra)
+  /** Foglio di sprite del blocco della tile, se c'è (e il blocco si vede). */
+  const tileSheet = (chunk: TileChunk, i: number) => {
+    if (!blockAt(chunk, i)) return null
+    const type = tileType(chunk, i)
+    return tileSprite(type) ? source.sheet('tiles', type) : null
+  }
+  /**
+   * Il muro della tile si disegna: ha uno sprite, non c'è un liquido davanti (lì il gioco non lo mostra) e il blocco
+   * davanti, se c'è, ha il suo sprite (altrimenti di quella tile resterebbe solo il colore del muro). Dietro un blocco
+   * il muro si vede dove lo sprite del blocco è trasparente: piattaforme, liane, rametti, bordi.
+   */
+  const wallSheet = (chunk: TileChunk, i: number) => {
+    const wall = wallOf(chunk, i)
+    if (!wallSprite(wall) || flagsOf(chunk, i) & LIQUID) return null
+    if (blockAt(chunk, i) && !tileSheet(chunk, i)) return null
+    return source.sheet('walls', wall)
+  }
+  /** Colore dello sfondo (cielo, caverne) vicino: quello di una tile vicina senza blocco, muro né liquido. */
+  const airAround = (x: number, y: number): number | null => {
+    for (let r = 1; r <= 3; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          const t = at(x + dx, y + dy)
+          if (!t || !t[0].pixels) continue
+          const [chunk, i] = t
+          if (blockAt(chunk, i) || wallOf(chunk, i) !== 0 || flagsOf(chunk, i) & LIQUID) continue
+          return chunk.pixels![i]
+        }
+      }
+    }
+    return null
+  }
+
+  // 1. Sfondo dietro i blocchi con uno sprite e senza muro: sotto c'è il colore piatto del blocco (la mappa a pixel),
+  //    che dove lo sprite è trasparente si vedrebbe; ci va lo sfondo, come nel gioco
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const t = at(x, y)
+      if (!t) continue
+      const [chunk, i] = t
+      if (!tileSheet(chunk, i) || wallSheet(chunk, i)) continue
+      // Blocco pieno in mezzo ad altri blocchi: lo sprite lo copre tutto (il caso più comune sottoterra)
+      if (types.solid[tileType(chunk, i)] && [[0, -1], [0, 1], [-1, 0], [1, 0]].every(([dx, dy]) => {
+        const n = at(x + dx, y + dy)
+        return n !== null && blockAt(n[0], n[1])
+      })) continue
+      const fill = airAround(x, y)
+      if (fill === null) continue
+      const { sx, sy, w, h } = rect(x, y)
+      ctx.fillStyle = hex(fill)
+      ctx.fillRect(sx, sy, w, h)
+    }
+  }
+
+  // 2. Muri (32×32, centrati sulla tile e debordanti di 8 pixel per lato), prima dei blocchi come nel gioco
   const wallDrawn = new Uint8Array(cols * (y1 - y0 + 1))
   let walls = 0
   for (let y = y0; y <= y1; y++) {
@@ -165,21 +220,12 @@ export function drawSprites(
       const t = at(x, y)
       if (!t) continue
       const [chunk, i] = t
-      const wall = wallOf(chunk, i)
-      if (!wallSprite(wall)) continue
-      const flags = flagsOf(chunk, i)
-      if (flags & LIQUID) continue
-      if (blockAt(chunk, i)) {
-        const type = tileType(chunk, i)
-        // Davanti: un blocco pieno, o uno senza sprite (resterebbe solo il colore del muro)
-        if (types.solid[type] || !tileSprite(type)) continue
-      }
-      const sheet = source.sheet('walls', wall)
+      const sheet = wallSheet(chunk, i)
       if (!sheet) continue
       let col = chunk.stride >= 12 ? chunk.data.getUint8(i * chunk.stride + 10) : UNKNOWN_FRAME
       let row = chunk.stride >= 12 ? chunk.data.getUint8(i * chunk.stride + 11) : UNKNOWN_FRAME
-      // Non calcolato dal gioco (mappa dal file del mondo): come per i blocchi, dai vicini con un muro (lo schema dei
-      // fogli dei muri, 13×5 pezzi, è quello dei blocchi)
+      // Non calcolato dal gioco: come per i blocchi, dai vicini con un muro (lo schema dei fogli dei muri, 13×5 pezzi,
+      // è quello dei blocchi)
       if (col === UNKNOWN_FRAME || row === UNKNOWN_FRAME) {
         ;[col, row] = blockFrame(hasWall(x, y - 1), hasWall(x, y + 1), hasWall(x - 1, y), hasWall(x + 1, y), variantAt(x, y))
       }
@@ -191,7 +237,7 @@ export function drawSprites(
     }
   }
 
-  // 2. Davanti ai muri: le tile vicine con un blocco o un liquido tornano del loro colore (i muri debordano)
+  // 3. Le tile vicine ai muri che restano del loro colore (blocco senza sprite, liquido) lo riprendono: i muri debordano
   if (walls > 0) {
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
@@ -209,7 +255,8 @@ export function drawSprites(
         const t = at(x, y)
         if (!t || !t[0].pixels) continue
         const [chunk, i] = t
-        if (!blockAt(chunk, i) && !(flagsOf(chunk, i) & LIQUID)) continue
+        const liquid = (flagsOf(chunk, i) & LIQUID) !== 0
+        if (!liquid && (!blockAt(chunk, i) || tileSheet(chunk, i))) continue
         const { sx, sy, w, h } = rect(x, y)
         ctx.fillStyle = hex(chunk.pixels![i])
         ctx.fillRect(sx, sy, w, h)
@@ -224,33 +271,22 @@ export function drawSprites(
     if (!t) return true
     return tileType(t[0], t[1]) === type && (flagsOf(t[0], t[1]) & ACTUATED) === 0
   }
-  /** Colore della mappa a pixel della prima tile vicina di un altro tipo: riempie dietro gli sprite trasparenti. */
-  const behind = (x: number, y: number, type: number): number | null => {
-    for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]] as const) {
-      const t = at(x + dx, y + dy)
-      if (!t || tileType(t[0], t[1]) === type || !t[0].pixels) continue
-      return t[0].pixels[t[1]]
-    }
-    return null
-  }
 
-  // 3. Blocchi
+  // 4. Blocchi
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const t = at(x, y)
       if (!t) continue
       const [chunk, i] = t
-      const type = tileType(chunk, i)
-      if (!tileSprite(type)) continue
-      const flags = flagsOf(chunk, i)
-      if (flags & ACTUATED) continue // disattivato da un attuatore: nella mappa non c'è
-      const sheet = source.sheet('tiles', type)
+      const sheet = tileSheet(chunk, i)
       if (!sheet) continue
+      const type = tileType(chunk, i)
+      const flags = flagsOf(chunk, i)
 
       let fx = chunk.data.getInt16(i * chunk.stride + 2, true)
       let fy = chunk.data.getInt16(i * chunk.stride + 4, true)
-      // I frame li calcola il gioco (LiveMap, con il codice delle mod: anche i loro schemi). Se mancano ancora,
-      // la tabella dei blocchi di Terraria, che va bene per le mod che non ne hanno uno proprio
+      // I frame li calcola il gioco (LiveMap, o WorldFrames per il file del mondo). Se mancano ancora, la tabella dei
+      // blocchi di Terraria, che va bene per le mod che non hanno uno schema proprio
       if (fx < 0 || fy < 0) {
         if (types.frameImportant[type]) continue
         const [col, row] = blockFrame(same(x, y - 1, type), same(x, y + 1, type), same(x - 1, y, type), same(x + 1, y, type), variantAt(x, y))
@@ -266,21 +302,14 @@ export function drawSprites(
         continue
       }
       if (fx + 16 > sheet.naturalWidth || fy + 16 > sheet.naturalHeight) continue
-
       const { sx, sy, w, h } = rect(x, y)
-      // Dietro uno sprite trasparente: il muro, se l'abbiamo disegnato, altrimenti il colore di una tile vicina
-      const fill = wallDrawn[(y - y0) * cols + (x - x0)] ? null : behind(x, y, type)
-      if (fill !== null) {
-        ctx.fillStyle = hex(fill)
-        ctx.fillRect(sx, sy, w, h)
-      }
       // Mezzo blocco: la metà alta dello sprite, nella metà bassa della tile (le pendenze per ora restano piene)
       if ((flags & 0x07) === 1) ctx.drawImage(sheet, fx, fy, 16, 8, sx, sy + Math.round(h / 2), w, h - Math.round(h / 2))
       else ctx.drawImage(sheet, fx, fy, 16, 16, sx, sy, w, h)
     }
   }
 
-  // 4. Chiome e rami degli alberi: debordano di qualche tile, quindi si guardano anche le tile appena fuori
+  // 5. Chiome e rami degli alberi: debordano di qualche tile, quindi si guardano anche le tile appena fuori
   if (!vanilla) return
   /** Stile dell'albero: dal blocco sotto il tronco. */
   const treeStyle = (x: number, y: number) => {
