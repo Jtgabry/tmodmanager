@@ -228,6 +228,8 @@ export type WorldMapState = {
   playersAt: string | null
   /** LiveMap con i dati delle tile: versione dei tipi di blocco (cambia a ogni avvio del server). */
   typesVersion?: number | null
+  /** Versione delle texture di Terraria nel pannello, per gli sprite dei blocchi vanilla (null: non ci sono). */
+  vanillaSprites?: string | null
 }
 
 export type ImportablePack = { name: string; format: 'json' | 'folder'; mods: number; files: number }

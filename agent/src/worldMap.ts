@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { ADDONS, addonPath, findModAddon } from './addons.js'
 import { tshockDataDir, tshockPluginsDir } from './games.js'
+import { vanillaAssets } from './mapSprites.js'
 import { isModAddonInstalled, shippedModAddon } from './modAddons.js'
 import { readEnabled } from './mods.js'
 import type { ServerDefinition } from './registry.js'
@@ -92,6 +93,8 @@ export type WorldMapState = {
   playersAt: string | null
   /** LiveMap con i dati grezzi delle tile: versione di types.json (cambia a ogni avvio), per gli sprite. */
   typesVersion: number | null
+  /** Versione delle texture di Terraria disponibili per gli sprite (data/terraria-assets), null se non ci sono. */
+  vanillaSprites: string | null
 }
 
 const liveMapDir = (server: ServerDefinition) =>
@@ -130,6 +133,7 @@ export async function worldMap(server: ServerDefinition, { watching = false } = 
   const state: WorldMapState = {
     source: null, unavailable: null, liveMap: null, worldFile: null, modBlocks: null, updatedAt: null, manifest: null, players: [], playersAt: null,
     typesVersion: null,
+    vanillaSprites: null,
   }
 
   state.liveMap = await liveMapStatus(server)
@@ -147,6 +151,7 @@ export async function worldMap(server: ServerDefinition, { watching = false } = 
         ...state,
         source: 'livemap',
         typesVersion: types ? Math.round(types.mtimeMs) : null,
+        vanillaSprites: types ? ((await vanillaAssets())?.version ?? null) : null,
         updatedAt: manifest.mtime.toISOString(),
         manifest: manifest.value,
         players: players?.value.players ?? [],

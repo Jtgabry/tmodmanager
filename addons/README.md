@@ -54,11 +54,14 @@ le letture di `Main.Map` (la mappa esplorata dal giocatore, che sul server non c
 Vista ravvicinata con gli sprite: oltre alla mappa a pixel, per ogni riquadro LiveMap scrive i dati grezzi delle
 tile (`tiles/`, formato in `Shared/TileData.cs`: tipo, frame, muro e suo frame, forma, vernice) e in `types.json`
 quali tipi sono delle mod e con quale texture. Il browser disegna blocchi e muri con i loro sprite, che l'agent
-prende dai `.tmod` (per ora solo quelli delle mod: gli sprite di Terraria non sono sul server). I frame (quale parte
-del foglio di sprite) caricando il mondo restano solo per mobili e oggetti di più tile: la mod li calcola per gli
-altri blocchi e per i muri con `WorldGen.TileFrame` e `Framing.WallFrame` senza "azioni", come
-`WorldGen.EveryTileFrame` dopo la generazione di un mondo, una volta per tile e dentro il limite di tempo per tick;
-così anche gli schemi di frame delle mod sono quelli giusti.
+prende dai `.tmod` per le mod e, per Terraria, dalle texture del gioco in `data/terraria-assets/<versione>/Images/`
+(`Tiles_*.xnb` e `Wall_*.xnb` copiati da un'installazione del gioco: non sono sul server né nel repository; l'agent
+li decomprime, LZX, e li converte in PNG una volta). I frame (quale parte del foglio di sprite) caricando il mondo
+restano solo per mobili e oggetti di più tile; per gli altri blocchi e per i muri li calcola LiveMap, una volta per
+tile a ogni avvio e dentro il limite di tempo per tick: la mod con `WorldGen.TileFrame` e `Framing.WallFrame` senza
+"azioni" (come `WorldGen.EveryTileFrame` dopo la generazione di un mondo), così anche gli schemi di frame delle mod
+sono giusti; il plugin con `WorldGen.TileFrameCosmetic` (in Terraria 1.4.5 la scelta del frame, senza gli effetti
+di `TileFrame`) e `Framing.WallFrame`.
 
 File scritti:
 

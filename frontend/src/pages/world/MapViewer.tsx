@@ -22,8 +22,8 @@ function layerOf(world: WorldMapManifest['world'], y: number) {
 /**
  * Mappa a riquadri: trascinamento, zoom con rotella, pizzico o pulsanti, giocatori sopra.
  * Da lontano si vede la panoramica (un'immagine sola); avvicinandosi si caricano solo i riquadri visibili,
- * e ciascuno si ricarica quando la sua versione cambia. Molto da vicino, con LiveMap, blocchi e muri delle mod
- * hanno i loro sprite (SpriteLayer).
+ * e ciascuno si ricarica quando la sua versione cambia. Molto da vicino, con LiveMap, blocchi e muri hanno i loro
+ * sprite (SpriteLayer): quelli delle mod sempre, quelli di Terraria se il pannello ha le texture del gioco.
  */
 export default function MapViewer({
   serverId,
@@ -32,6 +32,7 @@ export default function MapViewer({
   players,
   focus,
   typesVersion = null,
+  vanillaSprites = null,
 }: {
   serverId: string
   source: MapSource
@@ -41,6 +42,8 @@ export default function MapViewer({
   focus: { name: string; at: number } | null
   /** LiveMap con i dati delle tile: versione dei tipi di blocco (per gli sprite da vicino). */
   typesVersion?: number | null
+  /** Versione delle texture di Terraria nel pannello (anche i blocchi vanilla hanno lo sprite), oppure null. */
+  vanillaSprites?: string | null
 }) {
   const { world, chunkWidth: cw, chunkHeight: ch, cols, rows, overview } = manifest
   const frame = useRef<HTMLDivElement>(null)
@@ -238,7 +241,16 @@ export default function MapViewer({
 
         {sprites && v && typesVersion !== null && (
           // Tipi nuovi (server riavviato): si ricomincia da capo, anche con gli sprite
-          <SpriteLayer key={typesVersion} serverId={serverId} manifest={manifest} view={v} size={size} typesVersion={typesVersion} visible={visible} />
+          <SpriteLayer
+            key={`${typesVersion}:${vanillaSprites}`}
+            serverId={serverId}
+            manifest={manifest}
+            view={v}
+            size={size}
+            typesVersion={typesVersion}
+            vanilla={vanillaSprites}
+            visible={visible}
+          />
         )}
 
         {v && (

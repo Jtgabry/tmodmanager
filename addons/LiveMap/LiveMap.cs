@@ -1,3 +1,4 @@
+using System.Collections;
 using Terraria;
 using Terraria.ID;
 using Terraria.Map;
@@ -17,7 +18,7 @@ namespace LiveMap;
 public class LiveMap : TerrariaPlugin
 {
     public override string Name => "LiveMap";
-    public override Version Version => new(1, 3, 0);
+    public override Version Version => new(1, 4, 0);
     public override string Author => "tModManager";
     public override string Description => "Mappa del mondo in tempo reale per il pannello di tModManager.";
 
@@ -26,6 +27,9 @@ public class LiveMap : TerrariaPlugin
 
     private Command? _command;
     private MapEngine? _engine;
+
+    /// <summary>Blocchi e muri a cui il plugin ha già calcolato il frame da questo avvio (un bit per tile).</summary>
+    private static BitArray? _tileFramed, _wallFramed;
 
     public LiveMap(Main game) : base(game) { }
 
@@ -59,6 +63,7 @@ public class LiveMap : TerrariaPlugin
             if (_command != null) Commands.ChatCommands.Remove(_command);
             _engine?.Dispose();
             _engine = null;
+            _tileFramed = _wallFramed = null;
         }
         base.Dispose(disposing);
     }
@@ -66,6 +71,8 @@ public class LiveMap : TerrariaPlugin
     private void OnWorldReady(EventArgs args)
     {
         if (!PrepareColors()) return;
+        _tileFramed = new BitArray(Main.maxTilesX * Main.maxTilesY);
+        _wallFramed = new BitArray(Main.maxTilesX * Main.maxTilesY);
         var config = Config.Load(ConfigPath);
         _engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players, ReadTile, Types());
         Log.Info($"Mappa pronta: {_engine.Cols}×{_engine.Rows} riquadri in {MapDir}" +
@@ -93,8 +100,32 @@ public class LiveMap : TerrariaPlugin
 
     private static int Pixel(int x, int y)
     {
+        EnsureFramed(x, y);
         var color = MapHelper.GetMapTileXnaColor(MapHelper.CreateMapTile(x, y, 255), x, y);
         return color.R << 16 | color.G << 8 | color.B;
+    }
+
+    /// <summary>
+    /// Frame della tile (quale parte del foglio di sprite usare): caricando il mondo il gioco li tiene solo per i blocchi
+    /// "frame important" (mobili, oggetti di più tile) e li lascia da calcolare ai client. In Terraria 1.4.5 la scelta
+    /// del frame è WorldGen.TileFrameCosmetic, separata dagli effetti di TileFrame (sabbia che cade, liane, cactus,
+    /// liquidi): si chiama direttamente quella, e Framing.WallFrame per i muri. Una volta per tile a ogni avvio; dopo,
+    /// se cambiano, li ricalcola il gioco.
+    /// </summary>
+    private static void EnsureFramed(int x, int y)
+    {
+        var t = Main.tile[x, y];
+        var index = y * Main.maxTilesX + x;
+        if (t.active() && !Main.tileFrameImportant[t.type] && _tileFramed is { } tiles && !tiles[index])
+        {
+            WorldGen.TileFrameCosmetic(x, y, t, true);
+            tiles[index] = true;
+        }
+        if (t.wall > 0 && _wallFramed is { } walls && !walls[index])
+        {
+            Framing.WallFrame(x, y, true);
+            walls[index] = true;
+        }
     }
 
     /// <summary>Dati grezzi della tile, per gli sprite nel pannello (TileData).</summary>
@@ -102,8 +133,9 @@ public class LiveMap : TerrariaPlugin
     {
         var t = Main.tile[x, y];
         var shape = t.halfBrick() ? 1 : t.slope() == 0 ? 0 : t.slope() + 1;
-        // Frame di blocchi e muri: per ora quelli che ha il server (-1 / non calcolati per la maggior parte)
-        TileData.Write(dest, t.active(), t.type, t.frameX, t.frameY, t.wall, shape, t.inActive(), t.liquid > 0, t.color(), -1, -1);
+        var wallFramed = t.wall > 0 && _wallFramed?[y * Main.maxTilesX + x] == true;
+        TileData.Write(dest, t.active(), t.type, t.frameX, t.frameY, t.wall, shape, t.inActive(), t.liquid > 0, t.color(),
+            wallFramed ? t.wallFrameX() : -1, wallFramed ? t.wallFrameY() : -1);
     }
 
     /// <summary>Tipi di blocchi e muri (solo quelli di Terraria: TShock non ha mod).</summary>

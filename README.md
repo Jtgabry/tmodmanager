@@ -156,6 +156,9 @@ MariaDB), `php artisan migrate`, `php artisan db:import-from mariadb`.
   (TShock e tModLoader) è in tempo reale, con i giocatori, solo finché la pagina è aperta. Senza, con tModLoader si
   legge anche il `.twld` accanto al mondo, con i blocchi e i muri delle mod: il loro colore è la media della texture
   nel `.tmod`, con un colore fisso se la texture manca (LiveMap invece usa i colori veri della minimappa).
+  Da vicino, con LiveMap, blocchi e muri hanno i loro sprite: quelli delle mod presi dai `.tmod`, quelli di Terraria
+  dalle texture del gioco se sono in `data/terraria-assets/<versione>/Images/` (`Tiles_*.xnb` e `Wall_*.xnb`, da
+  un'installazione di Terraria: il pannello non li distribuisce).
 - **Add-on** (`addons/`): scritti per tModManager e distribuiti con il pannello, come **LiveMap** (mappa del mondo in
   tempo reale). Per TShock è un plugin, già tra i plugin di ogni server, disattivato: si attiva con un clic. Per
   tModLoader è una mod solo lato server, che compare nel **Workshop** del pannello (anche senza la chiave di Steam):

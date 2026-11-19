@@ -31,6 +31,8 @@ import type { Game } from './games.js'
  *   │   ├── plugins/<Plugin>/    TShock: tutte le versioni caricate (<impronta>.dll) e state.json (versione scelta)
  *   │   ├── backups/             backup dei mondi (<Mondo>_backup_<YmdHis>.zip)
  *   │   └── trash/<elemento>/
+ *   ├── terraria-assets/<versione>/Images/   texture di Terraria (Tiles_*.xnb, Wall_*.xnb) prese da un'installazione
+ *   │                            del gioco, per gli sprite della mappa; png/ le stesse convertite (non nel repository)
  *   ├── cache/                   download del Workshop, screenrc
  *   └── tmp/
  *
@@ -44,6 +46,7 @@ export const paths = {
   /** Server spenti dallo spegnimento dell'agent, da riaccendere al prossimo avvio. */
   resumeServers: () => join(config.dataDir, 'resume-servers.json'),
   tmp: () => join(config.dataDir, 'tmp'),
+  terrariaAssets: () => join(config.dataDir, 'terraria-assets'),
   cache: () => join(config.dataDir, 'cache'),
   screenrc: () => join(config.dataDir, 'cache', 'screenrc'),
   workshopDownloads: () => join(config.dataDir, 'cache', 'workshop'),

@@ -3,8 +3,8 @@ import type { TileTypes } from '../../lib/types'
 /**
  * Vista ravvicinata della mappa con gli sprite di blocchi e muri. LiveMap manda, per ogni riquadro, i dati grezzi
  * delle tile (addons/Shared/TileData.cs): tipo, frame (calcolati dal gioco), muro e suo frame, forma. Qui si
- * disegna quella parte del foglio di sprite sopra la mappa a pixel. Per ora solo blocchi e muri delle mod (gli
- * sprite di Terraria non sono sul server): gli altri restano del loro colore.
+ * disegna quella parte del foglio di sprite sopra la mappa a pixel. Blocchi e muri delle mod sempre; quelli di
+ * Terraria se il pannello ha le texture del gioco (`vanilla`), altrimenti restano del loro colore.
  */
 
 /** Offset dei campi di una tile (TileData); la lunghezza dipende dal formato (`stride`). */
@@ -96,6 +96,8 @@ export type SpriteKind = 'tiles' | 'walls'
 
 export type SpriteSource = {
   types: TileTypes
+  /** Ci sono anche gli sprite di Terraria. */
+  vanilla: boolean
   /** Foglio di sprite del tipo, se è caricato (null: non ancora, o non c'è). */
   sheet: (kind: SpriteKind, type: number) => HTMLImageElement | null
   /** Riquadro (cx, cy) già caricato, oppure null. */
@@ -105,7 +107,7 @@ export type SpriteSource = {
 const hex = (color: number) => `#${color.toString(16).padStart(6, '0')}`
 
 /**
- * Disegna gli sprite di muri e blocchi delle mod visibili, come il gioco: prima i muri (32×32, centrati sulla tile e
+ * Disegna gli sprite di muri e blocchi visibili, come il gioco: prima i muri (32×32, centrati sulla tile e
  * debordanti di 8 pixel per lato), poi i blocchi, che li coprono. `view` è la vista della mappa (tile in alto a
  * sinistra e pixel per tile), `ctx` un canvas grande quanto la mappa sullo schermo.
  */
@@ -116,8 +118,11 @@ export function drawSprites(
   grid: { chunkWidth: number; chunkHeight: number; worldWidth: number; worldHeight: number },
   source: SpriteSource,
 ) {
-  const { types } = source
+  const { types, vanilla } = source
   const { chunkWidth: cw, chunkHeight: ch } = grid
+  /** Il tipo ha (o può avere) uno sprite. */
+  const tileSprite = (type: number) => type !== NO_TILE && (vanilla || type >= types.vanillaTiles)
+  const wallSprite = (wall: number) => wall !== 0 && (vanilla || wall >= types.vanillaWalls)
   const z = view.zoom
   // Una tile in più per lato: i muri debordano sulle vicine
   const x0 = Math.max(0, Math.floor(view.x) - 1)
@@ -141,7 +146,7 @@ export function drawSprites(
   /** C'è un blocco che si vede (non disattivato da un attuatore). */
   const blockAt = (chunk: TileChunk, i: number) => tileType(chunk, i) !== NO_TILE && (flagsOf(chunk, i) & ACTUATED) === 0
 
-  // 1. Muri delle mod: dove non c'è un blocco pieno né un liquido davanti (lì il gioco non li mostra)
+  // 1. Muri: dove non c'è un blocco pieno né un liquido davanti (lì il gioco non li mostra)
   const wallDrawn = new Uint8Array(cols * (y1 - y0 + 1))
   let walls = 0
   for (let y = y0; y <= y1; y++) {
@@ -150,13 +155,13 @@ export function drawSprites(
       if (!t) continue
       const [chunk, i] = t
       const wall = wallOf(chunk, i)
-      if (wall < types.vanillaWalls || wall === 0) continue
+      if (!wallSprite(wall)) continue
       const flags = flagsOf(chunk, i)
       if (flags & LIQUID) continue
       if (blockAt(chunk, i)) {
         const type = tileType(chunk, i)
-        // Davanti: un blocco pieno, o uno di Terraria (non ha sprite: resterebbe solo il colore del muro)
-        if (types.solid[type] || type < types.vanillaTiles) continue
+        // Davanti: un blocco pieno, o uno senza sprite (resterebbe solo il colore del muro)
+        if (types.solid[type] || !tileSprite(type)) continue
       }
       const sheet = source.sheet('walls', wall)
       if (!sheet) continue
@@ -214,14 +219,14 @@ export function drawSprites(
     return null
   }
 
-  // 3. Blocchi delle mod
+  // 3. Blocchi
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const t = at(x, y)
       if (!t) continue
       const [chunk, i] = t
       const type = tileType(chunk, i)
-      if (type === NO_TILE || type < types.vanillaTiles) continue
+      if (!tileSprite(type)) continue
       const flags = flagsOf(chunk, i)
       if (flags & ACTUATED) continue // disattivato da un attuatore: nella mappa non c'è
       const sheet = source.sheet('tiles', type)

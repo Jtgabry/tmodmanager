@@ -42,7 +42,7 @@ export default function WorldTab() {
 
       {live ? <LiveNotice server={server} state={state} /> : <WorldFileNotice server={server} state={state} />}
 
-      <MapViewer serverId={server.id} source={source} manifest={manifest} players={players} focus={focus} typesVersion={state.typesVersion ?? null} />
+      <MapViewer serverId={server.id} source={source} manifest={manifest} players={players} focus={focus} typesVersion={state.typesVersion ?? null} vanillaSprites={state.vanillaSprites ?? null} />
 
       <div className="world-map-footer">
         {live ? (
