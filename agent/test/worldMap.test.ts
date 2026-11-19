@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, stat, utimes, writeFile } from 'node:fs/promises'
+import { gunzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -130,6 +131,17 @@ test('mappa dal file del mondo per un server vanilla: disegnata in un worker, si
   assert.equal((await readFile(chunk)).toString('latin1', 1, 4), 'PNG')
   assert.ok(await mapOverviewPath(server, 'world'))
   assert.equal(await mapChunkPath(server, 'livemap', '0', '0'), null)
+
+  // Dati grezzi delle tile per gli sprite (senza LiveMap): stesso formato, frame da calcolare (-1, muri 0xFF)
+  assert.equal(state.manifest?.tileData, 2)
+  assert.ok((state.typesVersion ?? 0) > 0)
+  const tiles = gunzipSync(await readFile(join(config.dataDir, 'servers', 'm', 'worldmap', 'tiles', '0_1.bin')))
+  assert.deepEqual([tiles.toString('latin1', 0, 4), tiles[4], tiles[5], tiles.readUInt16LE(6), tiles.readUInt16LE(8)], ['TMMT', 2, 12, 200, 150])
+  const at = (x: number, y: number) => 10 + ((y - 150) * 200 + x) * 12
+  assert.deepEqual([tiles.readUInt16LE(at(10, 160)), tiles.readInt16LE(at(10, 160) + 2), tiles[at(10, 160) + 10]], [0, -1, 0xff]) // terra
+  assert.deepEqual([tiles.readUInt16LE(at(20, 160)), tiles.readUInt16LE(at(20, 160) + 6), tiles[at(20, 160) + 8] & 0x10], [0xffff, 1, 0x10]) // muro e acqua
+  const types = JSON.parse(await readFile(join(config.dataDir, 'servers', 'm', 'worldmap', 'types.json'), 'utf8'))
+  assert.deepEqual([types.format, types.vanillaTiles, types.vanillaWalls], [2, 2, 2])
 
   // Stesso file: niente da rifare; mondo salvato di nuovo: si ridisegna, i riquadri uguali tengono la versione
   assert.equal((await worldMap(server)).worldFile?.generating, false)

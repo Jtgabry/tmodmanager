@@ -50,19 +50,19 @@ export async function mapRoutes(app: FastifyInstance) {
   app.get<Params>('/servers/:id/map/:source/types', async (req, reply) => {
     const s = await server(req.params.id, reply)
     if (!s) return
-    const path = req.params.source === 'livemap' ? mapTypesPath(s) : null
+    const path = mapTypesPath(s, String(req.params.source))
     const entry = path ? await readTileTypes(path) : null
     if (!entry) return reply.code(404).send({ error: 'not_found', message: 'Tipi dei blocchi non ancora disponibili' })
     return { data: entry.types }
   })
 
-  // Sprite di un tipo di blocco o di muro delle mod (dal suo .tmod)
-  app.get<Params>('/servers/:id/map/sprites/:kind/:type', async (req, reply) => {
+  // Sprite di un tipo di blocco o di muro (Terraria: dalle texture del gioco; mod: dal suo .tmod)
+  app.get<Params>('/servers/:id/map/:source/sprites/:kind/:type', async (req, reply) => {
     const s = await server(req.params.id, reply)
     if (!s) return
     const kind = String(req.params.kind)
     const type = Number(req.params.type)
-    const types = mapTypesPath(s)
+    const types = mapTypesPath(s, String(req.params.source))
     if (!SPRITE_KINDS.includes(kind as SpriteKind) || !Number.isInteger(type) || type < 0 || type > 65535 || !types) {
       return reply.code(404).send({ error: 'not_found', message: 'Sprite non trovato' })
     }

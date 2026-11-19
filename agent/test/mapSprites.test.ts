@@ -67,12 +67,12 @@ test('sprite di un blocco di una mod: dal .tmod della mod, convertito una volta 
   }
   await writeFile(join(dir, 'types.json'), JSON.stringify(types))
 
-  const path = await spritePng(server, mapTypesPath(server)!, 'tiles', 700)
+  const path = await spritePng(server, mapTypesPath(server, 'livemap')!, 'tiles', 700)
   assert.ok(path?.startsWith(join(config.dataDir, 'servers', 's', 'sprites', 'Foo', '1.0')))
   assert.equal((await readFile(path!)).toString('latin1', 1, 4), 'PNG')
-  assert.equal(await spritePng(server, mapTypesPath(server)!, 'tiles', 701), null) // texture di Terraria
-  assert.equal(await spritePng(server, mapTypesPath(server)!, 'tiles', 1), null) // blocco di Terraria
-  assert.equal(await spritePng(server, mapTypesPath(server)!, 'walls', 700), null)
+  assert.equal(await spritePng(server, mapTypesPath(server, 'livemap')!, 'tiles', 701), null) // texture di Terraria
+  assert.equal(await spritePng(server, mapTypesPath(server, 'livemap')!, 'tiles', 1), null) // blocco di Terraria
+  assert.equal(await spritePng(server, mapTypesPath(server, 'livemap')!, 'walls', 700), null)
 
   // Riquadri con i dati delle tile e versione dei tipi nello stato della mappa
   await writeFile(join(mods, 'enabled.json'), '["TmmLiveMap"]')

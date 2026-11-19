@@ -74,18 +74,19 @@ class ServerMapTest extends TestCase
         Http::fake([
             self::AGENT_URL.'/servers/alfa/map/livemap/tiles/2/1' => Http::response("\x1f\x8bdati", 200, ['Content-Type' => 'application/octet-stream']),
             self::AGENT_URL.'/servers/alfa/map/livemap/types' => Http::response(['data' => ['format' => 1, 'modTiles' => ['700' => ['mod' => 'Foo', 'name' => 'Bar', 'texture' => 'Foo/Tiles/Bar']]]]),
-            self::AGENT_URL.'/servers/alfa/map/sprites/tiles/700' => Http::response('PNG', 200, ['Content-Type' => 'image/png']),
+            self::AGENT_URL.'/servers/alfa/map/livemap/sprites/tiles/700' => Http::response('PNG', 200, ['Content-Type' => 'image/png']),
         ]);
 
-        $this->get(route('api.v1.servers.map.tiles', ['alfa', 2, 1, 'v' => 5]))
+        $this->get(route('api.v1.servers.map.tiles', ['alfa', 'livemap', 2, 1, 'v' => 5]))
             ->assertOk()
             ->assertHeader('Content-Type', 'application/octet-stream')
             ->assertHeader('Cache-Control', 'immutable, max-age=31536000, private');
-        $this->getJson(route('api.v1.servers.map.types', ['alfa', 'v' => 5]))->assertOk()->assertJsonPath('data.modTiles.700.mod', 'Foo');
-        $this->get(route('api.v1.servers.map.sprite', ['alfa', 'tiles', 700]))->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->getJson(route('api.v1.servers.map.types', ['alfa', 'livemap', 'v' => 5]))->assertOk()->assertJsonPath('data.modTiles.700.mod', 'Foo');
+        $this->get(route('api.v1.servers.map.sprite', ['alfa', 'livemap', 'tiles', 700]))->assertOk()->assertHeader('Content-Type', 'image/png');
 
-        $this->get('/api/v1/servers/alfa/map/sprites/altro/700')->assertNotFound();
-        $this->get('/api/v1/servers/alfa/map/sprites/tiles/x')->assertNotFound();
+        $this->get('/api/v1/servers/alfa/map/livemap/sprites/altro/700')->assertNotFound();
+        $this->get('/api/v1/servers/alfa/map/livemap/sprites/tiles/x')->assertNotFound();
+        $this->get('/api/v1/servers/alfa/map/altro/tiles/0/0')->assertNotFound();
         Http::assertSentCount(3);
     }
 
@@ -93,8 +94,8 @@ class ServerMapTest extends TestCase
     {
         Sanctum::actingAs(User::factory()->create());
 
-        $this->get(route('api.v1.servers.map.tiles', ['alfa', 0, 0]))->assertForbidden();
-        $this->get(route('api.v1.servers.map.sprite', ['alfa', 'tiles', 700]))->assertForbidden();
+        $this->get(route('api.v1.servers.map.tiles', ['alfa', 'world', 0, 0]))->assertForbidden();
+        $this->get(route('api.v1.servers.map.sprite', ['alfa', 'livemap', 'tiles', 700]))->assertForbidden();
 
         Http::assertNothingSent();
     }

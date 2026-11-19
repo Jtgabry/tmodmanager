@@ -6,6 +6,7 @@ import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { readServerConfig } from './serverConfig.js'
 import type { RenderJob, WorldFileSource } from './worldFileRender.js'
+import { TILE_FORMAT } from './worldTiles.js'
 
 /**
  * Mappa ricavata dal file del mondo (.wld), per tutti i server: si ridisegna quando il file cambia (a ogni
@@ -74,12 +75,16 @@ export async function refreshWorldFileMap(server: ServerDefinition): Promise<Wor
   status.savedAt = new Date(source.mtimeMs).toISOString()
 
   let drawn: WorldFileSource | null = null
+  let tileData = 0
   try {
-    drawn = (JSON.parse(await readFile(join(worldMapDir(server.id), 'manifest.json'), 'utf8')) as { source?: WorldFileSource }).source ?? null
+    const manifest = JSON.parse(await readFile(join(worldMapDir(server.id), 'manifest.json'), 'utf8')) as { source?: WorldFileSource; tileData?: number }
+    drawn = manifest.source ?? null
+    tileData = manifest.tileData ?? 0
   } catch {
     // mai disegnata
   }
-  if (drawn && sourceKey(drawn) === key) return status
+  // Stesso file e stesso formato: niente da rifare (una mappa di una versione precedente si ridisegna una volta)
+  if (drawn && sourceKey(drawn) === key && tileData === TILE_FORMAT) return status
 
   const state = states.get(server.id) ?? { running: false, failed: null }
   states.set(server.id, state)

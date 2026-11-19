@@ -100,6 +100,35 @@ export function parseTexture(texture: string): { mod: string; path: string } | n
   return { mod: match[1], path: match[2] }
 }
 
+const textureLists = new Map<string, { mtimeMs: number; names: string[] }>()
+
+/**
+ * Texture di un blocco o di un muro di una mod cercata dal nome: il file <Nome>.rawimg, preferendo quello sotto
+ * Tiles/ (o Walls/). È la texture predefinita di tModLoader (cartella della classe); una mod che ne usa un'altra
+ * resta senza sprite.
+ */
+async function findTexture(server: ServerDefinition, mod: string, name: string, kind: SpriteKind): Promise<{ mod: string; path: string } | null> {
+  if (!/^[A-Za-z0-9_]{1,64}$/.test(mod) || !/^[A-Za-z0-9_]{1,128}$/.test(name)) return null
+  const installed = (await listMods(server)).mods.find((m) => m.name === mod)
+  if (!installed) return null
+  const file = join(modsDir(server), installed.file)
+  const info = await stat(file).catch(() => null)
+  if (!info) return null
+  let list = textureLists.get(file)
+  if (list?.mtimeMs !== info.mtimeMs) {
+    const names: string[] = []
+    await readModEntries(file, (p) => {
+      if (p.endsWith('.rawimg')) names.push(p)
+      return false
+    }).catch(() => undefined)
+    list = { mtimeMs: info.mtimeMs, names }
+    textureLists.set(file, list)
+  }
+  const matches = list.names.filter((p) => p === `${name}.rawimg` || p.endsWith(`/${name}.rawimg`))
+  const best = matches.find((p) => p.startsWith(kind === 'tiles' ? 'Tiles/' : 'Walls/')) ?? matches[0]
+  return best ? parseTexture(`${mod}/${best.slice(0, -'.rawimg'.length)}`) : null
+}
+
 /** rawimg di tModLoader: int32 versione (1), larghezza, altezza, poi i pixel RGBA. */
 export function rawimgToPng(data: Buffer): Buffer | null {
   if (data.length < 12 || data.readInt32LE(0) !== 1) return null
@@ -124,7 +153,8 @@ export async function spritePng(server: ServerDefinition, typesPath: string, kin
   // Una mod può usare una texture di Terraria ("Terraria/Images/Tiles_1")
   const fromTerraria = /^Terraria\/Images\/((?:Tiles|Wall)_\d{1,5})$/.exec(mod.texture)
   if (fromTerraria) return vanillaSpritePng(fromTerraria[1])
-  const texture = parseTexture(mod.texture)
+  // Dal file del mondo si sa solo mod e nome: la texture si cerca nel .tmod (di solito Tiles/…/<Nome>)
+  const texture = mod.texture ? parseTexture(mod.texture) : await findTexture(server, mod.mod, mod.name, kind)
   if (!texture) return null
 
   const installed = (await listMods(server)).mods.find((m) => m.name === texture.mod)

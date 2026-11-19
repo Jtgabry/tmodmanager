@@ -143,6 +143,12 @@ export function drawSprites(
     const sy = Math.round((y - view.y) * z)
     return { sx, sy, w: Math.round((x + 1 - view.x) * z) - sx, h: Math.round((y + 1 - view.y) * z) - sy }
   }
+  /** C'è un muro nella tile (fuori dal mondo o in un riquadro non caricato: sì, così non spuntano bordi). */
+  const hasWall = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= grid.worldWidth || y >= grid.worldHeight) return true
+    const t = at(x, y)
+    return !t || wallOf(t[0], t[1]) !== 0
+  }
   /** C'è un blocco che si vede (non disattivato da un attuatore). */
   const blockAt = (chunk: TileChunk, i: number) => tileType(chunk, i) !== NO_TILE && (flagsOf(chunk, i) & ACTUATED) === 0
 
@@ -167,7 +173,11 @@ export function drawSprites(
       if (!sheet) continue
       let col = chunk.stride >= 12 ? chunk.data.getUint8(i * chunk.stride + 10) : UNKNOWN_FRAME
       let row = chunk.stride >= 12 ? chunk.data.getUint8(i * chunk.stride + 11) : UNKNOWN_FRAME
-      if (col === UNKNOWN_FRAME || row === UNKNOWN_FRAME) [col, row] = [1 + variantAt(x, y), 1] // pezzo interno, se il gioco non l'ha calcolato
+      // Non calcolato dal gioco (mappa dal file del mondo): come per i blocchi, dai vicini con un muro (lo schema dei
+      // fogli dei muri, 13×5 pezzi, è quello dei blocchi)
+      if (col === UNKNOWN_FRAME || row === UNKNOWN_FRAME) {
+        ;[col, row] = blockFrame(hasWall(x, y - 1), hasWall(x, y + 1), hasWall(x - 1, y), hasWall(x + 1, y), variantAt(x, y))
+      }
       if (col * 36 + 32 > sheet.naturalWidth || row * 36 + 32 > sheet.naturalHeight) continue
       const { sx, sy, w, h } = rect(x, y)
       ctx.drawImage(sheet, col * 36, row * 36, 32, 32, sx - w / 2, sy - h / 2, w * 2, h * 2)

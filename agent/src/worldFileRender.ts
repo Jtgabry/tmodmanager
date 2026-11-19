@@ -3,12 +3,14 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { join } from 'node:path'
 import { modBlockColors } from './modMapColors.js'
 import { encodePng } from './png.js'
-import { overlayModBlocks, readModBlocks } from './twld.js'
+import { type ModBlocks, overlayModBlocks, readModBlocks } from './twld.js'
 import { type MapColors, readWorldHeader, renderWorld } from './worldFile.js'
+import { TILE_FORMAT, WorldTileSink } from './worldTiles.js'
 
 /**
  * Disegna la mappa di un file del mondo nello stesso formato di LiveMap (vedi addons/LiveMap):
  *   manifest.json · chunks/{cx}_{cy}.png (200×150 tile) · overview.png (1 pixel ogni 4×4 tile)
+ *   tiles/{cx}_{cy}.bin e types.json: i dati grezzi delle tile, per gli sprite da vicino (worldTiles.ts)
  * Un riquadro identico a quello della volta prima non si riscrive e tiene la sua versione, così il browser
  * riscarica solo le zone cambiate. Gira in un worker thread (worldFileWorker.ts): l'agent non si blocca.
  */
@@ -32,7 +34,7 @@ export type RenderJob = {
 /** Esito della lettura dei blocchi delle mod (.twld). */
 export type ModBlocksInfo = { tiles: number; walls: number; fromTextures: number; error: string | null }
 
-type PreviousManifest = { cols?: number; rows?: number; chunks?: number[]; hashes?: string[]; overview?: { version?: number; hash?: string } }
+type PreviousManifest = { cols?: number; rows?: number; chunks?: number[]; hashes?: string[]; tileData?: number; overview?: { version?: number; hash?: string } }
 
 const nextVersion = (previous: number) => Math.max(previous + 1, Date.now())
 const hashOf = (png: Buffer) => createHash('sha256').update(png).digest('hex').slice(0, 16)
@@ -46,15 +48,24 @@ async function writeAtomic(path: string, data: Buffer | string) {
 export async function renderWorldFile(job: RenderJob): Promise<{ width: number; height: number; chunks: number }> {
   const [buf, colors] = await Promise.all([readFile(job.worldPath), readFile(job.colorsPath, 'utf8').then((t) => JSON.parse(t) as MapColors)])
   const header = readWorldHeader(buf)
-  const { pixels, layers } = renderWorld(buf, header, colors)
   const { width, height } = header
   await mkdir(job.outDir, { recursive: true })
 
   // tModLoader: i blocchi delle mod stanno nel .twld. Se non si legge, resta la mappa vanilla (con l'errore)
   let modBlocks: ModBlocksInfo | null = null
+  let blocks: ModBlocks | null = null
   if (job.twldPath) {
     try {
-      const blocks = readModBlocks(await readFile(job.twldPath))
+      blocks = readModBlocks(await readFile(job.twldPath))
+    } catch (err) {
+      modBlocks = { tiles: 0, walls: 0, fromTextures: 0, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+  // Mappa a pixel e, insieme, i dati grezzi delle tile (con i blocchi delle mod del .twld)
+  const sink = new WorldTileSink(width, height, CHUNK_WIDTH, CHUNK_HEIGHT, header.frameImportant, { tiles: colors.tileLookup.length, walls: colors.wallLookup.length }, blocks)
+  const { pixels, layers } = renderWorld(buf, header, colors, sink)
+  if (job.twldPath && !modBlocks) {
+    try {
       if (blocks) {
         const used = { tiles: blocks.tiles, walls: blocks.walls }
         const { colorOf, fromTextures } = await modBlockColors(used.tiles, used.walls, job.modsDir ?? null, join(job.outDir, 'mod-colors.json'))
@@ -76,8 +87,15 @@ export async function renderWorldFile(job: RenderJob): Promise<{ width: number; 
   }
   const sameGrid = previous.cols === cols && previous.rows === rows
   const chunksDir = join(job.outDir, 'chunks')
+  const tilesDir = join(job.outDir, 'tiles')
   await mkdir(chunksDir, { recursive: true })
-  if (!sameGrid) for (const f of await readdir(chunksDir)) await rm(join(chunksDir, f), { force: true })
+  await mkdir(tilesDir, { recursive: true })
+  if (!sameGrid) {
+    for (const f of await readdir(chunksDir)) await rm(join(chunksDir, f), { force: true })
+    for (const f of await readdir(tilesDir)) await rm(join(tilesDir, f), { force: true })
+  }
+  // Riquadri del formato vecchio (senza dati delle tile): si riscrivono tutti
+  const sameFormat = sameGrid && previous.tileData === TILE_FORMAT
 
   const versions: number[] = []
   const hashes: string[] = []
@@ -87,11 +105,13 @@ export async function renderWorldFile(job: RenderJob): Promise<{ width: number; 
       const w = Math.min(CHUNK_WIDTH, width - cx * CHUNK_WIDTH)
       const h = Math.min(CHUNK_HEIGHT, height - cy * CHUNK_HEIGHT)
       const png = encodePng(pixels, w, h, width, cy * CHUNK_HEIGHT * width + cx * CHUNK_WIDTH)
-      const hash = hashOf(png)
-      if (sameGrid && previous.hashes?.[i] === hash && previous.chunks?.[i]) {
+      const tiles = sink.chunks.get(i)
+      const hash = tiles ? `${hashOf(png)}${tiles.hash}` : hashOf(png)
+      if (sameFormat && previous.hashes?.[i] === hash && previous.chunks?.[i]) {
         versions.push(previous.chunks[i])
       } else {
         await writeAtomic(join(chunksDir, `${cx}_${cy}.png`), png)
+        if (tiles) await writeAtomic(join(tilesDir, `${cx}_${cy}.bin`), tiles.gzip)
         versions.push(nextVersion(sameGrid ? (previous.chunks?.[i] ?? 0) : 0))
       }
       hashes.push(hash)
@@ -122,11 +142,13 @@ export async function renderWorldFile(job: RenderJob): Promise<{ width: number; 
     hashes,
     overview: { scale: OVERVIEW_SCALE, width: ow, height: oh, version: overviewVersion, hash: overviewHash },
     progress: { drawn: cols * rows, total: cols * rows },
+    tileData: TILE_FORMAT,
     // Da quale file: se cambia (salvataggio del mondo), la mappa si ridisegna
     source: job.source,
     terraria: colors.terraria,
     modBlocks,
   }
+  await writeAtomic(join(job.outDir, 'types.json'), JSON.stringify(sink.types))
   await writeAtomic(join(job.outDir, 'manifest.json'), JSON.stringify(manifest))
   return { width, height, chunks: cols * rows }
 }

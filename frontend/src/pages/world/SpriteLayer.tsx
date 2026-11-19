@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { WorldMapManifest } from '../../lib/types'
+import type { MapSource, WorldMapManifest } from '../../lib/types'
 import { chunkUrl, spriteUrl, tilesUrl, useTileTypes } from '../../lib/worldMap'
 import { decodeTileChunk, drawSprites, imagePixels, type SpriteKind, type TileChunk } from './tileSprites'
 
@@ -16,12 +16,14 @@ type Loaded = { version: number; chunk: TileChunk | null; usedAt: number }
 type Block = { canvas: HTMLCanvasElement; stamp: number; usedAt: number }
 
 /**
- * Sprite di blocchi e muri sopra la mappa a pixel, da vicino (LiveMap con i dati delle tile). Carica i dati solo dei
+ * Sprite di blocchi e muri sopra la mappa a pixel, da vicino (con i dati delle tile: da LiveMap, o ricavati dal file
+ * del mondo). Carica i dati solo dei
  * riquadri visibili; finché non arrivano, e per i blocchi senza sprite, resta il colore della mappa. Gli sprite si
  * disegnano in blocchi di 32×32 tile tenuti da parte: spostando la mappa si copiano solo quelli.
  */
 export default function SpriteLayer({
   serverId,
+  source,
   manifest,
   view,
   size,
@@ -30,6 +32,7 @@ export default function SpriteLayer({
   visible,
 }: {
   serverId: string
+  source: MapSource
   manifest: WorldMapManifest
   view: { x: number; y: number; zoom: number }
   size: { w: number; h: number }
@@ -47,7 +50,7 @@ export default function SpriteLayer({
   const stamp = useRef(0)
   const [tick, setTick] = useState(0)
   const redraw = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const types = useTileTypes(serverId, typesVersion)
+  const types = useTileTypes(serverId, source, typesVersion)
 
   /** Nuovi dati o sprite: si ridisegna, raggruppando gli arrivi ravvicinati (all'inizio arrivano a decine). */
   const changed = () => {
@@ -79,9 +82,9 @@ export default function SpriteLayer({
       void (async () => {
         let chunk: TileChunk | null = null
         try {
-          const res = await fetch(tilesUrl(serverId, cx, cy, version), { credentials: 'same-origin' })
+          const res = await fetch(tilesUrl(serverId, source, cx, cy, version), { credentials: 'same-origin' })
           const decoded = res.ok ? await decodeTileChunk(await res.arrayBuffer()) : null
-          if (decoded) chunk = { ...decoded, pixels: await imagePixels(chunkUrl(serverId, 'livemap', cx, cy, version)) }
+          if (decoded) chunk = { ...decoded, pixels: await imagePixels(chunkUrl(serverId, source, cx, cy, version)) }
         } catch {
           // riquadro non disponibile: resta la mappa a pixel
         }
@@ -97,7 +100,7 @@ export default function SpriteLayer({
     }
     // `wanted` riassume `visible`
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted, serverId])
+  }, [wanted, serverId, source])
 
   // Disegno: a ogni spostamento, quando arrivano dati o sprite
   useEffect(() => {
@@ -131,10 +134,10 @@ export default function SpriteLayer({
         changed()
       }
       image.onerror = () => sheets.current.set(key, 'missing')
-      image.src = spriteUrl(serverId, kind, type, typesVersion)
+      image.src = spriteUrl(serverId, source, kind, type, typesVersion)
       return null
     }
-    const source = { types: tileTypes, vanilla: vanilla !== null, sheet, chunk: (cx: number, cy: number) => chunks.current.get(`${cx}_${cy}`)?.chunk ?? null }
+    const spriteSource = { types: tileTypes, vanilla: vanilla !== null, sheet, chunk: (cx: number, cy: number) => chunks.current.get(`${cx}_${cy}`)?.chunk ?? null }
     const grid = { chunkWidth: manifest.chunkWidth, chunkHeight: manifest.chunkHeight, worldWidth: manifest.world.width, worldHeight: manifest.world.height }
 
     const now = Date.now()
@@ -147,7 +150,7 @@ export default function SpriteLayer({
     for (let by = by0; by <= by1; by++) {
       for (let bx = bx0; bx <= bx1; bx++) {
         // Senza i dati del riquadro non c'è niente da disegnare (neanche in un blocco fatto prima)
-        if (!source.chunk(Math.floor((bx * BLOCK) / grid.chunkWidth), Math.floor((by * BLOCK) / grid.chunkHeight))) continue
+        if (!spriteSource.chunk(Math.floor((bx * BLOCK) / grid.chunkWidth), Math.floor((by * BLOCK) / grid.chunkHeight))) continue
         const key = `${bx}_${by}`
         let block = blocks.current.get(key)
         if (!block || block.stamp !== stamp.current) {
@@ -157,7 +160,7 @@ export default function SpriteLayer({
           const bctx = c.getContext('2d')
           if (!bctx) continue
           bctx.clearRect(0, 0, BLOCK_PX, BLOCK_PX)
-          drawSprites(bctx, { x: bx * BLOCK, y: by * BLOCK, zoom: 16 }, { w: BLOCK_PX, h: BLOCK_PX }, grid, source)
+          drawSprites(bctx, { x: bx * BLOCK, y: by * BLOCK, zoom: 16 }, { w: BLOCK_PX, h: BLOCK_PX }, grid, spriteSource)
           block = { canvas: c, stamp: stamp.current, usedAt: now }
           blocks.current.set(key, block)
         }
@@ -173,7 +176,7 @@ export default function SpriteLayer({
       const oldest = [...blocks.current.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt).slice(0, blocks.current.size - MAX_BLOCKS)
       for (const [k] of oldest) blocks.current.delete(k)
     }
-  }, [view, size, tick, types.data, manifest, serverId, typesVersion, vanilla])
+  }, [view, size, tick, types.data, manifest, serverId, source, typesVersion, vanilla])
 
   return <canvas ref={canvas} className="world-map-sprites" style={{ width: size.w, height: size.h }} aria-hidden="true" />
 }

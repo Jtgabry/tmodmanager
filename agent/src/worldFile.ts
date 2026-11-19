@@ -178,7 +178,12 @@ function backgroundColors(header: WorldHeader, c: MapColors): Uint32Array {
  * (alcuni blocchi, come gli alberi, nel gioco cambiano colore secondo il bioma). `layers` dice quale di questi
  * ha vinto in ogni pixel (0 sfondo, 1 muro, 2 liquido, 3 blocco): serve per sovrapporre i blocchi delle mod.
  */
-export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors): { pixels: Uint32Array; layers: Uint8Array } {
+/** Chi raccoglie i dati grezzi delle tile, nell'ordine del file (vedi worldTiles.ts). */
+export type TileSink = {
+  put(x: number, y: number, type: number, frameX: number, frameY: number, wall: number, shape: number, actuated: boolean, liquid: boolean, paint: number): void
+}
+
+export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink?: TileSink): { pixels: Uint32Array; layers: Uint8Array } {
   const { width, height, frameImportant } = header
   const pixels = new Uint32Array(width * height)
   const layers = new Uint8Array(width * height)
@@ -202,10 +207,16 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors): { p
       }
 
       let tile = -1
+      let frameX = -1
+      let frameY = -1
+      let paint = 0
       if (h1 & 2) {
         tile = h1 & 0x20 ? r.byte() | (r.byte() << 8) : r.byte()
-        if (frameImportant[tile]) r.skip(4)
-        if (h3 & 8) r.byte() // vernice
+        if (frameImportant[tile]) {
+          frameX = r.int16()
+          frameY = r.int16()
+        }
+        if (h3 & 8) paint = r.byte() // vernice
       }
       let wall = 0
       if (h1 & 4) {
@@ -237,13 +248,18 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors): { p
       const repeat = (h1 & 0xc0) >> 6
       let count = repeat === 0 ? 0 : repeat === 1 ? r.byte() : r.int16()
       if (count < 0 || y + count >= height) count = Math.max(0, Math.min(count, height - 1 - y))
+      // Forma (h2): 1 mezzo blocco, 2–5 pendenze; attuatore (h3 & 4)
+      const shape = (h2 >> 4) & 7
+      const actuated = (h3 & 4) !== 0
       // Senza blocco, liquido o muro: lo sfondo, che cambia con la profondità (anche per le tile ripetute)
       pixels[y * width + x] = color >= 0 ? color : background[y]
       layers[y * width + x] = layer
+      sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid >= 0, paint)
       while (count-- > 0) {
         y++
         pixels[y * width + x] = color >= 0 ? color : background[y]
         layers[y * width + x] = layer
+        sink?.put(x, y, tile, frameX, frameY, wall, shape, actuated, liquid >= 0, paint)
       }
     }
   }

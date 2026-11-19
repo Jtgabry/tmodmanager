@@ -172,7 +172,16 @@ export async function worldMap(server: ServerDefinition, { watching = false } = 
   )
   if (manifest && !file.missing) {
     const { source, modBlocks, ...rest } = manifest.value
-    return { ...state, source: 'world', manifest: rest, modBlocks: modBlocks ?? null, updatedAt: new Date(source.mtimeMs).toISOString() }
+    const types = rest.tileData ? await stat(join(worldMapDir(server.id), 'types.json')).catch(() => null) : null
+    return {
+      ...state,
+      source: 'world',
+      manifest: rest,
+      modBlocks: modBlocks ?? null,
+      updatedAt: new Date(source.mtimeMs).toISOString(),
+      typesVersion: types ? Math.round(types.mtimeMs) : null,
+      vanillaSprites: types ? ((await vanillaAssets())?.version ?? null) : null,
+    }
   }
   const unavailable: MapUnavailable = file.missing ? 'no-world' : file.noColors ? 'no-colors' : file.error ? 'world-error' : 'loading'
   return { ...state, unavailable }
@@ -198,16 +207,16 @@ export async function mapOverviewPath(server: ServerDefinition, source: string):
   return (await exists(path)) ? path : null
 }
 
-/** Dati grezzi delle tile di un riquadro (solo LiveMap, vedi addons/Shared/TileData.cs), compressi gzip. */
+/** Dati grezzi delle tile di un riquadro (formato in addons/Shared/TileData.cs), compressi gzip. */
 export async function mapTilesPath(server: ServerDefinition, source: string, cx: string, cy: string): Promise<string | null> {
-  const dir = source === 'livemap' ? liveMapDir(server) : null
+  const dir = mapDir(server, source)
   if (!dir || !COORD.test(cx) || !COORD.test(cy)) return null
   const path = join(dir, 'tiles', `${Number(cx)}_${Number(cy)}.bin`)
   return (await exists(path)) ? path : null
 }
 
-/** types.json di LiveMap: tipi di blocchi e muri, con le texture di quelli delle mod. */
-export function mapTypesPath(server: ServerDefinition): string | null {
-  const dir = liveMapDir(server)
+/** types.json di una sorgente: tipi di blocchi e muri, con mod (e texture, da LiveMap) di quelli delle mod. */
+export function mapTypesPath(server: ServerDefinition, source: string): string | null {
+  const dir = mapDir(server, source)
   return dir ? join(dir, 'types.json') : null
 }

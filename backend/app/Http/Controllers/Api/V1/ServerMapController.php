@@ -49,37 +49,37 @@ class ServerMapController extends Controller
     }
 
     /**
-     * Dati grezzi delle tile di un riquadro di LiveMap (gzip, li decomprime il browser), per disegnare i blocchi
-     * con i loro sprite da vicino. Come i riquadri, l'indirizzo contiene la versione.
+     * Dati grezzi delle tile di un riquadro (gzip, li decomprime il browser), per disegnare i blocchi con i loro
+     * sprite da vicino: da LiveMap o ricavati dal file del mondo. Come i riquadri, l'indirizzo contiene la versione.
      */
-    public function tiles(string $server, int $cx, int $cy): Response
+    public function tiles(string $server, string $source, int $cx, int $cy): Response
     {
         Gate::authorize('server', [$server, ServerAbility::View]);
 
-        return $this->binary("/servers/{$server}/map/livemap/tiles/{$cx}/{$cy}", 'application/octet-stream');
+        return $this->binary("/servers/{$server}/map/{$source}/tiles/{$cx}/{$cy}", 'application/octet-stream');
     }
 
     /**
-     * Tipi di blocchi e muri di LiveMap (quali sono delle mod, con quale texture). Cambiano a ogni avvio del server:
-     * l'indirizzo contiene la versione.
+     * Tipi di blocchi e muri della sorgente (quali sono delle mod, e di quale). Cambiano a ogni avvio del server o
+     * salvataggio del mondo: l'indirizzo contiene la versione.
      */
-    public function types(string $server): JsonResponse
+    public function types(string $server, string $source): JsonResponse
     {
         Gate::authorize('server', [$server, ServerAbility::View]);
 
         return response()
-            ->json(['data' => $this->agent->json('get', "/servers/{$server}/map/livemap/types")])
+            ->json(['data' => $this->agent->json('get', "/servers/{$server}/map/{$source}/types")])
             ->header('Cache-Control', 'private, max-age=31536000, immutable');
     }
 
     /**
-     * Sprite di un tipo di blocco o di muro delle mod, preso dal suo .tmod.
+     * Sprite di un tipo di blocco o di muro: di Terraria (dalle texture del gioco) o di una mod (dal suo .tmod).
      */
-    public function sprite(string $server, string $kind, int $type): Response
+    public function sprite(string $server, string $source, string $kind, int $type): Response
     {
         Gate::authorize('server', [$server, ServerAbility::View]);
 
-        return $this->image("/servers/{$server}/map/sprites/{$kind}/{$type}");
+        return $this->image("/servers/{$server}/map/{$source}/sprites/{$kind}/{$type}");
     }
 
     private function image(string $path): Response

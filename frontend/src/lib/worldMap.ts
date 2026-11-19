@@ -22,17 +22,18 @@ export const chunkUrl = (serverId: string, source: MapSource, cx: number, cy: nu
 
 export const overviewUrl = (serverId: string, source: MapSource, version: number) => `/api/v1/servers/${serverId}/map/${source}/overview?v=${version}`
 
-/** Dati grezzi delle tile di un riquadro di LiveMap (gzip), per gli sprite da vicino. */
-export const tilesUrl = (serverId: string, cx: number, cy: number, version: number) => `/api/v1/servers/${serverId}/map/livemap/tiles/${cx}/${cy}?v=${version}`
+/** Dati grezzi delle tile di un riquadro (gzip), per gli sprite da vicino: da LiveMap o dal file del mondo. */
+export const tilesUrl = (serverId: string, source: MapSource, cx: number, cy: number, version: number) =>
+  `/api/v1/servers/${serverId}/map/${source}/tiles/${cx}/${cy}?v=${version}`
 
-export const spriteUrl = (serverId: string, kind: 'tiles' | 'walls', type: number, version: number) =>
-  `/api/v1/servers/${serverId}/map/sprites/${kind}/${type}?v=${version}`
+export const spriteUrl = (serverId: string, source: MapSource, kind: 'tiles' | 'walls', type: number, version: number) =>
+  `/api/v1/servers/${serverId}/map/${source}/sprites/${kind}/${type}?v=${version}`
 
-/** Tipi di blocchi e muri di LiveMap (cambiano a ogni avvio del server: `version`). */
-export function useTileTypes(serverId: string, version: number | null) {
+/** Tipi di blocchi e muri della sorgente (cambiano a ogni avvio del server o salvataggio del mondo: `version`). */
+export function useTileTypes(serverId: string, source: MapSource, version: number | null) {
   return useQuery({
-    queryKey: ['servers', serverId, 'map', 'types', version],
-    queryFn: async () => (await api.get<{ data: TileTypes }>(`/servers/${serverId}/map/livemap/types`, { params: { v: version } })).data.data,
+    queryKey: ['servers', serverId, 'map', 'types', source, version],
+    queryFn: async () => (await api.get<{ data: TileTypes }>(`/servers/${serverId}/map/${source}/types`, { params: { v: version } })).data.data,
     enabled: version !== null,
     staleTime: Infinity,
     retry: false,

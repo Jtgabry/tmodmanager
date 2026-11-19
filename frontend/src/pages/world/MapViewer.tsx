@@ -22,8 +22,8 @@ function layerOf(world: WorldMapManifest['world'], y: number) {
 /**
  * Mappa a riquadri: trascinamento, zoom con rotella, pizzico o pulsanti, giocatori sopra.
  * Da lontano si vede la panoramica (un'immagine sola); avvicinandosi si caricano solo i riquadri visibili,
- * e ciascuno si ricarica quando la sua versione cambia. Molto da vicino, con LiveMap, blocchi e muri hanno i loro
- * sprite (SpriteLayer): quelli delle mod sempre, quelli di Terraria se il pannello ha le texture del gioco.
+ * e ciascuno si ricarica quando la sua versione cambia. Molto da vicino blocchi e muri hanno i loro sprite (SpriteLayer,
+ * con i dati delle tile di LiveMap o del file del mondo): quelli delle mod sempre, quelli di Terraria se il pannello ha le texture del gioco.
  */
 export default function MapViewer({
   serverId,
@@ -199,7 +199,7 @@ export default function MapViewer({
     }
   }
 
-  const sprites = v !== null && source === 'livemap' && (manifest.tileData ?? 0) > 0 && typesVersion !== null && v.zoom >= SPRITE_ZOOM
+  const sprites = v !== null && (manifest.tileData ?? 0) > 0 && typesVersion !== null && v.zoom >= SPRITE_ZOOM
 
   const screen = (tx: number, ty: number) => (v ? { left: (tx - v.x) * v.zoom, top: (ty - v.y) * v.zoom } : { left: 0, top: 0 })
 
@@ -242,8 +242,9 @@ export default function MapViewer({
         {sprites && v && typesVersion !== null && (
           // Tipi nuovi (server riavviato): si ricomincia da capo, anche con gli sprite
           <SpriteLayer
-            key={`${typesVersion}:${vanillaSprites}`}
+            key={`${source}:${typesVersion}:${vanillaSprites}`}
             serverId={serverId}
+            source={source}
             manifest={manifest}
             view={v}
             size={size}

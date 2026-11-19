@@ -7,6 +7,8 @@ import { gzipSync } from 'node:zlib'
 import { fallbackColor, modBlockColors } from '../src/modMapColors.ts'
 import { rawimgAverageColor } from '../src/tmod.ts'
 import { LAYER, overlayModBlocks, readModBlocks } from '../src/twld.ts'
+import { WorldTileSink } from '../src/worldTiles.ts'
+import { gunzipSync } from 'node:zlib'
 
 // --- Scrittura TagIO minima (big-endian, stringhe con lunghezza int16), come tModLoader ---------------
 
@@ -120,4 +122,24 @@ test('colori dei blocchi delle mod: media della texture rawimg, altrimenti un co
   assert.equal(fromTextures, 0)
   assert.equal(colorOf(tile, false), fallbackColor('Sparita/Blocco'))
   assert.notEqual(fallbackColor('Sparita/Blocco'), fallbackColor('Sparita/Altro'))
+})
+
+test('dati delle tile dal file del mondo: blocchi e muri delle mod del .twld, con i loro frame salvati', () => {
+  const blocks = readModBlocks(fakeTwld())!
+  const sink = new WorldTileSink(W, H, W, H, [false, true], { tiles: 693, walls: 347 }, blocks)
+  // Come renderWorld: colonna per colonna; nel .wld tutto vuoto tranne un blocco di Terraria (tipo 1) in (2, 2)
+  for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) sink.put(x, y, x === 2 && y === 2 ? 1 : -1, -1, -1, 0, 0, false, false, 0)
+  assert.deepEqual(sink.types.modTiles, { '693': { mod: 'Calamity', name: 'Gravel', texture: '' }, '694': { mod: 'Calamity', name: 'Crystal', texture: '' } })
+  assert.deepEqual(sink.types.modWalls, { '347': { mod: 'Calamity', name: 'SlabWall', texture: '' } })
+  assert.deepEqual([sink.types.frameImportant[693], sink.types.frameImportant[694], sink.types.solid[694]], [true, false, true])
+
+  const data = gunzipSync(sink.chunks.get(0)!.gzip).subarray(10)
+  const tile = (x: number, y: number) => {
+    const o = (y * W + x) * 12
+    return [data.readUInt16LE(o), data.readInt16LE(o + 2), data.readInt16LE(o + 4), data.readUInt16LE(o + 6)]
+  }
+  assert.deepEqual(tile(1, 2), [693, 0, 0, 0]) // blocco della mod con frame salvati (0, 0 nel .twld finto)
+  assert.deepEqual(tile(3, 0), [694, -1, -1, 0]) // senza frame salvati: li sceglie il pannello
+  assert.deepEqual(tile(2, 2), [1, -1, -1, 0]) // Terraria
+  assert.deepEqual(tile(0, 1), [0xffff, -1, -1, 347]) // muro della mod
 })
