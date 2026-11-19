@@ -20,7 +20,7 @@ import {
   ticksToSeconds,
 } from './procfs.js'
 import { modsFingerprint } from './mods.js'
-import { pluginsFingerprint } from './plugins.js'
+import { pluginsFingerprint, refreshActiveAddons } from './plugins.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { listSessions, quitSession, type ScreenSession, sendLine, startSession } from './screen.js'
@@ -335,6 +335,8 @@ export class ServerManager {
       // TShock non crea da solo la cartella dei plugin aggiuntivi (e senza non parte)
       await mkdir(tshockPluginsDir(server.saveDir), { recursive: true })
       await mkdir(tshockDataDir(server.saveDir), { recursive: true })
+      // Add-on di tModManager attivi (es. LiveMap): alla versione di questo pannello
+      await refreshActiveAddons(server).catch(() => [])
     }
     const { command, env } = launchCommand(server, settings)
     await startSession(server.screenSession, server.installDir, logFile, paths.screenrc(), command, env)

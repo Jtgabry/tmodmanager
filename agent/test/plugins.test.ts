@@ -13,6 +13,7 @@ import {
   listPlugins,
   pluginsFingerprint,
   readAssemblyInfo,
+  refreshActiveAddons,
   setPluginEnabled,
   uploadPlugin,
   usePluginVersion,
@@ -204,6 +205,11 @@ test('add-on di tModManager: in elenco disattivato, si attiva, si aggiorna con i
   const updated = (await listPlugins(server)).plugins.find((p) => p.name === 'LiveMap')
   assert.equal(updated?.versions[0].version, '1.1.0')
   assert.equal(readAssemblyInfo(await readFile(join(server.saveDir, 'ServerPlugins', 'LiveMap.dll'))).version, '1.1.0')
+  // Prima dell'avvio del server l'add-on attivo si allinea anche senza aprire l'elenco dei plugin
+  await writeFile(join(config.addonsDir, 'LiveMap.dll'), fakeAssembly({ name: 'LiveMap', version: '1.2.0' }))
+  assert.deepEqual(await refreshActiveAddons(server), ['LiveMap'])
+  assert.equal(readAssemblyInfo(await readFile(join(server.saveDir, 'ServerPlugins', 'LiveMap.dll'))).version, '1.2.0')
+  assert.deepEqual(await refreshActiveAddons(server), [])
   // ...e non finisce tra le versioni dei plugin caricati
   assert.equal((await readdir(join(config.dataDir, 'servers', 'p')).catch(() => [])).includes('plugins'), false)
 

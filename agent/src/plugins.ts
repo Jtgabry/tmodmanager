@@ -386,6 +386,22 @@ async function addonEntry(server: ServerDefinition, addon: Addon, path: string, 
   }
 }
 
+/**
+ * Allinea gli add-on attivi del server alla build distribuita con il pannello. Da chiamare prima di avviare
+ * un server TShock: dopo un aggiornamento del pannello, il server riparte già con la versione nuova.
+ */
+export async function refreshActiveAddons(server: ServerDefinition): Promise<string[]> {
+  const updated: string[] = []
+  for (const { addon, path, info } of await availableAddons()) {
+    const active = await fileInfo(join(activePluginsDir(server), `${addon.name}.dll`))
+    if (active && active.id !== info.id) {
+      await installAddon(server, addon, path, null)
+      updated.push(addon.name)
+    }
+  }
+  return updated
+}
+
 const addonOnly = (plugin: PluginEntry) => {
   if (plugin.addon) throw new ModError(`${plugin.title ?? plugin.name} è un add-on di tModManager: si attiva o si disattiva soltanto, e si aggiorna con il pannello`, 409)
 }
