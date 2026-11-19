@@ -51,12 +51,22 @@ La mod è `side = Server`: i giocatori non la scaricano. Sul server dedicato tMo
 minimappa: le prepara la mod (`MapColors` in `TmmLiveMap.cs`), e una modifica IL toglie da `MapHelper.CreateMapTile`
 le letture di `Main.Map` (la mappa esplorata dal giocatore, che sul server non c'è).
 
+Vista ravvicinata con gli sprite: oltre alla mappa a pixel, per ogni riquadro LiveMap scrive i dati grezzi delle
+tile (`tiles/`, formato in `Shared/TileData.cs`: tipo, frame, muro, forma, vernice) e in `types.json` quali tipi
+sono delle mod e con quale texture. Il browser disegna i blocchi con i loro sprite, che l'agent prende dai `.tmod`
+(per ora solo quelli delle mod: gli sprite di Terraria non sono sul server). I frame (quale parte del foglio di
+sprite) caricando il mondo restano solo per mobili e oggetti di più tile: la mod li calcola per gli altri blocchi
+con `WorldGen.TileFrame` senza "azioni", come `WorldGen.EveryTileFrame` dopo la generazione di un mondo, una volta
+per tile e dentro il limite di tempo per tick; così anche gli schemi di frame delle mod sono quelli giusti.
+
 File scritti:
 
 | File | Contenuto |
 | --- | --- |
 | `manifest.json` | mondo (nome, id, dimensioni, spawn, superficie), griglia dei riquadri e loro versioni (`chunks`, riga per riga, 0 = non ancora disegnato), panoramica, avanzamento |
 | `chunks/{cx}_{cy}.png` | riquadri da 200×150 tile, un pixel per tile, con i colori della minimappa |
+| `tiles/{cx}_{cy}.bin` | dati grezzi delle stesse tile (gzip), con la stessa versione del PNG |
+| `types.json` | tipi di blocchi e muri: frame salvati o no, e mod e texture di quelli delle mod |
 | `overview.png` | mondo intero ridotto (`ScalaPanoramica`, default 1 pixel ogni 4×4 tile), dopo il primo giro completo |
 | `players.json` | giocatori: nome, posizione in tile, team, vita, morto |
 | `viewer` | lo **tocca il pannello** finché la mappa è aperta; senza, LiveMap resta in pausa |

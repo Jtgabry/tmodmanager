@@ -56,6 +56,8 @@ const Manifest = z.object({
   chunks: z.array(z.number()),
   overview: z.object({ scale: z.number().int().positive(), width: z.number(), height: z.number(), version: z.number() }),
   progress: z.object({ drawn: z.number(), total: z.number() }),
+  /** LiveMap: formato dei dati grezzi delle tile in tiles/ (per gli sprite), 0 o assente = non ci sono. */
+  tileData: z.number().int().optional(),
 })
 export type WorldMapManifest = z.infer<typeof Manifest>
 
@@ -88,6 +90,8 @@ export type WorldMapState = {
   players: MapPlayer[]
   /** Ultimo aggiornamento delle posizioni dei giocatori. */
   playersAt: string | null
+  /** LiveMap con i dati grezzi delle tile: versione di types.json (cambia a ogni avvio), per gli sprite. */
+  typesVersion: number | null
 }
 
 const liveMapDir = (server: ServerDefinition) =>
@@ -125,6 +129,7 @@ async function readJson<T>(path: string, schema: z.ZodType<T>): Promise<{ value:
 export async function worldMap(server: ServerDefinition, { watching = false } = {}): Promise<WorldMapState> {
   const state: WorldMapState = {
     source: null, unavailable: null, liveMap: null, worldFile: null, modBlocks: null, updatedAt: null, manifest: null, players: [], playersAt: null,
+    typesVersion: null,
   }
 
   state.liveMap = await liveMapStatus(server)
@@ -137,9 +142,11 @@ export async function worldMap(server: ServerDefinition, { watching = false } = 
     const manifest = await readJson(join(dir, 'manifest.json'), Manifest)
     if (manifest) {
       const players = await readJson(join(dir, 'players.json'), z.object({ players: z.array(Player) }))
+      const types = manifest.value.tileData ? await stat(join(dir, 'types.json')).catch(() => null) : null
       return {
         ...state,
         source: 'livemap',
+        typesVersion: types ? Math.round(types.mtimeMs) : null,
         updatedAt: manifest.mtime.toISOString(),
         manifest: manifest.value,
         players: players?.value.players ?? [],
@@ -184,4 +191,18 @@ export async function mapOverviewPath(server: ServerDefinition, source: string):
   if (!dir) return null
   const path = join(dir, 'overview.png')
   return (await exists(path)) ? path : null
+}
+
+/** Dati grezzi delle tile di un riquadro (solo LiveMap, vedi addons/Shared/TileData.cs), compressi gzip. */
+export async function mapTilesPath(server: ServerDefinition, source: string, cx: string, cy: string): Promise<string | null> {
+  const dir = source === 'livemap' ? liveMapDir(server) : null
+  if (!dir || !COORD.test(cx) || !COORD.test(cy)) return null
+  const path = join(dir, 'tiles', `${Number(cx)}_${Number(cy)}.bin`)
+  return (await exists(path)) ? path : null
+}
+
+/** types.json di LiveMap: tipi di blocchi e muri, con le texture di quelli delle mod. */
+export function mapTypesPath(server: ServerDefinition): string | null {
+  const dir = liveMapDir(server)
+  return dir ? join(dir, 'types.json') : null
 }

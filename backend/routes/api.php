@@ -96,6 +96,10 @@ Route::prefix('v1')
                 // {source}: livemap (add-on LiveMap, server TShock) o world (dal file del mondo)
                 Route::get('/{source}/chunks/{cx}/{cy}', 'chunk')->whereIn('source', ['livemap', 'world'])->whereNumber(['cx', 'cy'])->name('chunk');
                 Route::get('/{source}/overview', 'overview')->whereIn('source', ['livemap', 'world'])->name('overview');
+                // Vista ravvicinata con gli sprite (solo LiveMap): dati grezzi delle tile, tipi, sprite delle mod
+                Route::get('/livemap/tiles/{cx}/{cy}', 'tiles')->whereNumber(['cx', 'cy'])->name('tiles');
+                Route::get('/livemap/types', 'types')->name('types');
+                Route::get('/sprites/{kind}/{type}', 'sprite')->whereIn('kind', ['tiles', 'walls'])->whereNumber('type')->name('sprite');
             });
 
             Route::controller(ServerPluginController::class)->prefix('/servers/{server}/plugins')->name('servers.plugins.')->group(function () {

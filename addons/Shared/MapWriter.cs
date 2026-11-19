@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Text.Json;
 using System.Threading.Channels;
 
@@ -16,6 +18,8 @@ public sealed record PlayerInfo(string Name, float X, float Y, int Team, int Lif
 /// Cartella (tshock/map/ con TShock, LiveMap/ nella cartella dei salvataggi con tModLoader):
 ///   manifest.json          mondo, griglia dei riquadri e loro versioni
 ///   chunks/{cx}_{cy}.png   riquadri da 200×150 tile, un pixel per tile
+///   tiles/{cx}_{cy}.bin    dati grezzi delle stesse tile, per gli sprite (TileData), con la stessa versione
+///   types.json             tipi di blocchi e muri (TileTypes)
 ///   overview.png           mondo intero ridotto (scritta solo dopo il primo giro completo)
 ///   players.json           posizioni dei giocatori, in tile
 ///   viewer                 toccato dal pannello finché la mappa è aperta: senza, il plugin non lavora
@@ -30,7 +34,8 @@ public sealed class MapWriter : IDisposable
     private readonly Timer _flushTimer;
     private int _pending;
 
-    private readonly string _dir, _chunksDir;
+    private readonly string _dir, _chunksDir, _tilesDir;
+    private readonly int _tileFormat;
     private readonly int _cols, _rows, _chunkWidth, _chunkHeight, _scale;
     private WorldInfo _world;
     private readonly long[] _versions;
@@ -52,8 +57,11 @@ public sealed class MapWriter : IDisposable
 
     public string Dir => _dir;
 
-    public MapWriter(string dir, WorldInfo world, int cols, int rows, int chunkWidth, int chunkHeight, int scale)
+    /// <param name="tileFormat">TileData.Format se arrivano anche i dati grezzi delle tile, altrimenti 0.</param>
+    public MapWriter(string dir, WorldInfo world, int cols, int rows, int chunkWidth, int chunkHeight, int scale, int tileFormat = 0)
     {
+        _tileFormat = tileFormat;
+        _tilesDir = Path.Combine(dir, "tiles");
         _dir = dir;
         _chunksDir = Path.Combine(dir, "chunks");
         _world = world;
@@ -70,13 +78,23 @@ public sealed class MapWriter : IDisposable
         _flushTimer = new Timer(_ => Enqueue(Flush, counted: false), null, 2000, 2000);
     }
 
-    /// <summary>Consegna un riquadro disegnato; <paramref name="pixels"/> viene da ArrayPool e passa a questo thread.</summary>
-    public void Chunk(int index, int[] pixels, int width, int height) =>
+    /// <summary>
+    /// Consegna un riquadro disegnato; <paramref name="pixels"/> e <paramref name="tiles"/> vengono da ArrayPool e
+    /// passano a questo thread.
+    /// </summary>
+    public void Chunk(int index, int[] pixels, byte[]? tiles, int width, int height) =>
         Enqueue(() =>
         {
-            try { WriteChunk(index, pixels, width, height); }
-            finally { ArrayPool<int>.Shared.Return(pixels); }
+            try { WriteChunk(index, pixels, tiles, width, height); }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(pixels);
+                if (tiles != null) ArrayPool<byte>.Shared.Return(tiles);
+            }
         }, counted: true);
+
+    /// <summary>types.json: tipi di blocchi e muri (cambiano solo con le mod, cioè a ogni avvio).</summary>
+    public void Types(TileTypes types) => Enqueue(() => WriteAtomic(Path.Combine(_dir, "types.json"), JsonSerializer.Serialize(types, Json)), counted: false);
 
     public void Players(WorldInfo world, List<PlayerInfo> players) => Enqueue(() => WritePlayers(world, players), counted: false);
 
@@ -110,11 +128,13 @@ public sealed class MapWriter : IDisposable
 
     private string ManifestPath => Path.Combine(_dir, "manifest.json");
     private string ChunkPath(int index) => Path.Combine(_chunksDir, $"{index % _cols}_{index / _cols}.png");
+    private string TilesPath(int index) => Path.Combine(_tilesDir, $"{index % _cols}_{index / _cols}.bin");
 
     /// <summary>Riprende versioni e hash dell'avvio precedente se il mondo è lo stesso, altrimenti riparte pulito.</summary>
     private void Restore()
     {
         Directory.CreateDirectory(_chunksDir);
+        if (_tileFormat != 0) Directory.CreateDirectory(_tilesDir);
         try
         {
             if (File.Exists(ManifestPath))
@@ -126,7 +146,10 @@ public sealed class MapWriter : IDisposable
                     && old.Chunks.Length == _versions.Length && old.Hashes.Length == _hashes.Length)
                 {
                     Array.Copy(old.Chunks, _versions, _versions.Length);
-                    for (var i = 0; i < _hashes.Length; i++) _hashes[i] = Convert.ToUInt64(old.Hashes[i], 16);
+                    // Con o senza dati delle tile (o in un altro formato) gli hash non valgono: si riscrive tutto
+                    if (old.TileData == _tileFormat)
+                        for (var i = 0; i < _hashes.Length; i++) _hashes[i] = Convert.ToUInt64(old.Hashes[i], 16);
+                    else _manifestDirty = true;
                     if (old.Overview.Scale == _scale) _overviewVersion = old.Overview.Version;
                     return;
                 }
@@ -139,17 +162,20 @@ public sealed class MapWriter : IDisposable
 
         // Mondo diverso (o primo avvio): via i riquadri vecchi
         foreach (var file in Directory.EnumerateFiles(_chunksDir, "*.png")) File.Delete(file);
+        if (Directory.Exists(_tilesDir)) foreach (var file in Directory.EnumerateFiles(_tilesDir, "*.bin")) File.Delete(file);
         File.Delete(Path.Combine(_dir, "overview.png"));
         _manifestDirty = true;
     }
 
-    private void WriteChunk(int index, int[] pixels, int width, int height)
+    private void WriteChunk(int index, int[] pixels, byte[]? tiles, int width, int height)
     {
         var hash = Hash(pixels, width * height);
+        if (tiles != null) hash = Hash(hash, tiles.AsSpan(0, width * height * TileData.Size));
         var path = ChunkPath(index);
-        if (hash != _hashes[index] || !File.Exists(path))
+        if (hash != _hashes[index] || !File.Exists(path) || (tiles != null && !File.Exists(TilesPath(index))))
         {
             Png.Write(path, pixels, width, height, width);
+            if (tiles != null) WriteTiles(TilesPath(index), tiles, width, height);
             _versions[index] = NextVersion(_versions[index]);
             _hashes[index] = hash;
             _manifestDirty = true;
@@ -214,6 +240,7 @@ public sealed class MapWriter : IDisposable
             Rows = _rows,
             Chunks = _versions,
             Hashes = _hashes.Select(h => h.ToString("x16")).ToArray(),
+            TileData = _tileFormat,
             Overview = new OverviewInfo(_scale, _overviewWidth, _overviewHeight, _overviewVersion),
             Progress = new ProgressInfo(_drawnCount, Total),
         };
@@ -228,6 +255,34 @@ public sealed class MapWriter : IDisposable
         var hash = 14695981039346656037UL; // FNV-1a
         for (var i = 0; i < count; i++) hash = (hash ^ (uint)pixels[i]) * 1099511628211UL;
         return hash == 0 ? 1 : hash; // 0 = "mai scritto"
+    }
+
+    /// <summary>Prosegue l'hash con i dati delle tile (8 byte alla volta, poi il resto).</summary>
+    private static ulong Hash(ulong hash, ReadOnlySpan<byte> data)
+    {
+        var i = 0;
+        for (; i + 8 <= data.Length; i += 8) hash = (hash ^ BinaryPrimitives.ReadUInt64LittleEndian(data[i..])) * 1099511628211UL;
+        for (; i < data.Length; i++) hash = (hash ^ data[i]) * 1099511628211UL;
+        return hash == 0 ? 1 : hash;
+    }
+
+    /// <summary>tiles/{cx}_{cy}.bin: intestazione e tile riga per riga (TileData), compressi gzip.</summary>
+    private static void WriteTiles(string path, byte[] tiles, int width, int height)
+    {
+        var tmp = path + ".tmp";
+        using (var file = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
+        using (var gzip = new GZipStream(file, CompressionLevel.Fastest))
+        {
+            Span<byte> header = stackalloc byte[10];
+            "TMMT"u8.CopyTo(header);
+            header[4] = TileData.Format;
+            header[5] = TileData.Size;
+            BinaryPrimitives.WriteUInt16LittleEndian(header[6..], (ushort)width);
+            BinaryPrimitives.WriteUInt16LittleEndian(header[8..], (ushort)height);
+            gzip.Write(header);
+            gzip.Write(tiles, 0, width * height * TileData.Size);
+        }
+        File.Move(tmp, path, overwrite: true);
     }
 
     private static void WriteAtomic(string path, string content)
@@ -248,6 +303,8 @@ public sealed class MapWriter : IDisposable
         /// <summary>Versione di ogni riquadro, riga per riga (indice = cy * cols + cx); 0 = non ancora disegnato.</summary>
         public long[] Chunks { get; set; } = [];
         public string[] Hashes { get; set; } = [];
+        /// <summary>Formato dei dati delle tile in tiles/ (TileData.Format), 0 = non ci sono.</summary>
+        public int TileData { get; set; }
         public OverviewInfo Overview { get; set; } = null!;
         public ProgressInfo Progress { get; set; } = null!;
     }

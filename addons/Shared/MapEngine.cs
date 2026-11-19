@@ -21,11 +21,18 @@ public sealed class MapEngine : IDisposable
     /// <summary>Come le sezioni di Terraria: le dimensioni standard dei mondi ne sono multipli.</summary>
     public const int ChunkWidth = 200, ChunkHeight = 150;
 
+    /// <summary>
+    /// Dati grezzi di una tile per il disegno con gli sprite nel pannello, <see cref="TileData.Size"/> byte
+    /// (vedi TileData). L'host li scrive in <paramref name="dest"/>.
+    /// </summary>
+    public delegate void TileReader(int x, int y, Span<byte> dest);
+
     private readonly string _dir;
     private readonly int _width, _height;
     private readonly Func<int, int, int> _pixel;
     private readonly Func<WorldInfo> _world;
     private readonly Func<List<PlayerInfo>> _players;
+    private readonly TileReader? _tiles;
     private readonly MapWriter _writer;
     private volatile Config _config;
     private volatile bool _disposed;
@@ -54,11 +61,16 @@ public sealed class MapEngine : IDisposable
     {
         public int Index, X0, Y0, Width, Height, Row;
         public int[] Pixels = [];
+        public byte[]? Tiles;
     }
 
     /// <param name="pixel">Colore 0xRRGGBB della tile (x, y) come nella minimappa; un'eccezione la fa magenta.</param>
-    public MapEngine(string dir, Config config, int width, int height, Func<int, int, int> pixel, Func<WorldInfo> world, Func<List<PlayerInfo>> players)
+    /// <param name="tiles">Dati grezzi delle tile (per gli sprite nel pannello), oppure null.</param>
+    /// <param name="types">Tipi di blocchi e muri (types.json, vedi TileData), se ci sono i dati grezzi.</param>
+    public MapEngine(string dir, Config config, int width, int height, Func<int, int, int> pixel, Func<WorldInfo> world, Func<List<PlayerInfo>> players,
+        TileReader? tiles = null, TileTypes? types = null)
     {
+        _tiles = tiles;
         _dir = dir;
         _config = config;
         _width = width;
@@ -72,7 +84,8 @@ public sealed class MapEngine : IDisposable
         _dirtySince = new long[_cols * _rows];
         _lastDrawn = new long[_cols * _rows];
         Directory.CreateDirectory(dir);
-        _writer = new MapWriter(dir, world(), _cols, _rows, ChunkWidth, ChunkHeight, config.ScalaPanoramica);
+        _writer = new MapWriter(dir, world(), _cols, _rows, ChunkWidth, ChunkHeight, config.ScalaPanoramica, tiles != null ? TileData.Format : 0);
+        if (types != null) _writer.Types(types);
         _idleTimer = new Timer(_ => OnIdleTick(), null, 1000, 16);
     }
 
@@ -97,7 +110,11 @@ public sealed class MapEngine : IDisposable
         _idleTimer.Dispose();
         lock (_drawLock)
         {
-            if (_job != null) ArrayPool<int>.Shared.Return(_job.Pixels);
+            if (_job != null)
+            {
+                ArrayPool<int>.Shared.Return(_job.Pixels);
+                if (_job.Tiles != null) ArrayPool<byte>.Shared.Return(_job.Tiles);
+            }
             _job = null;
         }
         _writer.Dispose();
@@ -224,6 +241,7 @@ public sealed class MapEngine : IDisposable
         {
             Index = index, X0 = x0, Y0 = y0, Width = width, Height = height,
             Pixels = ArrayPool<int>.Shared.Rent(width * height),
+            Tiles = _tiles != null ? ArrayPool<byte>.Shared.Rent(width * height * TileData.Size) : null,
         };
         return true;
     }
@@ -245,6 +263,18 @@ public sealed class MapEngine : IDisposable
                 _errors++;
             }
             job.Pixels[offset + dx] = pixel;
+            if (job.Tiles != null)
+            {
+                var dest = job.Tiles.AsSpan((offset + dx) * TileData.Size, TileData.Size);
+                try
+                {
+                    _tiles!(job.X0 + dx, y, dest);
+                }
+                catch
+                {
+                    TileData.Empty(dest);
+                }
+            }
         }
         job.Row++;
         _tilesDrawn += job.Width;
@@ -255,7 +285,7 @@ public sealed class MapEngine : IDisposable
         var job = _job!;
         _job = null;
         _lastDrawn[job.Index] = now;
-        _writer.Chunk(job.Index, job.Pixels, job.Width, job.Height);
+        _writer.Chunk(job.Index, job.Pixels, job.Tiles, job.Width, job.Height);
     }
 
     /// <summary>

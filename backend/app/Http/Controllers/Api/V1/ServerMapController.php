@@ -11,8 +11,8 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Mappa del mondo (sezione "Mondo"): basta l'accesso al server. Sorgenti: l'add-on LiveMap (TShock, in
- * tempo reale) o il file del mondo (tutti i server, a ogni salvataggio).
+ * Mappa del mondo (sezione "Mondo"): basta l'accesso al server. Sorgenti: l'add-on LiveMap (TShock e tModLoader,
+ * in tempo reale, con i dati delle tile per gli sprite) o il file del mondo (tutti i server, a ogni salvataggio).
  */
 class ServerMapController extends Controller
 {
@@ -48,10 +48,49 @@ class ServerMapController extends Controller
         return $this->image("/servers/{$server}/map/{$source}/overview");
     }
 
+    /**
+     * Dati grezzi delle tile di un riquadro di LiveMap (gzip, li decomprime il browser), per disegnare i blocchi
+     * con i loro sprite da vicino. Come i riquadri, l'indirizzo contiene la versione.
+     */
+    public function tiles(string $server, int $cx, int $cy): Response
+    {
+        Gate::authorize('server', [$server, ServerAbility::View]);
+
+        return $this->binary("/servers/{$server}/map/livemap/tiles/{$cx}/{$cy}", 'application/octet-stream');
+    }
+
+    /**
+     * Tipi di blocchi e muri di LiveMap (quali sono delle mod, con quale texture). Cambiano a ogni avvio del server:
+     * l'indirizzo contiene la versione.
+     */
+    public function types(string $server): JsonResponse
+    {
+        Gate::authorize('server', [$server, ServerAbility::View]);
+
+        return response()
+            ->json(['data' => $this->agent->json('get', "/servers/{$server}/map/livemap/types")])
+            ->header('Cache-Control', 'private, max-age=31536000, immutable');
+    }
+
+    /**
+     * Sprite di un tipo di blocco o di muro delle mod, preso dal suo .tmod.
+     */
+    public function sprite(string $server, string $kind, int $type): Response
+    {
+        Gate::authorize('server', [$server, ServerAbility::View]);
+
+        return $this->image("/servers/{$server}/map/sprites/{$kind}/{$type}");
+    }
+
     private function image(string $path): Response
     {
+        return $this->binary($path, 'image/png');
+    }
+
+    private function binary(string $path, string $contentType): Response
+    {
         return response($this->agent->stream($path)->body(), 200, [
-            'Content-Type' => 'image/png',
+            'Content-Type' => $contentType,
             'Cache-Control' => 'private, max-age=31536000, immutable',
             'X-Content-Type-Options' => 'nosniff',
         ]);

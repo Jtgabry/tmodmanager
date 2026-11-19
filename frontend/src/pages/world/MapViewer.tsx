@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { chunkUrl, overviewUrl } from '../../lib/worldMap'
 import type { MapPlayer, MapSource, WorldMapManifest } from '../../lib/types'
+import SpriteLayer, { SPRITE_ZOOM } from './SpriteLayer'
 
 /** Vista: tile in alto a sinistra e pixel dello schermo per tile. */
 type View = { x: number; y: number; zoom: number }
@@ -21,7 +22,8 @@ function layerOf(world: WorldMapManifest['world'], y: number) {
 /**
  * Mappa a riquadri: trascinamento, zoom con rotella, pizzico o pulsanti, giocatori sopra.
  * Da lontano si vede la panoramica (un'immagine sola); avvicinandosi si caricano solo i riquadri visibili,
- * e ciascuno si ricarica quando la sua versione cambia.
+ * e ciascuno si ricarica quando la sua versione cambia. Molto da vicino, con LiveMap, i blocchi delle mod hanno
+ * i loro sprite (SpriteLayer).
  */
 export default function MapViewer({
   serverId,
@@ -29,6 +31,7 @@ export default function MapViewer({
   manifest,
   players,
   focus,
+  typesVersion = null,
 }: {
   serverId: string
   source: MapSource
@@ -36,6 +39,8 @@ export default function MapViewer({
   players: MapPlayer[]
   /** Giocatore su cui centrarsi (cambia → la vista si sposta). */
   focus: { name: string; at: number } | null
+  /** LiveMap con i dati delle tile: versione dei tipi di blocco (per gli sprite da vicino). */
+  typesVersion?: number | null
 }) {
   const { world, chunkWidth: cw, chunkHeight: ch, cols, rows, overview } = manifest
   const frame = useRef<HTMLDivElement>(null)
@@ -191,6 +196,8 @@ export default function MapViewer({
     }
   }
 
+  const sprites = v !== null && source === 'livemap' && (manifest.tileData ?? 0) > 0 && typesVersion !== null && v.zoom >= SPRITE_ZOOM
+
   const screen = (tx: number, ty: number) => (v ? { left: (tx - v.x) * v.zoom, top: (ty - v.y) * v.zoom } : { left: 0, top: 0 })
 
   return (
@@ -227,6 +234,11 @@ export default function MapViewer({
               />
             ))}
           </div>
+        )}
+
+        {sprites && v && typesVersion !== null && (
+          // Tipi nuovi (server riavviato): si ricomincia da capo, anche con gli sprite
+          <SpriteLayer key={typesVersion} serverId={serverId} manifest={manifest} view={v} size={size} typesVersion={typesVersion} visible={visible} />
         )}
 
         {v && (

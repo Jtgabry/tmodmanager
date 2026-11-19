@@ -3,6 +3,7 @@ using System.Reflection;
 using Microsoft.Xna.Framework;
 using MonoMod.Cil;
 using Terraria;
+using Terraria.ID;
 using Terraria.Localization;
 using Terraria.Map;
 using Terraria.ModLoader;
@@ -53,7 +54,7 @@ public class LiveMapSystem : ModSystem
 
         Directory.CreateDirectory(MapDir);
         var config = Config.Load(ConfigPath);
-        Engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players);
+        Engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players, ReadTile, Types());
         Log.Info($"Mappa pronta: {Engine.Cols}×{Engine.Rows} riquadri in {MapDir}" +
                  (config.SempreAttiva ? " (sempre attiva)" : " (si aggiorna quando il pannello la apre)"));
     }
@@ -69,9 +70,58 @@ public class LiveMapSystem : ModSystem
     /// <summary>Colore della tile come nella minimappa del gioco, a piena luce.</summary>
     private static int Pixel(int x, int y)
     {
+        EnsureFramed(x, y);
         var tile = MapHelper.CreateMapTile(x, y, 255);
         var color = MapHelper.GetMapTileXnaColor(ref tile);
         return color.R << 16 | color.G << 8 | color.B;
+    }
+
+    /// <summary>
+    /// Frame della tile (quale parte del foglio di sprite usare). Caricando il mondo il gioco li mette a -1 per i
+    /// blocchi normali, e li calcolano i client; sul server servono per gli sprite del pannello (e per il colore di
+    /// alcuni blocchi). Si calcolano come WorldGen.EveryTileFrame, che il server usa dopo aver generato un mondo:
+    /// TileFrame senza "azioni" (sabbia che cade, liquidi, oggetti che si rompono). Lo fa il codice del gioco e
+    /// delle mod, quindi anche gli schemi di frame delle mod sono giusti. Una volta sola per tile.
+    /// </summary>
+    private static void EnsureFramed(int x, int y)
+    {
+        var t = Main.tile[x, y];
+        if (!t.HasTile || (t.TileFrameX >= 0 && t.TileFrameY >= 0)) return;
+        var (liquid, actions) = (WorldGen.noLiquidCheck, WorldGen.noTileActions);
+        WorldGen.noLiquidCheck = true;
+        WorldGen.noTileActions = true;
+        try
+        {
+            WorldGen.TileFrame(x, y, resetFrame: true, noBreak: true);
+        }
+        finally
+        {
+            (WorldGen.noLiquidCheck, WorldGen.noTileActions) = (liquid, actions);
+        }
+    }
+
+    /// <summary>Dati grezzi della tile, per gli sprite nel pannello (TileData).</summary>
+    private static void ReadTile(int x, int y, Span<byte> dest)
+    {
+        var t = Main.tile[x, y];
+        TileData.Write(dest, t.HasTile, t.TileType, t.TileFrameX, t.TileFrameY, t.WallType, (int)t.BlockType, t.IsActuated, t.LiquidAmount > 0, t.TileColor);
+    }
+
+    /// <summary>Tipi di blocchi e muri, con mod e texture di quelli delle mod (types.json).</summary>
+    private static TileTypes Types()
+    {
+        var types = new TileTypes
+        {
+            VanillaTiles = TileID.Count,
+            VanillaWalls = WallID.Count,
+            FrameImportant = Main.tileFrameImportant.Take(TileLoader.TileCount).ToArray(),
+            Solid = Main.tileSolid.Take(TileLoader.TileCount).ToArray(),
+        };
+        for (var type = TileID.Count; type < TileLoader.TileCount; type++)
+            if (TileLoader.GetTile(type) is { } tile) types.ModTiles[type] = new ModType(tile.Mod.Name, tile.Name, tile.Texture);
+        for (var type = WallID.Count; type < WallLoader.WallCount; type++)
+            if (WallLoader.GetWall(type) is { } wall) types.ModWalls[type] = new ModType(wall.Mod.Name, wall.Name, wall.Texture);
+        return types;
     }
 
     private static WorldInfo World() => new(

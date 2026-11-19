@@ -2746,6 +2746,13 @@ html:has(.sheet[open]) {
   cursor: grabbing;
 }
 
+.world-map-sprites {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
 .world-map-layer {
   position: absolute;
   top: 0;

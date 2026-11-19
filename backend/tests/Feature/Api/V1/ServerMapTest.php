@@ -68,6 +68,37 @@ class ServerMapTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_tile_data_types_and_sprites_are_proxied_and_cached(): void
+    {
+        $this->actingAsMember([]);
+        Http::fake([
+            self::AGENT_URL.'/servers/alfa/map/livemap/tiles/2/1' => Http::response("\x1f\x8bdati", 200, ['Content-Type' => 'application/octet-stream']),
+            self::AGENT_URL.'/servers/alfa/map/livemap/types' => Http::response(['data' => ['format' => 1, 'modTiles' => ['700' => ['mod' => 'Foo', 'name' => 'Bar', 'texture' => 'Foo/Tiles/Bar']]]]),
+            self::AGENT_URL.'/servers/alfa/map/sprites/tiles/700' => Http::response('PNG', 200, ['Content-Type' => 'image/png']),
+        ]);
+
+        $this->get(route('api.v1.servers.map.tiles', ['alfa', 2, 1, 'v' => 5]))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/octet-stream')
+            ->assertHeader('Cache-Control', 'immutable, max-age=31536000, private');
+        $this->getJson(route('api.v1.servers.map.types', ['alfa', 'v' => 5]))->assertOk()->assertJsonPath('data.modTiles.700.mod', 'Foo');
+        $this->get(route('api.v1.servers.map.sprite', ['alfa', 'tiles', 700]))->assertOk()->assertHeader('Content-Type', 'image/png');
+
+        $this->get('/api/v1/servers/alfa/map/sprites/altro/700')->assertNotFound();
+        $this->get('/api/v1/servers/alfa/map/sprites/tiles/x')->assertNotFound();
+        Http::assertSentCount(3);
+    }
+
+    public function test_tile_data_requires_access_to_the_server(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->get(route('api.v1.servers.map.tiles', ['alfa', 0, 0]))->assertForbidden();
+        $this->get(route('api.v1.servers.map.sprite', ['alfa', 'tiles', 700]))->assertForbidden();
+
+        Http::assertNothingSent();
+    }
+
     /**
      * @param  list<ServerAbility>  $abilities
      */

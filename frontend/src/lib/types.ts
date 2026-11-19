@@ -205,6 +205,8 @@ export type WorldMapManifest = {
   chunks: number[]
   overview: { scale: number; width: number; height: number; version: number }
   progress: { drawn: number; total: number }
+  /** LiveMap: formato dei dati grezzi delle tile (per gli sprite da vicino); assente o 0 = non ci sono. */
+  tileData?: number
 }
 
 export type MapPlayer = { name: string; x: number; y: number; team: number; life: number; lifeMax: number; dead: boolean }
@@ -224,6 +226,8 @@ export type WorldMapState = {
   manifest: WorldMapManifest | null
   players: MapPlayer[]
   playersAt: string | null
+  /** LiveMap con i dati delle tile: versione dei tipi di blocco (cambia a ogni avvio del server). */
+  typesVersion?: number | null
 }
 
 export type ImportablePack = { name: string; format: 'json' | 'folder'; mods: number; files: number }
@@ -471,3 +475,16 @@ export type BrowseDetails = BrowseItem & {
 export type PendingMod = Pick<Mod, 'name' | 'displayName' | 'version' | 'missingDependencies'>
 
 export type ApplyPendingResult = { enabled: string[]; failed: { name: string; message: string }[] }
+
+/** Tipi di blocchi e muri di LiveMap (types.json): per scegliere e trovare gli sprite. Indici = tipi. */
+export type TileTypes = {
+  format: 1
+  /** Blocchi e muri di Terraria: da qui in poi sono delle mod. */
+  vanillaTiles: number
+  vanillaWalls: number
+  /** Frame salvati dal gioco (mobili, oggetti di più tile); gli altri si scelgono dai vicini. */
+  frameImportant: boolean[]
+  solid: boolean[]
+  modTiles: Record<string, { mod: string; name: string; texture: string }>
+  modWalls: Record<string, { mod: string; name: string; texture: string }>
+}

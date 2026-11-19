@@ -1,4 +1,5 @@
 using Terraria;
+using Terraria.ID;
 using Terraria.Map;
 using TerrariaApi.Server;
 using TmmLiveMap;
@@ -16,7 +17,7 @@ namespace LiveMap;
 public class LiveMap : TerrariaPlugin
 {
     public override string Name => "LiveMap";
-    public override Version Version => new(1, 1, 0);
+    public override Version Version => new(1, 2, 0);
     public override string Author => "tModManager";
     public override string Description => "Mappa del mondo in tempo reale per il pannello di tModManager.";
 
@@ -66,7 +67,7 @@ public class LiveMap : TerrariaPlugin
     {
         if (!PrepareColors()) return;
         var config = Config.Load(ConfigPath);
-        _engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players);
+        _engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players, ReadTile, Types());
         Log.Info($"Mappa pronta: {_engine.Cols}×{_engine.Rows} riquadri in {MapDir}" +
                  (config.SempreAttiva ? " (sempre attiva)" : " (si aggiorna quando il pannello la apre)"));
     }
@@ -95,6 +96,23 @@ public class LiveMap : TerrariaPlugin
         var color = MapHelper.GetMapTileXnaColor(MapHelper.CreateMapTile(x, y, 255), x, y);
         return color.R << 16 | color.G << 8 | color.B;
     }
+
+    /// <summary>Dati grezzi della tile, per gli sprite nel pannello (TileData).</summary>
+    private static void ReadTile(int x, int y, Span<byte> dest)
+    {
+        var t = Main.tile[x, y];
+        var shape = t.halfBrick() ? 1 : t.slope() == 0 ? 0 : t.slope() + 1;
+        TileData.Write(dest, t.active(), t.type, t.frameX, t.frameY, t.wall, shape, t.inActive(), t.liquid > 0, t.color());
+    }
+
+    /// <summary>Tipi di blocchi e muri (solo quelli di Terraria: TShock non ha mod).</summary>
+    private static TileTypes Types() => new()
+    {
+        VanillaTiles = TileID.Count,
+        VanillaWalls = WallID.Count,
+        FrameImportant = Main.tileFrameImportant.Take(TileID.Count).ToArray(),
+        Solid = Main.tileSolid.Take(TileID.Count).ToArray(),
+    };
 
     private void OnUpdate(EventArgs args) => _engine?.OnGameUpdate();
 
