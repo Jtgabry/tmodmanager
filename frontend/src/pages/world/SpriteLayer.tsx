@@ -4,13 +4,15 @@ import { chunkUrl, spriteUrl, tilesUrl, useTileTypes } from '../../lib/worldMap'
 import { decodeTileChunk, drawSprites, imagePixels, paintGroup, paintPixels, paints, type Sheet, type SpriteKind, type TileChunk } from './tileSprites'
 
 /** Da quanti pixel dello schermo per tile si vedono gli sprite (sotto sarebbero illeggibili). */
-export const SPRITE_ZOOM = 8
+export const SPRITE_ZOOM = 6
 /** Riquadri tenuti in memoria (ognuno circa 360 KB): quelli visti da poco. */
 const MAX_CHUNKS = 24
 /** Gli sprite si disegnano una volta in blocchi di 32×32 tile, a 16 pixel per tile (512×512, 1 MB l'uno). */
 const BLOCK = 32
 const BLOCK_PX = BLOCK * 16
+/** Blocchi tenuti da parte oltre a quelli sullo schermo (almeno MAX_BLOCKS in tutto). */
 const MAX_BLOCKS = 64
+const SPARE_BLOCKS = 16
 
 type Loaded = { version: number; chunk: TileChunk | null; usedAt: number }
 type Block = { canvas: HTMLCanvasElement; stamp: number; usedAt: number }
@@ -93,8 +95,10 @@ export default function SpriteLayer({
         loading.current.delete(job)
         chunks.current.set(key, { version, chunk, usedAt: Date.now() })
         // I meno usati di recente lasciano il posto
-        if (chunks.current.size > MAX_CHUNKS) {
-          const oldest = [...chunks.current.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt).slice(0, chunks.current.size - MAX_CHUNKS)
+        // Mai meno di quelli visibili (su uno schermo molto grande possono essere più di MAX_CHUNKS)
+        const limit = Math.max(MAX_CHUNKS, visible.length + 4)
+        if (chunks.current.size > limit) {
+          const oldest = [...chunks.current.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt).slice(0, chunks.current.size - limit)
           for (const [k] of oldest) chunks.current.delete(k)
         }
         changed()
@@ -207,8 +211,10 @@ export default function SpriteLayer({
         ctx.drawImage(block.canvas, sx, sy, ex - sx, ey - sy)
       }
     }
-    if (blocks.current.size > MAX_BLOCKS) {
-      const oldest = [...blocks.current.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt).slice(0, blocks.current.size - MAX_BLOCKS)
+    // Mai meno di quelli sullo schermo: su uno schermo grande, da lontano, se ne vedono più di MAX_BLOCKS
+    const limit = Math.max(MAX_BLOCKS, (bx1 - bx0 + 1) * (by1 - by0 + 1) + SPARE_BLOCKS)
+    if (blocks.current.size > limit) {
+      const oldest = [...blocks.current.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt).slice(0, blocks.current.size - limit)
       for (const [k] of oldest) blocks.current.delete(k)
     }
   }, [view, size, tick, types.data, manifest, serverId, source, typesVersion, vanilla])
