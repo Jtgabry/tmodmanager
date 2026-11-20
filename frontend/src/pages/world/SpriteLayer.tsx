@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MapSource, WorldMapManifest } from '../../lib/types'
 import { chunkUrl, spriteUrl, tilesUrl, useTileTypes } from '../../lib/worldMap'
-import { decodeTileChunk, drawSprites, imagePixels, paintPixels, paints, type Sheet, type SpriteKind, type TileChunk } from './tileSprites'
+import { decodeTileChunk, drawSprites, imagePixels, paintGroup, paintPixels, paints, type Sheet, type SpriteKind, type TileChunk } from './tileSprites'
 
 /** Da quanti pixel dello schermo per tile si vedono gli sprite (sotto sarebbero illeggibili). */
 export const SPRITE_ZOOM = 8
@@ -120,8 +120,10 @@ export default function SpriteLayer({
     if (!tileTypes) return
 
     /** Copia del foglio colorata dalla vernice (una volta per foglio e vernice). */
-    const paintedSheet = (key: string, image: HTMLImageElement, paint: number): Sheet | null => {
-      const pkey = `${key}:${paint}`
+    const paintedSheet = (kind: SpriteKind, type: number, key: string, image: HTMLImageElement, paint: number, style?: number): Sheet | null => {
+      // Quali pixel tinge la vernice dipende dal foglio (erba, alberi) e, nelle palme, dal bioma
+      const group = kind === 'tiles' && type >= tileTypes.vanillaTiles ? null : paintGroup(kind, type, style)
+      const pkey = `${key}:${paint}:${group ? (style ?? '') : ''}`
       if (painted.current.has(pkey)) return painted.current.get(pkey)!
       let result: Sheet | null = null
       try {
@@ -132,7 +134,7 @@ export default function SpriteLayer({
         if (pctx) {
           pctx.drawImage(image, 0, 0)
           const data = pctx.getImageData(0, 0, c.width, c.height)
-          paintPixels(data.data, paint)
+          paintPixels(data.data, paint, group, kind === 'walls')
           pctx.putImageData(data, 0, 0)
           result = Object.assign(c, { naturalWidth: c.width, naturalHeight: c.height })
         }
@@ -142,10 +144,10 @@ export default function SpriteLayer({
       painted.current.set(pkey, result)
       return result
     }
-    const sheet = (kind: SpriteKind, type: number, paint = 0): Sheet | null => {
+    const sheet = (kind: SpriteKind, type: number, paint = 0, style?: number): Sheet | null => {
       const key = `${kind}:${type}`
       const have = sheets.current.get(key)
-      if (have instanceof HTMLImageElement) return paints(paint) ? (paintedSheet(key, have, paint) ?? have) : have
+      if (have instanceof HTMLImageElement) return paints(paint) ? (paintedSheet(kind, type, key, have, paint, style) ?? have) : have
       if (have) return null
       const tree = kind !== 'tiles' && kind !== 'walls'
       const isVanilla = tree || type < (kind === 'tiles' ? tileTypes.vanillaTiles : tileTypes.vanillaWalls)

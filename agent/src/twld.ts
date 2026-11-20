@@ -1,4 +1,5 @@
 import { gunzipSync } from 'node:zlib'
+import { mapPaint } from './paint.js'
 import { WorldFileError } from './worldFile.js'
 
 /**
@@ -157,13 +158,16 @@ export function overlayModBlocks(pixels: Uint32Array, layers: Uint8Array, width:
       const value = data[p] | (data[p + 1] << 8)
       p += 2
       if (!value) continue
-      p += 1 // vernice
+      const paint = data[p]
+      p += 1
       if (!wall && byValue.get(value)?.framed) p += 4
       // Colonna per colonna: i = x * height + y
       const x = Math.floor(i / height)
       const index = (i - x * height) * width + x
-      const c = color.get(value)
-      if (c === undefined) continue
+      const base = color.get(value)
+      if (base === undefined) continue
+      // Verniciato: come la minimappa del gioco
+      const c = paint ? mapPaint(base, paint, wall) : base
       if (!wall) {
         pixels[index] = c
         layers[index] = LAYER.tile

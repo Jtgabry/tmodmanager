@@ -5,6 +5,7 @@ import { config } from './config.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { readServerConfig } from './serverConfig.js'
+import { MAP_PIXELS } from './worldFile.js'
 import type { RenderJob, WorldFileSource } from './worldFileRender.js'
 import { TILE_FORMAT } from './worldTiles.js'
 
@@ -79,15 +80,18 @@ export async function refreshWorldFileMap(server: ServerDefinition): Promise<Wor
   let drawn: WorldFileSource | null = null
   let tileData = 0
   let framed = false
+  let pixels = 0
   try {
     const manifest = JSON.parse(await readFile(join(worldMapDir(server.id), 'manifest.json'), 'utf8')) as {
       source?: WorldFileSource
       tileData?: number
       framed?: boolean
       frameError?: string | null
+      pixels?: number
     }
     drawn = manifest.source ?? null
     tileData = manifest.tileData ?? 0
+    pixels = manifest.pixels ?? 1
     // Strumento fallito su questo file: si riprova al prossimo salvataggio, non a ogni controllo
     framed = (manifest.framed ?? false) || Boolean(manifest.frameError)
   } catch {
@@ -96,7 +100,7 @@ export async function refreshWorldFileMap(server: ServerDefinition): Promise<Wor
   const frames = await stat(worldFramesPath()).then(() => ({ dotnet: config.dotnet, dll: worldFramesPath() }), () => null)
   // Stesso file e stesso formato: niente da rifare (una mappa di una versione precedente, o senza i frame calcolati
   // quando ora lo strumento c'è, si ridisegna una volta)
-  if (drawn && sourceKey(drawn) === key && tileData === TILE_FORMAT && (framed || !frames)) return status
+  if (drawn && sourceKey(drawn) === key && tileData === TILE_FORMAT && pixels === MAP_PIXELS && (framed || !frames)) return status
 
   const state = states.get(server.id) ?? { running: false, failed: null }
   states.set(server.id, state)

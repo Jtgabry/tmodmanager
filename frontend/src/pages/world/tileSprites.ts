@@ -155,7 +155,8 @@ export type SpriteSource = {
   /** Ci sono anche gli sprite di Terraria. */
   vanilla: boolean
   /** Foglio di sprite del tipo, con la vernice indicata (0 = nessuna), se è pronto (null: non ancora, o non c'è). */
-  sheet: (kind: SpriteKind, type: number, paint?: number) => Sheet | null
+  /** Foglio di sprite, con la vernice; `style` (bioma delle palme) sceglie quali pixel la vernice tinge. */
+  sheet: (kind: SpriteKind, type: number, paint?: number, style?: number) => Sheet | null
   /** Riquadro (cx, cy) già caricato, oppure null. */
   chunk: (cx: number, cy: number) => TileChunk | null
 }
@@ -508,8 +509,12 @@ export function drawSprites(
           const variant = treeVariant(treeGround(trunkX(x, fx, fy), y, TREE), y, grid.surface)
           if (variant >= 0) trunk = source.sheet('trunks', variant, tilePaint(chunk, i))
         } else if (type === PALM) {
-          srcY = palmBiome(x, y) * 22
+          // Una riga per bioma; con la vernice conta anche il bioma (quali pixel tinge)
+          const biome = palmBiome(x, y)
+          srcY = biome * 22
           shift = fy
+          const paint = tilePaint(chunk, i)
+          if (paints(paint)) trunk = source.sheet('tiles', PALM, paint, biome)
         }
         if (!trunk || fx + 20 > trunk.naturalWidth || srcY + 20 > trunk.naturalHeight) continue
         const px = z / 16
@@ -559,7 +564,7 @@ export function drawSprites(
         const biome = palmBiome(x, y)
         const oasis = biome >= 4
         const [style, w, h, offX, offY] = oasis ? [21, 114, 98, 48, 2] : [15, 80, 80, 32, 0]
-        const sheet = source.sheet('treetops', style, tilePaint(chunk, i))
+        const sheet = source.sheet('treetops', style, tilePaint(chunk, i), biome)
         if (sheet) put(sheet, variant * (w + 2), (oasis ? biome - 4 : biome) * (h + 2), w, h, x, y, fy - offX, 16 + offY - h)
         continue
       }
@@ -588,55 +593,137 @@ export function drawSprites(
   }
 }
 
-/** Colori delle vernici di Terraria (WorldGen.paintColor), per numero: 1–12 normali, 13–24 intense, poi le speciali. */
-const PAINT_COLORS: [number, number, number][] = [
-  [255, 255, 255], [255, 0, 0], [255, 127, 0], [255, 255, 0], [127, 255, 0], [0, 255, 0], [0, 255, 127], [0, 255, 255],
-  [0, 127, 255], [0, 0, 255], [127, 0, 255], [255, 0, 255], [255, 0, 127], [255, 0, 0], [255, 127, 0], [255, 255, 0],
-  [127, 255, 0], [0, 255, 0], [0, 255, 127], [0, 255, 255], [0, 127, 255], [0, 0, 255], [127, 0, 255], [255, 0, 255],
-  [255, 0, 127], [75, 75, 75], [255, 255, 255], [175, 175, 175], [255, 178, 125], [25, 25, 25], [200, 200, 200], [255, 255, 255],
-]
+/** Vernici con un significato a parte (WorldGen.paintColor): ombra, negativa, luminosa. */
 const SHADOW = 29
 const NEGATIVE = 30
 const ILLUMINANT = 31
+const PAINTS = 31
 
 /** La vernice cambia l'aspetto dello sprite (la luminosa no: nel gioco cambia solo la luce). */
-export const paints = (paint: number) => paint > 0 && paint < PAINT_COLORS.length && paint !== ILLUMINANT
+export const paints = (paint: number) => paint > 0 && paint <= PAINTS && paint !== ILLUMINANT
 
 /**
- * Colora i pixel RGBA di un foglio di sprite con una vernice, imitando lo shader del gioco: la luminosità dello sprite
- * tinta del colore della vernice (le normali più chiare, le intense più sature), l'ombra quasi nera, la negativa
- * con i colori invertiti.
+ * Parte dello sprite che una vernice normale tinge (TreePaintSystemData): erba, alberi e foglie hanno pixel che
+ * restano del loro colore (la terra sotto l'erba, il legno sotto le foglie). Un pixel è nel gruppo se tonalità
+ * (spostata di `offset`) e saturazione sono negli intervalli; `invert` tinge invece quelli fuori.
  */
-export function paintPixels(data: Uint8ClampedArray, paint: number) {
-  const [pr, pg, pb] = PAINT_COLORS[paint]
+export type PaintGroup = { minHue: number; maxHue: number; minSat: number; maxSat: number; offset: number; invert: boolean }
+const group = (minHue: number, maxHue: number, minSat: number, maxSat: number, offset: number, invert: boolean): PaintGroup => ({ minHue, maxHue, minSat, maxSat, offset, invert })
+const G = {
+  dirt: group(0.03, 0.08, 0.38, 0.53, 0, true),
+  mud: group(0.42, 0.55, 0.2, 0.27, 0.5, true),
+  purity: group(1 / 6, 5 / 6, 0, 1, 0, false),
+  corruption: group(0.5, 1, 0.27, 1, 0, false),
+  hallow: group(0, 1, 0, 0.34, 0, true),
+  snow: group(0, 0.06944445, 0, 1, 0, false),
+  crimson: group(1 / 3, 2 / 3, 0, 1, 0, true),
+  mushroom: group(0.5, 5 / 6, 0, 1, 0, false),
+  cherry: group(5 / 6, 1, 0, 1, 0, false),
+  willow: group(0, 0.025, 0, 1, 0, true),
+  gem: group(0, 1, 0, 0.0027777778, 0, true),
+  palmPurity: group(0.15277778, 0.25, 0.88, 1, 0, false),
+  palmCorruption: group(0, 1, 0.4, 1, 0, false),
+  palmCrimson: group(1 / 3, 0.5277778, 0, 1, 0.5, false),
+  palmHallow: group(0.5, 0.6111111, 0, 1, 0, false),
+}
+/** Legno degli alberi per variante (-1 foresta, poi corruzione, giungla, consacrato, neve, cremisi, giungla sotterranea, funghi). */
+const WOOD = [G.purity, G.corruption, G.purity, G.hallow, G.snow, G.crimson, G.purity, G.mushroom]
+/** Palme per bioma della sabbia (le oasi, 4–7, come la spiaggia). */
+const PALMS = [G.palmPurity, G.palmCrimson, G.palmHallow, G.palmCorruption]
+/** Chiome e rami per numero di texture (Tree_Tops_N, Tree_Branches_N); oltre: come l'erba. */
+const FOLIAGE: (PaintGroup | 'palm')[] = [
+  G.purity, G.corruption, G.purity, G.hallow, G.snow, G.crimson, G.purity, G.purity, G.purity, G.purity, G.purity,
+  G.purity, G.snow, G.purity, G.mushroom, 'palm', G.snow, G.snow, G.snow, G.hallow, G.hallow, 'palm', G.gem, G.gem,
+  G.gem, G.gem, G.gem, G.gem, G.gem, G.cherry, G.willow,
+]
+const GRASS = new Set([0, 2, 23, 109, 199, 477, 492, 633])
+
+/** Gruppo da tingere di un foglio di Terraria (TreePaintSystemData.GetTileSettings e GetTreeFoliageSettings). */
+export function paintGroup(kind: SpriteKind, type: number, style = -1): PaintGroup | null {
+  if (kind === 'trunks') return WOOD[type + 1] ?? G.purity
+  if (kind === 'treetops' || kind === 'treebranches') {
+    const g = FOLIAGE[type] ?? G.dirt
+    return g === 'palm' ? (PALMS[style] ?? PALMS[style - 4] ?? G.purity) : g
+  }
+  if (kind !== 'tiles') return null
+  if (GRASS.has(type)) return G.dirt
+  if (type === 59 || type === 60 || type === 70) return G.mud
+  if (type === 5) return WOOD[style + 1] ?? G.purity
+  if (type === 323) return PALMS[style] ?? PALMS[style - 4] ?? G.purity
+  if (type >= 583 && type <= 589) return G.gem
+  if (type === 595 || type === 596) return G.cherry
+  if (type === 615 || type === 616 || type === 634) return G.willow
+  return null
+}
+
+/**
+ * Tonalità e saturazione (0–1) calcolate come lo shader: per ogni canale che vale il massimo una tonalità candidata
+ * (rosso 6 + (g−b)/d, verde 2 + (b−r)/d, blu 4 + (r−g)/d), la più alta, per 0,166667 (non 1/6 esatto), parte
+ * frazionaria. Grigi: 0, 0.
+ */
+function hueSat(r: number, g: number, b: number): [number, number] {
+  const max = Math.max(r, g, b)
+  const d = max - Math.min(r, g, b)
+  if (d === 0) return [0, 0]
+  const h = Math.max(r >= max ? 6 + (g - b) / d : 0, g >= max ? 2 + (b - r) / d : 0, b >= max ? 4 + (r - g) / d : 0) * SIXTH
+  return [h - Math.floor(h), d / max]
+}
+/** La costante dello shader per dividere per 6 (0,166667 in float32). */
+const SIXTH = Math.fround(0.166667)
+
+/**
+ * Colora i pixel RGBA di un foglio di sprite con una vernice, come lo shader del gioco (TileShader, una passata per
+ * vernice). Su ogni pixel contano il canale più chiaro M e il più scuro m: le vernici normali mettono M, m o la loro
+ * media nei tre canali (le intense m×0,4), le speciali sono grigi o marroni da M e m, la negativa inverte. Nell'erba,
+ * negli alberi e nelle foglie (`group`) le normali tingono solo una parte dei pixel. I conti sono sui colori
+ * premoltiplicati per l'alfa, come le texture del gioco.
+ */
+export function paintPixels(data: Uint8ClampedArray, paint: number, group: PaintGroup | null = null, wall = false) {
+  if (!paints(paint)) return
   const deep = paint >= 13 && paint <= 24
-  const normal = paint >= 1 && paint <= 12
+  // Canali delle vernici colorate: 0 = M, 1 = media, 2 = m (per rosso, arancione… fino a rosa)
+  const PATTERN = [[0, 2, 2], [0, 1, 2], [0, 0, 2], [1, 0, 2], [2, 0, 2], [2, 0, 1], [2, 0, 0], [2, 1, 0], [2, 2, 0], [1, 2, 0], [0, 2, 0], [0, 2, 1]]
+  const pattern = paint <= 24 ? PATTERN[(paint - 1) % 12] : null
+  const special = group && paint <= 12 ? group : null
   for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] === 0) continue
-    const r = data[i]
-    const g = data[i + 1]
-    const b = data[i + 2]
-    if (paint === NEGATIVE) {
-      data[i] = 255 - r
-      data[i + 1] = 255 - g
-      data[i + 2] = 255 - b
+    const alpha = data[i + 3] / 255
+    if (alpha === 0) continue
+    const r = (data[i] / 255) * alpha
+    const g = (data[i + 1] / 255) * alpha
+    const b = (data[i + 2] / 255) * alpha
+    if (special) {
+      const [hue, sat] = hueSat(r, g, b)
+      const h = hue + special.offset - Math.floor(hue + special.offset)
+      const inside = sat >= special.minSat && sat <= special.maxSat && h >= special.minHue && h <= special.maxHue
+      if (inside === special.invert) continue
+    }
+    const M = Math.max(r, g, b)
+    const m = Math.min(r, g, b)
+    let out: [number, number, number]
+    if (pattern) {
+      const lo = deep ? m * 0.4 : m
+      const v = [M, (M + lo) / 2, lo]
+      out = [v[pattern[0]], v[pattern[1]], v[pattern[2]]]
+    } else if (paint === 25) {
+      out = [(M + m) * 0.15, (M + m) * 0.15, (M + m) * 0.15] // nera
+    } else if (paint === 26) {
+      const w = (0.7 * M + 0.3 * m) * (2 - (M + m) / 2) // bianca
+      out = [w, w, w]
+    } else if (paint === 27) {
+      out = [(M + m) / 2, (M + m) / 2, (M + m) / 2] // grigia
+    } else if (paint === 28) {
+      out = [M, M * 0.7, M * 0.49] // marrone
+    } else if (paint === SHADOW) {
+      out = [(M + m) * 0.025, (M + m) * 0.025, (M + m) * 0.025]
+    } else if (paint === NEGATIVE) {
+      // Sui muri il gioco la attenua (più scura)
+      out = M === 0 ? [r, g, b] : wall ? [Math.max(0, 0.75 - 2 * r), Math.max(0, 0.75 - 2 * g), Math.max(0, 0.75 - 2 * b)] : [1 - r, 1 - g, 1 - b]
+    } else {
       continue
     }
-    if (paint === SHADOW) {
-      data[i] = r * 0.15
-      data[i + 1] = g * 0.15
-      data[i + 2] = b * 0.15
-      continue
-    }
-    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    // Normali: tinta a metà con il bianco (più tenue); intense e speciali: il colore pieno
-    const k = deep ? 1.3 : 1.15
-    const tr = normal ? (pr + 255) / 2 : pr
-    const tg = normal ? (pg + 255) / 2 : pg
-    const tb = normal ? (pb + 255) / 2 : pb
-    data[i] = lum * tr * k
-    data[i + 1] = lum * tg * k
-    data[i + 2] = lum * tb * k
+    data[i] = (out[0] / alpha) * 255
+    data[i + 1] = (out[1] / alpha) * 255
+    data[i + 2] = (out[2] / alpha) * 255
   }
 }
 

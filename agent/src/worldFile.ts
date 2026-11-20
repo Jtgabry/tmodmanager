@@ -1,3 +1,5 @@
+import { mapPaint, RAINBOW_BRICK } from './paint.js'
+
 /**
  * Lettura dei file del mondo di Terraria (.wld), per disegnarne la mappa senza il gioco.
  *
@@ -9,6 +11,9 @@
  * campi che cambiano a ogni versione: spawn e livelli (superficie, roccia) si trovano cercandoli (vedi findLevels).
  * Blocchi: colonna per colonna, dall'alto in basso, con ripetizioni (RLE) per le tile uguali consecutive.
  */
+
+/** Versione dei colori della mappa a pixel: 2 con la vernice. Se cresce, le mappe già disegnate si rifanno. */
+export const MAP_PIXELS = 2
 
 export class WorldFileError extends Error {}
 
@@ -238,13 +243,14 @@ export function renderWorld(buf: Buffer, header: WorldHeader, c: MapColors, sink
       let layer = 0
       const solid = tile >= 0 && tile < tileColor.length ? tileColor[tile] : -1
       if (solid >= 0 && !(h3 & 4)) {
-        color = solid // i blocchi disattivati da un attuatore non si vedono
+        // I blocchi disattivati da un attuatore non si vedono; verniciati, come la minimappa del gioco
+        color = paint && tile !== RAINBOW_BRICK ? mapPaint(solid, paint, false) : solid
         layer = 3
       } else if (liquid >= 0) {
         color = liquidColor[liquid]
         layer = 2
       } else if (wall > 0 && wall < wallColor.length && wallColor[wall] >= 0) {
-        color = wallColor[wall]
+        color = wallPaint ? mapPaint(wallColor[wall], wallPaint, true) : wallColor[wall]
         layer = 1
       }
 

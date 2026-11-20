@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { modBlockColors } from './modMapColors.js'
 import { encodePng } from './png.js'
 import { type ModBlocks, overlayModBlocks, readModBlocks } from './twld.js'
-import { type MapColors, readWorldHeader, renderWorld } from './worldFile.js'
+import { MAP_PIXELS, type MapColors, readWorldHeader, renderWorld } from './worldFile.js'
 import { TILE_FORMAT, WorldTileSink } from './worldTiles.js'
 
 /**
@@ -241,6 +241,7 @@ export async function renderWorldFile(job: RenderJob): Promise<{ width: number; 
     overview: { scale: OVERVIEW_SCALE, width: ow, height: oh, version: overviewVersion, hash: overviewHash },
     progress: { drawn: cols * rows, total: cols * rows },
     tileData: TILE_FORMAT,
+    pixels: MAP_PIXELS,
     rawHashes,
     tileHashes,
     framed: usedFrames,
