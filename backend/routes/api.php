@@ -103,6 +103,9 @@ Route::prefix('v1')
                 // Editor del mondo a server acceso (mod LiveMap): blocchi e muri da scegliere, modifiche
                 Route::get('/editor/catalog', 'editorCatalog')->name('editor.catalog');
                 Route::post('/editor', 'edit')->name('editor.edit');
+                // Settaggi del mondo: ora, meteo, eventi, luna, difficoltà, hardmode, spawn, boss sconfitti
+                Route::get('/editor/world', 'worldSettings')->name('editor.world');
+                Route::post('/editor/settings', 'changeWorldSettings')->name('editor.settings');
             });
 
             Route::controller(ServerPluginController::class)->prefix('/servers/{server}/plugins')->name('servers.plugins.')->group(function () {

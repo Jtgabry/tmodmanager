@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../../lib/api'
 import type { WorldEditOp, WorldEditResult, WorldMapManifest } from '../../lib/types'
-import { useWorldEdit, useWorldEditorCatalog } from '../../lib/worldEditor'
+import { useChangeWorldSettings, useWorldEdit, useWorldEditorCatalog } from '../../lib/worldEditor'
 import type { MapMark, MapPaint } from './MapViewer'
 import TypePicker from './TypePicker'
 
-type Tool = 'move' | 'tile' | 'wall' | 'kill-tile' | 'kill-wall'
+type Tool = 'move' | 'tile' | 'wall' | 'kill-tile' | 'kill-wall' | 'spawn'
 
 const TOOLS: { id: Tool; label: string; title: string }[] = [
   { id: 'move', label: 'Sposta', title: 'Trascina per spostare la mappa' },
@@ -13,6 +13,7 @@ const TOOLS: { id: Tool; label: string; title: string }[] = [
   { id: 'wall', label: 'Muro', title: 'Piazza il muro scelto' },
   { id: 'kill-tile', label: 'Togli blocchi', title: 'Rimuove blocchi e oggetti (le casse piene restano)' },
   { id: 'kill-wall', label: 'Togli muri', title: 'Rimuove i muri' },
+  { id: 'spawn', label: 'Spawn', title: 'Clic sulla mappa: lì rinascono i giocatori senza letto' },
 ]
 
 /** Dopo quanto le tile segnate spariscono comunque, se la mappa non le ridisegna. */
@@ -34,6 +35,7 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
   const [last, setLast] = useState<WorldEditResult | null>(null)
   const catalog = useWorldEditorCatalog(serverId, enabled)
   const edit = useWorldEdit(serverId)
+  const settings = useChangeWorldSettings(serverId)
 
   // Segni nascosti appena i riquadri toccati cambiano versione (ridisegnati), tolti comunque dopo un po'
   useEffect(() => {
@@ -47,6 +49,13 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
 
   const onStroke = (tiles: { x: number; y: number }[]) => {
     if (!manifest) return
+    if (tool === 'spawn') {
+      // Un clic: l'ultima tile toccata; poi si torna a spostare la mappa
+      const at = tiles[tiles.length - 1]
+      settings.mutate({ spawn: at })
+      setTool('move')
+      return
+    }
     const ops: WorldEditOp[] = tiles.map(({ x, y }) => {
       switch (tool) {
         case 'tile':
@@ -73,7 +82,7 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
     })
   }
 
-  const paint: MapPaint | null = active ? { brush, erase, onStroke } : null
+  const paint: MapPaint | null = active ? { brush: tool === 'spawn' ? 1 : brush, erase, onStroke } : null
   const chunks = manifest?.chunks
   const marks = useMemo(
     () => pending.filter((p) => [...p.chunks].every(([i, v]) => (chunks?.[i] ?? 0) === v)).flatMap((p) => p.marks),
@@ -98,7 +107,7 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
           kind={tool === 'tile' ? 'Blocco' : 'Muro'}
         />
       )}
-      {active && (
+      {active && tool !== 'spawn' && (
         <select value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label="Pennello" title="Dimensione del pennello">
           {[1, 2, 3, 5, 9].map((n) => (
             <option key={n} value={n}>
@@ -108,7 +117,15 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
         </select>
       )}
       <span className="small muted">
-        {edit.isPending
+        {tool === 'spawn'
+          ? 'Clic sulla mappa dove mettere lo spawn.'
+          : settings.isPending
+            ? 'Sposto lo spawn…'
+            : settings.error
+              ? <span className="error-text">{errorMessage(settings.error)}</span>
+              : settings.data?.failed
+                ? <span className="error-text">Spawn non spostato: {settings.data.failures[0]?.reason}</span>
+                : edit.isPending
           ? 'Invio…'
           : edit.error
             ? <span className="error-text">{errorMessage(edit.error)}</span>
@@ -122,5 +139,5 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
     </div>
   ) : null
 
-  return { toolbar, paint, marks }
+  return { toolbar, paint, marks, pickSpawn: () => setTool('spawn') }
 }

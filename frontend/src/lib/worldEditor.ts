@@ -1,6 +1,9 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import type { WorldEditOp, WorldEditorCatalog, WorldEditResult } from './types'
+import type { WorldEditOp, WorldEditorCatalog, WorldEditResult, WorldSettingsChange, WorldSettingsState } from './types'
+import { worldMapKey } from './worldMap'
+
+const settingsKey = (serverId: string) => ['servers', serverId, 'map', 'editor', 'world']
 
 /** Operazioni per richiesta (come l'agent e la mod): i tratti più lunghi si mandano a pezzi. */
 const MAX_OPS = 4096
@@ -29,5 +32,47 @@ export function useWorldEdit(serverId: string) {
       }
       return total
     },
+  })
+}
+
+/** Settaggi del mondo, riletti ogni 3 secondi (la mod li riscrive ogni 2: l'ora del gioco scorre). */
+export function useWorldSettings(serverId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: settingsKey(serverId),
+    queryFn: async () => (await api.get<{ data: WorldSettingsState }>(`/servers/${serverId}/map/editor/world`)).data.data,
+    enabled,
+    refetchInterval: 3000,
+    retry: false,
+  })
+}
+
+/** Cambia i settaggi indicati; dopo, settaggi e mappa (lo spawn è nel manifest) si rileggono. */
+export function useChangeWorldSettings(serverId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (change: WorldSettingsChange) =>
+      (await api.post<{ data: WorldEditResult }>(`/servers/${serverId}/map/editor/settings`, change)).data.data,
+    // Subito nel pannello quello che la mod ha accettato; la rilettura dopo conferma
+    onSuccess: (result, change) =>
+      queryClient.setQueryData<WorldSettingsState>(settingsKey(serverId), (old) => {
+        if (!old) return old
+        const failed = new Set(result.failures.map((f) => f.setting))
+        const next = { ...old, bosses: { ...old.bosses } }
+        for (const [key, value] of Object.entries(change)) {
+          if (failed.has(key)) continue
+          if (key === 'spawn') Object.assign(next, { spawnX: change.spawn!.x, spawnY: change.spawn!.y })
+          else if (key === 'bosses') {
+            for (const [boss, down] of Object.entries(change.bosses!)) if (!failed.has(`bosses.${boss}`)) next.bosses[boss as keyof typeof next.bosses] = down
+          } else Object.assign(next, { [key]: value })
+        }
+        if (change.clock !== undefined && !failed.has('clock')) next.day = change.clock >= 270 && change.clock < 1170
+        return next
+      }),
+    onSettled: () =>
+      // La mod riscrive world.json ogni 2 secondi: si rilegge dopo, per vedere il cambiamento
+      setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: settingsKey(serverId) })
+        void queryClient.invalidateQueries({ queryKey: worldMapKey(serverId), exact: true })
+      }, 2100),
   })
 }

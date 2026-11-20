@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { findServer, type ServerDefinition } from '../registry.js'
 import { readTileTypes, SPRITE_KINDS, type SpriteKind, spritePng } from '../mapSprites.js'
-import { editWorld, WorldEditorError, worldEditorCatalog } from '../worldEditor.js'
+import { changeWorldSettings, editWorld, WorldEditorError, worldEditorCatalog, worldSettings } from '../worldEditor.js'
 import { mapChunkPath, mapOverviewPath, mapTilesPath, mapTypesPath, worldMap } from '../worldMap.js'
 
 type Params = { Params: { id: string; source?: string; cx?: string; cy?: string; kind?: string; type?: string }; Querystring: { watching?: string } }
@@ -79,17 +79,32 @@ export async function mapRoutes(app: FastifyInstance) {
     return { data: catalog }
   })
 
-  app.post<Params & { Body: unknown }>('/servers/:id/map/editor', async (req, reply) => {
+  // Settaggi del mondo (ora, meteo, eventi, difficoltà, hardmode, spawn, boss sconfitti)
+  app.get<Params>('/servers/:id/map/editor/world', async (req, reply) => {
     const s = await server(req.params.id, reply)
     if (!s) return
-    try {
-      return { data: await editWorld(s, req.body) }
-    } catch (err) {
-      if (!(err instanceof WorldEditorError)) throw err
-      // Editor spento o server che non risponde: 409, come le altre operazioni impossibili col server in quello stato
-      return err.code === 'invalid'
-        ? reply.code(422).send({ error: 'invalid', message: err.message })
-        : reply.code(409).send({ error: 'conflict', message: err.message })
-    }
+    const settings = await worldSettings(s)
+    if (!settings) return reply.code(404).send({ error: 'not_found', message: 'Settaggi del mondo non disponibili (server spento o LiveMap non attivo)' })
+    return { data: settings }
   })
+
+  // Blocchi e muri, settaggi: stesso canale, stessi errori
+  for (const [path, run] of [
+    ['/servers/:id/map/editor', editWorld],
+    ['/servers/:id/map/editor/settings', changeWorldSettings],
+  ] as const) {
+    app.post<Params & { Body: unknown }>(path, async (req, reply) => {
+      const s = await server(req.params.id, reply)
+      if (!s) return
+      try {
+        return { data: await run(s, req.body) }
+      } catch (err) {
+        if (!(err instanceof WorldEditorError)) throw err
+        // Editor spento o server che non risponde: 409, come le altre operazioni impossibili col server in quello stato
+        return err.code === 'invalid'
+          ? reply.code(422).send({ error: 'invalid', message: err.message })
+          : reply.code(409).send({ error: 'conflict', message: err.message })
+      }
+    })
+  }
 }

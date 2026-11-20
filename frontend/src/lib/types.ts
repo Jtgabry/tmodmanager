@@ -241,7 +241,44 @@ export type WorldEditOp =
   | { op: 'place-wall'; x: number; y: number; type: number }
   | { op: 'kill-wall'; x: number; y: number }
 
-export type WorldEditResult = { applied: number; failed: number; failures: { index: number; x: number; y: number; reason: string }[] }
+/** Esito dell'editor; per i settaggi, `setting` dice quale non è cambiato (index = -1). */
+export type WorldEditResult = { applied: number; failed: number; failures: { index: number; x: number; y: number; reason: string; setting?: string }[] }
+
+/** Boss di Terraria che l'editor può segnare come sconfitti (wallOfFlesh segue l'hardmode). */
+export type WorldBoss =
+  | 'slimeKing' | 'eyeOfCthulhu' | 'evilBoss' | 'queenBee' | 'skeletron' | 'deerclops' | 'wallOfFlesh' | 'queenSlime' | 'destroyer' | 'twins'
+  | 'skeletronPrime' | 'plantera' | 'golem' | 'dukeFishron' | 'empressOfLight' | 'lunaticCultist' | 'moonLord'
+
+/** Settaggi del mondo letti dalla mod LiveMap. clock: minuti dalla mezzanotte; gameMode: 0 classica, 1 esperto, 2 maestro, 3 viaggio. */
+export type WorldSettingsState = {
+  clock: number
+  day: boolean
+  rain: boolean
+  sandstorm: boolean
+  bloodMoon: boolean
+  eclipse: boolean
+  moonPhase: number
+  gameMode: number
+  hardMode: boolean
+  generatingHardMode: boolean
+  spawnX: number
+  spawnY: number
+  bosses: Partial<Record<WorldBoss, boolean>>
+}
+
+/** Settaggi da cambiare: solo quelli indicati. */
+export type WorldSettingsChange = Partial<{
+  clock: number
+  rain: boolean
+  sandstorm: boolean
+  bloodMoon: boolean
+  eclipse: boolean
+  moonPhase: number
+  gameMode: number
+  hardMode: boolean
+  spawn: { x: number; y: number }
+  bosses: Partial<Record<Exclude<WorldBoss, 'wallOfFlesh'>, boolean>>
+}>
 
 /** Blocchi e muri che l'editor può piazzare: nome interno (TileID/WallID o della mod), mod, oggetto di più tile. */
 export type WorldEditorCatalogEntry = { type: number; name: string; mod?: string; object?: boolean }

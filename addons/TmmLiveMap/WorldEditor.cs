@@ -14,7 +14,9 @@ namespace TmmLiveMap;
 ///   editor/inbox/{id}.json   comandi scritti dall'agent (prima .tmp, poi rinominati: mai letti a metà);
 ///   editor/outbox/{id}.json  esito, scritto qui; l'agent lo legge e lo cancella;
 ///   editor/catalog.json      blocchi e muri che si possono piazzare (nomi, mod), a ogni caricamento del mondo;
+///   editor/world.json        settaggi del mondo (ora, meteo, eventi, boss…, vedi WorldSettings), ogni 2 secondi;
 ///   editor/alive             toccato ogni 2 secondi: il pannello sa che l'editor risponde.
+/// Un comando ha "ops" (blocchi e muri) oppure "settings" (WorldSettings.Changes).
 ///
 /// Il mondo si tocca solo dal thread di gioco (PostUpdateEverything). A server vuoto Terraria non aggiorna il mondo
 /// e quel thread tace: allora i comandi li esegue il timer, come fa MapEngine per il disegno (nessun altro sta
@@ -66,6 +68,7 @@ public sealed class WorldEditor : IDisposable
         _disposed = true;
         _timer.Dispose();
         TryDelete(Path.Combine(_dir, "alive"));
+        TryDelete(Path.Combine(_dir, "world.json"));
     }
 
     /// <summary>A ogni tick del gioco, dal thread di gioco.</summary>
@@ -84,6 +87,10 @@ public sealed class WorldEditor : IDisposable
             _nextAlive = now + 2000;
             try
             {
+                // Lettura da questo thread: valori semplici, al massimo vecchi di un tick
+                var tmp = Path.Combine(_dir, "world.tmp");
+                File.WriteAllText(tmp, JsonSerializer.Serialize(WorldSettings.Read(), Json));
+                File.Move(tmp, Path.Combine(_dir, "world.json"), overwrite: true);
                 File.WriteAllText(Path.Combine(_dir, "alive"), $"{Format}\n");
             }
             catch (Exception ex)
@@ -154,6 +161,16 @@ public sealed class WorldEditor : IDisposable
 
     private Result Execute(Command command)
     {
+        if (command.Settings is { } settings)
+        {
+            var failures = WorldSettings.Apply(settings);
+            return new Result
+            {
+                Applied = 1,
+                Failed = failures.Count,
+                Failures = failures.Select(f => new Failure(-1, 0, 0, f.Reason, f.Key)).ToList(),
+            };
+        }
         var ops = command.Ops ?? [];
         if (ops.Count > MaxOps) throw new InvalidDataException($"troppe operazioni ({ops.Count}, massimo {MaxOps})");
 
@@ -182,7 +199,7 @@ public sealed class WorldEditor : IDisposable
             else
             {
                 result.Failed++;
-                if (result.Failures.Count < 20) result.Failures.Add(new Failure(i, op.X, op.Y, failure));
+                if (result.Failures.Count < 20) result.Failures.Add(new Failure(i, op.X, op.Y, failure, null));
             }
         }
         if (result.Applied > 0) Sync(x0 - Margin, y0 - Margin, x1 + Margin, y1 + Margin);
@@ -306,6 +323,7 @@ public sealed class WorldEditor : IDisposable
         /// <summary>Quando l'agent l'ha scritto (ms dal 1970).</summary>
         public long CreatedAt { get; set; }
         public List<EditOp>? Ops { get; set; }
+        public WorldSettings.Changes? Settings { get; set; }
     }
 
     private sealed class EditOp
@@ -326,7 +344,8 @@ public sealed class WorldEditor : IDisposable
         public string? Error { get; set; }
     }
 
-    private sealed record Failure(int Index, int X, int Y, string Reason);
+    /// <param name="Setting">Settaggio non cambiato (comandi "settings"), allora Index = -1.</param>
+    private sealed record Failure(int Index, int X, int Y, string Reason, string? Setting);
 
     private sealed class Catalog
     {

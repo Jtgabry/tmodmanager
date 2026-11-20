@@ -12,6 +12,7 @@ import type { Server, WorldMapState } from '../../lib/types'
 import { useWorldMap, worldMapKey } from '../../lib/worldMap'
 import MapViewer from './MapViewer'
 import { useWorldEditor } from './useWorldEditor'
+import WorldSettingsCard from './WorldSettingsCard'
 
 /**
  * Sezione "Mondo": mappa del mondo del server. Con l'add-on LiveMap (plugin sui server TShock, mod sui server
@@ -25,11 +26,8 @@ export default function WorldTab() {
   const [focus, setFocus] = useState<{ name: string; at: number } | null>(null)
   const state = map.data
   // Editor: server acceso con la mod LiveMap che risponde, per chi ha la console (può già cambiare il mondo coi comandi)
-  const editor = useWorldEditor(
-    server.id,
-    state?.manifest ?? null,
-    Boolean(state?.editor && state.source === 'livemap' && server.state === 'running' && can(server.id, 'console')),
-  )
+  const editing = Boolean(state?.editor && state.source === 'livemap' && server.state === 'running' && can(server.id, 'console'))
+  const editor = useWorldEditor(server.id, state?.manifest ?? null, editing)
 
   if (map.isLoading) return <div className="spinner" />
   if (map.error) return <div className="alert alert-error">{errorMessage(map.error)}</div>
@@ -86,6 +84,8 @@ export default function WorldTab() {
           {!live && progress.drawn < progress.total ? ` · ${progress.drawn}/${progress.total}` : ''}
         </span>
       </div>
+
+      {editing && <WorldSettingsCard serverId={server.id} onPickSpawn={editor.pickSpawn} />}
     </div>
   )
 }

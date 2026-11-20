@@ -144,6 +144,43 @@ class ServerMapTest extends TestCase
             ->assertJsonPath('message', 'Editor non disponibile');
     }
 
+    public function test_world_settings_require_the_console_ability(): void
+    {
+        $this->actingAsMember([]);
+
+        $this->getJson(route('api.v1.servers.map.editor.world', 'alfa'))->assertForbidden();
+        $this->postJson(route('api.v1.servers.map.editor.settings', 'alfa'), ['rain' => true])->assertForbidden();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_world_settings_are_read_and_changed_through_the_agent(): void
+    {
+        $this->actingAsMember([ServerAbility::Console]);
+        Http::fake([
+            self::AGENT_URL.'/servers/alfa/map/editor/world' => Http::response(['data' => ['clock' => 720, 'day' => true, 'rain' => false]]),
+            self::AGENT_URL.'/servers/alfa/map/editor/settings' => Http::response(['data' => ['applied' => 1, 'failed' => 0, 'failures' => []]]),
+        ]);
+
+        $this->getJson(route('api.v1.servers.map.editor.world', 'alfa'))->assertOk()->assertJsonPath('data.clock', 720);
+
+        $this->postJson(route('api.v1.servers.map.editor.settings', 'alfa'), [])->assertUnprocessable();
+        $this->postJson(route('api.v1.servers.map.editor.settings', 'alfa'), ['clock' => 1440])->assertUnprocessable();
+        $this->postJson(route('api.v1.servers.map.editor.settings', 'alfa'), ['gameMode' => 3])->assertUnprocessable();
+        $this->postJson(route('api.v1.servers.map.editor.settings', 'alfa'), ['spawn' => ['x' => 1]])->assertUnprocessable();
+
+        $this->postJson(route('api.v1.servers.map.editor.settings', 'alfa'), [
+            'rain' => true,
+            'spawn' => ['x' => 100, 'y' => 200],
+            'bosses' => ['plantera' => true],
+            'ignored' => 'x',
+        ])->assertOk()->assertJsonPath('data.applied', 1);
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+            && $request->url() === self::AGENT_URL.'/servers/alfa/map/editor/settings'
+            && $request->data() === ['rain' => true, 'spawn' => ['x' => 100, 'y' => 200], 'bosses' => ['plantera' => true]]);
+    }
+
     /**
      * @param  list<ServerAbility>  $abilities
      */

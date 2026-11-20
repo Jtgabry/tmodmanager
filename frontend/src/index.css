@@ -2789,6 +2789,70 @@ html:has(.sheet[open]) {
   max-width: 22rem;
 }
 
+/* Impostazioni del mondo: etichetta a sinistra, controlli a destra (in colonna su mobile) */
+.world-settings {
+  display: grid;
+  /* minmax(0, …): la colonna dei controlli si stringe con lo schermo invece di allargare la pagina */
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+}
+
+.world-settings-label {
+  color: var(--nav-text);
+  font-size: 0.87rem;
+  font-weight: 600;
+}
+
+.world-settings-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  min-width: 0;
+}
+
+/* File di pulsanti (ore, boss): occupano la riga e, se su una riga non stanno (mobile), scorrono da sole */
+.world-settings-controls > .btn-row,
+.world-settings-controls > .tag-filters {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.world-settings-controls > .tag-filters {
+  flex: 1 1 100%;
+}
+
+.world-settings-value {
+  min-width: 7rem;
+}
+
+@media (max-width: 599px) {
+  .world-settings {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
+  }
+
+  .world-settings-controls > .btn-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .world-settings-controls > .btn-row .btn {
+    flex: none;
+  }
+
+  /* Senza lo sbordo fino ai lati della card dei filtri: qui sono allineati alle altre righe */
+  .world-settings-controls > .tag-filters {
+    margin: 0;
+    padding: 0 0 2px;
+  }
+
+  .world-settings-label:not(:first-child) {
+    margin-top: 0.6rem;
+  }
+}
+
 .world-map-sprites {
   position: absolute;
   top: 0;

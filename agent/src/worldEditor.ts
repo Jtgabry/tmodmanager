@@ -49,7 +49,8 @@ const EditRequest = z.object({ ops: z.array(EditOp).min(1).max(MAX_OPS) })
 const EditResult = z.object({
   applied: z.number(),
   failed: z.number(),
-  failures: z.array(z.object({ index: z.number(), x: z.number(), y: z.number(), reason: z.string() })),
+  /** setting: settaggio del mondo non cambiato (allora index = -1). */
+  failures: z.array(z.object({ index: z.number(), x: z.number(), y: z.number(), reason: z.string(), setting: z.string().optional() })),
   error: z.string().optional(),
 })
 export type EditResult = z.infer<typeof EditResult>
@@ -58,6 +59,73 @@ export type EditResult = z.infer<typeof EditResult>
 export async function editWorld(server: ServerDefinition, body: unknown): Promise<EditResult> {
   const parsed = EditRequest.safeParse(body)
   if (!parsed.success) throw new WorldEditorError(`Modifiche non valide: ${parsed.error.issues[0]?.message ?? 'formato'}`, 'invalid')
+  return sendCommand(server, { ops: parsed.data.ops })
+}
+
+/** Boss di Terraria che si possono segnare come sconfitti (wallOfFlesh si legge soltanto: è l'hardmode). */
+export const BOSSES = [
+  'slimeKing', 'eyeOfCthulhu', 'evilBoss', 'queenBee', 'skeletron', 'deerclops', 'wallOfFlesh', 'queenSlime', 'destroyer', 'twins',
+  'skeletronPrime', 'plantera', 'golem', 'dukeFishron', 'empressOfLight', 'lunaticCultist', 'moonLord',
+] as const
+
+const WorldSettingsState = z.object({
+  clock: z.number(),
+  day: z.boolean(),
+  rain: z.boolean(),
+  sandstorm: z.boolean(),
+  bloodMoon: z.boolean(),
+  eclipse: z.boolean(),
+  moonPhase: z.number(),
+  gameMode: z.number(),
+  hardMode: z.boolean(),
+  generatingHardMode: z.boolean(),
+  spawnX: z.number(),
+  spawnY: z.number(),
+  bosses: z.record(z.string(), z.boolean()),
+})
+export type WorldSettingsState = z.infer<typeof WorldSettingsState>
+
+const WorldSettingsChanges = z
+  .object({
+    /** Minuti dalla mezzanotte. */
+    clock: z.number().int().min(0).max(1439),
+    rain: z.boolean(),
+    sandstorm: z.boolean(),
+    bloodMoon: z.boolean(),
+    eclipse: z.boolean(),
+    moonPhase: z.number().int().min(0).max(7),
+    /** 0 classica, 1 esperto, 2 maestro (Viaggio no: i personaggi devono essere di quel tipo). */
+    gameMode: z.number().int().min(0).max(2),
+    hardMode: z.boolean(),
+    spawn: z.object({ x: Coord, y: Coord }),
+    bosses: z.partialRecord(z.enum(BOSSES).exclude(['wallOfFlesh']), z.boolean()),
+  })
+  .partial()
+  .strict()
+  .refine((c) => Object.keys(c).length > 0, 'nessun settaggio da cambiare')
+
+/** Settaggi del mondo come li vede la mod adesso (li riscrive ogni 2 secondi), null se l'editor non risponde. */
+export async function worldSettings(server: ServerDefinition): Promise<WorldSettingsState | null> {
+  const dir = editorDir(server)
+  if (!dir || !(await worldEditorAvailable(server))) return null
+  try {
+    const parsed = WorldSettingsState.safeParse(JSON.parse(await readFile(join(dir, 'world.json'), 'utf8')))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
+/** Cambia i settaggi del mondo (solo quelli indicati); l'esito dice quali non si sono potuti cambiare e perché. */
+export async function changeWorldSettings(server: ServerDefinition, body: unknown): Promise<EditResult> {
+  const parsed = WorldSettingsChanges.safeParse(body)
+  if (!parsed.success) throw new WorldEditorError(`Settaggi non validi: ${parsed.error.issues[0]?.message ?? 'formato'}`, 'invalid')
+  const { spawn, ...rest } = parsed.data
+  return sendCommand(server, { settings: { ...rest, ...(spawn ? { spawnX: spawn.x, spawnY: spawn.y } : {}) } })
+}
+
+/** Scrive un comando per la mod e ne aspetta l'esito. */
+async function sendCommand(server: ServerDefinition, payload: { ops: EditOp[] } | { settings: object }): Promise<EditResult> {
   const dir = editorDir(server)
   if (!dir || !(await worldEditorAvailable(server))) {
     throw new WorldEditorError("L'editor non è disponibile: serve il server acceso con la mod LiveMap attiva", 'unavailable')
@@ -68,7 +136,7 @@ export async function editWorld(server: ServerDefinition, body: unknown): Promis
   const command = join(inbox, `${id}.json`)
   const output = join(dir, 'outbox', `${id}.json`)
   await mkdir(inbox, { recursive: true })
-  await writeFile(join(inbox, `${id}.tmp`), JSON.stringify({ createdAt: Date.now(), ops: parsed.data.ops }))
+  await writeFile(join(inbox, `${id}.tmp`), JSON.stringify({ createdAt: Date.now(), ...payload }))
   await rename(join(inbox, `${id}.tmp`), command)
 
   const deadline = Date.now() + RESULT_TIMEOUT_MS

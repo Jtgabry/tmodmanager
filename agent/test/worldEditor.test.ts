@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { config } from '../src/config.ts'
 import { ServerDefinition } from '../src/registry.ts'
-import { editWorld, WorldEditorError, worldEditorAvailable, worldEditorCatalog } from '../src/worldEditor.ts'
+import { changeWorldSettings, editWorld, WorldEditorError, worldEditorAvailable, worldEditorCatalog, worldSettings } from '../src/worldEditor.ts'
 
 async function setup(game: 'tmodloader' | 'tshock' = 'tmodloader') {
   config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-editor-'))
@@ -79,4 +79,29 @@ test('editor: catalogo dei blocchi scritto dalla mod', async () => {
   await writeFile(join(dir, 'catalog.json'), JSON.stringify({ format: 1, tiles: [{ type: 0, name: 'Dirt' }, { type: 700, name: 'Foo', mod: 'M', object: true }], walls: [] }))
   const catalog = await worldEditorCatalog(server)
   assert.equal(catalog?.tiles[1].mod, 'M')
+})
+
+test('settaggi del mondo: stato letto dalla mod, cambiamenti validati e mandati come comando', async () => {
+  const { server, dir } = await setup()
+  await mkdir(dir, { recursive: true })
+  const state = {
+    clock: 720, day: true, rain: false, sandstorm: false, bloodMoon: false, eclipse: false, moonPhase: 0, gameMode: 1, hardMode: false,
+    generatingHardMode: false, spawnX: 4200, spawnY: 400, bosses: { eyeOfCthulhu: true },
+  }
+  await writeFile(join(dir, 'world.json'), JSON.stringify(state))
+  assert.equal(await worldSettings(server), null, 'editor spento: niente settaggi (sarebbero vecchi)')
+  await writeFile(join(dir, 'alive'), '1\n')
+  assert.deepEqual(await worldSettings(server), state)
+
+  const result = { applied: 1, failed: 1, failures: [{ index: -1, x: 0, y: 0, reason: 'solo di notte', setting: 'bloodMoon' }] }
+  const [changed, command] = await Promise.all([
+    changeWorldSettings(server, { clock: 1200, bloodMoon: true, spawn: { x: 100, y: 200 }, bosses: { plantera: true } }),
+    respond(dir, result),
+  ])
+  assert.deepEqual(changed, result)
+  assert.deepEqual(command.settings, { clock: 1200, bloodMoon: true, spawnX: 100, spawnY: 200, bosses: { plantera: true } })
+
+  for (const invalid of [{}, { clock: 1440 }, { gameMode: 3 }, { bosses: { wallOfFlesh: true } }, { bosses: { foo: true } }, { weather: 'storm' }]) {
+    await assert.rejects(changeWorldSettings(server, invalid), (e: WorldEditorError) => e.code === 'invalid', JSON.stringify(invalid))
+  }
 })

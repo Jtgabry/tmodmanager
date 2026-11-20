@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Mappa del mondo (sezione "Mondo"): basta l'accesso al server; l'editor del mondo vuole la console. Sorgenti:
@@ -112,6 +113,46 @@ class ServerMapController extends Controller
         $ops = array_map(fn (array $op): array => array_filter($op, fn (mixed $value): bool => $value !== null), $validated['ops']);
 
         return response()->json(['data' => $this->agent->json('post', "/servers/{$server}/map/editor", ['ops' => $ops])]);
+    }
+
+    /**
+     * Settaggi del mondo come li vede la mod LiveMap adesso (ora, meteo, eventi, difficoltà, spawn, boss sconfitti).
+     */
+    public function worldSettings(string $server): JsonResponse
+    {
+        Gate::authorize('server', [$server, ServerAbility::Console]);
+
+        return response()->json(['data' => $this->agent->json('get', "/servers/{$server}/map/editor/world")]);
+    }
+
+    /**
+     * Cambia i settaggi del mondo indicati, a server acceso. Le regole di gioco (luna di sangue solo di notte, mondi
+     * Viaggio, …) le controlla la mod: l'esito dice cosa non è cambiato e perché.
+     */
+    public function changeWorldSettings(Request $request, string $server): JsonResponse
+    {
+        Gate::authorize('server', [$server, ServerAbility::Console]);
+
+        $validated = $request->validate([
+            'clock' => ['sometimes', 'integer', 'between:0,1439'],
+            'rain' => ['sometimes', 'boolean'],
+            'sandstorm' => ['sometimes', 'boolean'],
+            'bloodMoon' => ['sometimes', 'boolean'],
+            'eclipse' => ['sometimes', 'boolean'],
+            'moonPhase' => ['sometimes', 'integer', 'between:0,7'],
+            'gameMode' => ['sometimes', 'integer', 'between:0,2'],
+            'hardMode' => ['sometimes', 'boolean'],
+            'spawn' => ['sometimes', 'array:x,y'],
+            'spawn.x' => ['required_with:spawn', 'integer', 'min:0'],
+            'spawn.y' => ['required_with:spawn', 'integer', 'min:0'],
+            'bosses' => ['sometimes', 'array'],
+            'bosses.*' => ['boolean'],
+        ]);
+        if ($validated === []) {
+            throw ValidationException::withMessages(['settings' => 'Nessun settaggio da cambiare.']);
+        }
+
+        return response()->json(['data' => $this->agent->json('post', "/servers/{$server}/map/editor/settings", $validated)]);
     }
 
     private function image(string $path): Response

@@ -110,12 +110,20 @@ Canale con il pannello, in `LiveMap/editor/`:
 
 | File | Chi lo scrive | Contenuto |
 | --- | --- | --- |
-| `inbox/{id}.json` | agent (`.tmp`, poi rinominato) | `{ createdAt, ops: [{ op, x, y, type?, style? }] }`, op = `place-tile`, `kill-tile`, `place-wall`, `kill-wall`, al massimo 4096 |
-| `outbox/{id}.json` | mod | esito: `{ applied, failed, failures: [{ index, x, y, reason }], error? }`; l'agent lo legge e lo cancella |
+| `inbox/{id}.json` | agent (`.tmp`, poi rinominato) | `{ createdAt, ops: [{ op, x, y, type?, style? }] }`, op = `place-tile`, `kill-tile`, `place-wall`, `kill-wall`, al massimo 4096; oppure `{ createdAt, settings: {…} }` (sotto) |
+| `outbox/{id}.json` | mod | esito: `{ applied, failed, failures: [{ index, x, y, reason, setting? }], error? }`; l'agent lo legge e lo cancella |
+| `world.json` | mod, ogni 2 s | settaggi del mondo adesso (`WorldSettings.State`) |
 | `catalog.json` | mod, a ogni caricamento del mondo | blocchi e muri: tipo, nome (`TileID`/`WallID` o della mod), mod, oggetto di più tile |
 | `alive` | mod, ogni 2 s | l'editor risponde (il pannello mostra gli strumenti solo così) |
 
 L'agent aspetta l'esito 5 secondi, poi ritira il comando; la mod scarta i comandi più vecchi di 10 secondi e svuota
 le cartelle a ogni caricamento del mondo, quindi una modifica non risposta non si applica più tardi. Nei processi dei
 subworld (SubworldLibrary, `-subworld`) l'editor non parte: i comandi sono per il mondo principale.
+
+Settaggi del mondo (`TmmLiveMap/WorldSettings.cs`), cambiati solo quelli presenti, poi il pacchetto `WorldData` ai
+client: `clock` (minuti dalla mezzanotte; il giorno va dalle 4:30 alle 19:30, e come nel gioco all'alba finisce la luna
+di sangue e al tramonto l'eclissi), `rain`, `sandstorm`, `bloodMoon` (solo di notte), `eclipse` (solo di giorno),
+`moonPhase` (0–7), `gameMode` (0–2; un mondo Viaggio non si cambia), `hardMode` (attivarlo è `WorldGen.StartHardmode`,
+come sconfiggere il Muro di carne: genera consacrato e corruzione/cremisi; disattivarlo toglie solo lo stato),
+`spawnX`/`spawnY`, `bosses` (boss di Terraria sconfitti, per nome: `slimeKing`, `eyeOfCthulhu`, … `moonLord`).
 
