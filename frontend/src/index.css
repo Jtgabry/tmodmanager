@@ -2746,6 +2746,49 @@ html:has(.sheet[open]) {
   cursor: grabbing;
 }
 
+.world-map-frame.world-map-painting {
+  cursor: crosshair;
+}
+
+/* Editor del mondo: tile segnate (una tile = 1px, la scala la dà il livello) */
+.world-map-marks {
+  pointer-events: none;
+}
+
+.world-map-mark,
+.world-map-brush {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+}
+
+.world-map-mark {
+  background: rgb(255 210 90 / 0.55);
+}
+
+.world-map-mark-erase {
+  background: rgb(255 80 80 / 0.55);
+}
+
+.world-map-brush {
+  box-sizing: border-box;
+  /* 1.5 px sullo schermo a ogni zoom */
+  outline: calc(1.5px / var(--zoom, 1)) solid #fff;
+  background: rgb(255 255 255 / 0.18);
+}
+
+.world-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.world-editor-type {
+  flex: 1 1 14rem;
+  max-width: 22rem;
+}
+
 .world-map-sprites {
   position: absolute;
   top: 0;

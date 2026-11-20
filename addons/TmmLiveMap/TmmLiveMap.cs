@@ -41,8 +41,11 @@ public class TmmLiveMap : Mod
 public class LiveMapSystem : ModSystem
 {
     public static MapEngine? Engine { get; private set; }
+    public static WorldEditor? Editor { get; private set; }
 
     public static string MapDir => Path.Combine(Main.SavePath, "LiveMap");
+
+    private static readonly bool IsSubworldProcess = Environment.GetCommandLineArgs().Contains("-subworld", StringComparer.OrdinalIgnoreCase);
     public static string ConfigPath => Path.Combine(MapDir, "config.json");
 
     public override void OnWorldLoad()
@@ -50,6 +53,12 @@ public class LiveMapSystem : ModSystem
         if (!Main.dedServ) return;
         Engine?.Dispose();
         Engine = null;
+        Editor?.Dispose();
+        Editor = null;
+        // I subworld (SubworldLibrary) girano in un altro processo con la stessa cartella: i comandi del pannello sono
+        // per il mondo principale, un subworld non deve prenderli
+        if (!IsSubworldProcess)
+            Editor = new WorldEditor(MapDir, (x, y, width, height) => Engine?.MarkArea(x, y, width, height));
         if (!MapColors.Prepare()) return;
 
         Directory.CreateDirectory(MapDir);
@@ -66,9 +75,15 @@ public class LiveMapSystem : ModSystem
         _tileFramed = _wallFramed = null;
         Engine?.Dispose();
         Engine = null;
+        Editor?.Dispose();
+        Editor = null;
     }
 
-    public override void PostUpdateEverything() => Engine?.OnGameUpdate();
+    public override void PostUpdateEverything()
+    {
+        Editor?.OnGameUpdate();
+        Engine?.OnGameUpdate();
+    }
 
     /// <summary>Colore della tile come nella minimappa del gioco, a piena luce.</summary>
     private static int Pixel(int x, int y)

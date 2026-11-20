@@ -100,6 +100,9 @@ Route::prefix('v1')
                 Route::get('/{source}/tiles/{cx}/{cy}', 'tiles')->whereIn('source', ['livemap', 'world'])->whereNumber(['cx', 'cy'])->name('tiles');
                 Route::get('/{source}/types', 'types')->whereIn('source', ['livemap', 'world'])->name('types');
                 Route::get('/{source}/sprites/{kind}/{type}', 'sprite')->whereIn('source', ['livemap', 'world'])->whereIn('kind', ['tiles', 'walls', 'treetops', 'treebranches', 'trunks', 'shroomtops', 'liquids'])->whereNumber('type')->name('sprite');
+                // Editor del mondo a server acceso (mod LiveMap): blocchi e muri da scegliere, modifiche
+                Route::get('/editor/catalog', 'editorCatalog')->name('editor.catalog');
+                Route::post('/editor', 'edit')->name('editor.edit');
             });
 
             Route::controller(ServerPluginController::class)->prefix('/servers/{server}/plugins')->name('servers.plugins.')->group(function () {

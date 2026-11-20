@@ -102,6 +102,48 @@ class ServerMapTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_world_editor_requires_the_console_ability(): void
+    {
+        $this->actingAsMember([]);
+
+        $this->getJson(route('api.v1.servers.map.editor.catalog', 'alfa'))->assertForbidden();
+        $this->postJson(route('api.v1.servers.map.editor.edit', 'alfa'), ['ops' => [['op' => 'kill-tile', 'x' => 1, 'y' => 2]]])->assertForbidden();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_world_editor_edits_are_validated_and_forwarded(): void
+    {
+        $this->actingAsMember([ServerAbility::Console]);
+        Http::fake([
+            self::AGENT_URL.'/servers/alfa/map/editor' => Http::response(['data' => ['applied' => 2, 'failed' => 0, 'failures' => []]]),
+            self::AGENT_URL.'/servers/alfa/map/editor/catalog' => Http::response(['data' => ['format' => 1, 'tiles' => [['type' => 0, 'name' => 'Dirt']], 'walls' => []]]),
+        ]);
+
+        $this->postJson(route('api.v1.servers.map.editor.edit', 'alfa'), ['ops' => [['op' => 'explode', 'x' => 1, 'y' => 2]]])->assertUnprocessable();
+        $this->postJson(route('api.v1.servers.map.editor.edit', 'alfa'), ['ops' => []])->assertUnprocessable();
+
+        $this->postJson(route('api.v1.servers.map.editor.edit', 'alfa'), ['ops' => [
+            ['op' => 'place-tile', 'x' => 10, 'y' => 20, 'type' => 1],
+            ['op' => 'kill-wall', 'x' => 11, 'y' => 20],
+        ]])->assertOk()->assertJsonPath('data.applied', 2);
+        $this->getJson(route('api.v1.servers.map.editor.catalog', 'alfa'))->assertOk()->assertJsonPath('data.tiles.0.name', 'Dirt');
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+            && $request->url() === self::AGENT_URL.'/servers/alfa/map/editor'
+            && $request->data() === ['ops' => [['op' => 'place-tile', 'x' => 10, 'y' => 20, 'type' => 1], ['op' => 'kill-wall', 'x' => 11, 'y' => 20]]]);
+    }
+
+    public function test_world_editor_errors_from_the_agent_are_passed_on(): void
+    {
+        $this->actingAsMember([ServerAbility::Console]);
+        Http::fake([self::AGENT_URL.'/servers/alfa/map/editor' => Http::response(['error' => 'conflict', 'message' => 'Editor non disponibile'], 409)]);
+
+        $this->postJson(route('api.v1.servers.map.editor.edit', 'alfa'), ['ops' => [['op' => 'kill-tile', 'x' => 1, 'y' => 2]]])
+            ->assertConflict()
+            ->assertJsonPath('message', 'Editor non disponibile');
+    }
+
     /**
      * @param  list<ServerAbility>  $abilities
      */

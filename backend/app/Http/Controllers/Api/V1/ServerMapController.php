@@ -11,8 +11,9 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Mappa del mondo (sezione "Mondo"): basta l'accesso al server. Sorgenti: l'add-on LiveMap (TShock e tModLoader,
- * in tempo reale, con i dati delle tile per gli sprite) o il file del mondo (tutti i server, a ogni salvataggio).
+ * Mappa del mondo (sezione "Mondo"): basta l'accesso al server; l'editor del mondo vuole la console. Sorgenti:
+ * l'add-on LiveMap (TShock e tModLoader, in tempo reale, con i dati delle tile per gli sprite) o il file del mondo
+ * (tutti i server, a ogni salvataggio).
  */
 class ServerMapController extends Controller
 {
@@ -80,6 +81,37 @@ class ServerMapController extends Controller
         Gate::authorize('server', [$server, ServerAbility::View]);
 
         return $this->image("/servers/{$server}/map/{$source}/sprites/{$kind}/{$type}");
+    }
+
+    /**
+     * Blocchi e muri che l'editor del mondo può piazzare (dalla mod LiveMap, a ogni caricamento del mondo).
+     */
+    public function editorCatalog(string $server): JsonResponse
+    {
+        Gate::authorize('server', [$server, ServerAbility::Console]);
+
+        return response()->json(['data' => $this->agent->json('get', "/servers/{$server}/map/editor/catalog")]);
+    }
+
+    /**
+     * Modifica il mondo a server acceso (blocchi e muri, tramite la mod LiveMap): chi ha la console può già
+     * cambiare il mondo con i comandi, quindi serve lo stesso permesso. La validazione fine la fa l'agent.
+     */
+    public function edit(Request $request, string $server): JsonResponse
+    {
+        Gate::authorize('server', [$server, ServerAbility::Console]);
+
+        $validated = $request->validate([
+            'ops' => ['required', 'array', 'min:1', 'max:4096'],
+            'ops.*.op' => ['required', 'string', 'in:place-tile,kill-tile,place-wall,kill-wall'],
+            'ops.*.x' => ['required', 'integer', 'min:0'],
+            'ops.*.y' => ['required', 'integer', 'min:0'],
+            'ops.*.type' => ['nullable', 'integer', 'min:0'],
+            'ops.*.style' => ['nullable', 'integer', 'min:0'],
+        ]);
+        $ops = array_map(fn (array $op): array => array_filter($op, fn (mixed $value): bool => $value !== null), $validated['ops']);
+
+        return response()->json(['data' => $this->agent->json('post', "/servers/{$server}/map/editor", ['ops' => $ops])]);
     }
 
     private function image(string $path): Response

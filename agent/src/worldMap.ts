@@ -7,6 +7,7 @@ import { vanillaAssets } from './mapSprites.js'
 import { isModAddonInstalled, shippedModAddon } from './modAddons.js'
 import { readEnabled } from './mods.js'
 import type { ServerDefinition } from './registry.js'
+import { worldEditorAvailable } from './worldEditor.js'
 import { refreshWorldFileMap, worldMapDir } from './worldFileMap.js'
 
 /**
@@ -95,6 +96,8 @@ export type WorldMapState = {
   typesVersion: number | null
   /** Versione delle texture di Terraria disponibili per gli sprite (data/terraria-assets), null se non ci sono. */
   vanillaSprites: string | null
+  /** L'editor del mondo risponde (server acceso con la mod LiveMap attiva): si possono piazzare blocchi e muri. */
+  editor: boolean
 }
 
 const liveMapDir = (server: ServerDefinition) =>
@@ -134,6 +137,7 @@ export async function worldMap(server: ServerDefinition, { watching = false } = 
     source: null, unavailable: null, liveMap: null, worldFile: null, modBlocks: null, updatedAt: null, manifest: null, players: [], playersAt: null,
     typesVersion: null,
     vanillaSprites: null,
+    editor: false,
   }
 
   state.liveMap = await liveMapStatus(server)
@@ -150,6 +154,7 @@ export async function worldMap(server: ServerDefinition, { watching = false } = 
       return {
         ...state,
         source: 'livemap',
+        editor: await worldEditorAvailable(server),
         typesVersion: types ? Math.round(types.mtimeMs) : null,
         vanillaSprites: types ? ((await vanillaAssets())?.version ?? null) : null,
         updatedAt: manifest.mtime.toISOString(),

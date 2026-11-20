@@ -81,6 +81,7 @@ File scritti:
 | `overview.png` | mondo intero ridotto (`ScalaPanoramica`, default 1 pixel ogni 4×4 tile), dopo il primo giro completo |
 | `players.json` | giocatori: nome, posizione in tile, team, vita, morto |
 | `viewer` | lo **tocca il pannello** finché la mappa è aperta; senza, LiveMap resta in pausa |
+| `editor/` | solo la mod: editor del mondo (sotto) |
 
 Le versioni sono istanti in ms e crescono a ogni riscrittura: il pannello ricarica solo i riquadri cambiati.
 
@@ -97,3 +98,24 @@ Carico sul server:
 
 Per provarla senza pannello: `"SempreAttiva": true` nella configurazione, poi `/reload` (TShock) o
 `/mappa ricarica` (tModLoader).
+
+### Editor del mondo (prototipo, solo la mod tModLoader)
+
+A server acceso, dalla sezione **Mondo** (chi ha il permesso della console): piazzare e togliere blocchi e muri
+col pennello sulla mappa. Lo fa `TmmLiveMap/WorldEditor.cs`, sul thread di gioco (a server vuoto con un timer, come
+il disegno), con le funzioni del gioco (`WorldGen.PlaceTile`, `ReplaceTile`, `KillTile` senza oggetti a terra, …);
+poi manda l'area ai client (`NetMessage.SendTileSquare`, a quadrati di 32 tile) e la segna da ridisegnare.
+
+Canale con il pannello, in `LiveMap/editor/`:
+
+| File | Chi lo scrive | Contenuto |
+| --- | --- | --- |
+| `inbox/{id}.json` | agent (`.tmp`, poi rinominato) | `{ createdAt, ops: [{ op, x, y, type?, style? }] }`, op = `place-tile`, `kill-tile`, `place-wall`, `kill-wall`, al massimo 4096 |
+| `outbox/{id}.json` | mod | esito: `{ applied, failed, failures: [{ index, x, y, reason }], error? }`; l'agent lo legge e lo cancella |
+| `catalog.json` | mod, a ogni caricamento del mondo | blocchi e muri: tipo, nome (`TileID`/`WallID` o della mod), mod, oggetto di più tile |
+| `alive` | mod, ogni 2 s | l'editor risponde (il pannello mostra gli strumenti solo così) |
+
+L'agent aspetta l'esito 5 secondi, poi ritira il comando; la mod scarta i comandi più vecchi di 10 secondi e svuota
+le cartelle a ogni caricamento del mondo, quindi una modifica non risposta non si applica più tardi. Nei processi dei
+subworld (SubworldLibrary, `-subworld`) l'editor non parte: i comandi sono per il mondo principale.
+

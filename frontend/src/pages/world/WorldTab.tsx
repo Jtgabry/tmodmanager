@@ -11,6 +11,7 @@ import { useTogglePlugin } from '../../lib/plugins'
 import type { Server, WorldMapState } from '../../lib/types'
 import { useWorldMap, worldMapKey } from '../../lib/worldMap'
 import MapViewer from './MapViewer'
+import { useWorldEditor } from './useWorldEditor'
 
 /**
  * Sezione "Mondo": mappa del mondo del server. Con l'add-on LiveMap (plugin sui server TShock, mod sui server
@@ -20,11 +21,18 @@ import MapViewer from './MapViewer'
 export default function WorldTab() {
   const server = useCurrentServer()
   const map = useWorldMap(server.id)
+  const { can } = useAuth()
   const [focus, setFocus] = useState<{ name: string; at: number } | null>(null)
+  const state = map.data
+  // Editor: server acceso con la mod LiveMap che risponde, per chi ha la console (può già cambiare il mondo coi comandi)
+  const editor = useWorldEditor(
+    server.id,
+    state?.manifest ?? null,
+    Boolean(state?.editor && state.source === 'livemap' && server.state === 'running' && can(server.id, 'console')),
+  )
 
   if (map.isLoading) return <div className="spinner" />
   if (map.error) return <div className="alert alert-error">{errorMessage(map.error)}</div>
-  const state = map.data
   if (!state) return null
   if (!state.manifest || !state.source) return <Unavailable state={state} />
 
@@ -42,7 +50,19 @@ export default function WorldTab() {
 
       {live ? <LiveNotice server={server} state={state} /> : <WorldFileNotice server={server} state={state} />}
 
-      <MapViewer serverId={server.id} source={source} manifest={manifest} players={players} focus={focus} typesVersion={state.typesVersion ?? null} vanillaSprites={state.vanillaSprites ?? null} />
+      {editor.toolbar}
+
+      <MapViewer
+        serverId={server.id}
+        source={source}
+        manifest={manifest}
+        players={players}
+        focus={focus}
+        typesVersion={state.typesVersion ?? null}
+        vanillaSprites={state.vanillaSprites ?? null}
+        paint={editor.paint}
+        marks={editor.marks}
+      />
 
       <div className="world-map-footer">
         {live ? (

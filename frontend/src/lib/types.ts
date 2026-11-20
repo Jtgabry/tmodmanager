@@ -230,7 +230,22 @@ export type WorldMapState = {
   typesVersion?: number | null
   /** Versione delle texture di Terraria nel pannello, per gli sprite dei blocchi vanilla (null: non ci sono). */
   vanillaSprites?: string | null
+  /** L'editor del mondo risponde (server tModLoader acceso con la mod LiveMap). */
+  editor?: boolean
 }
+
+/** Modifica del mondo a server acceso (editor, tramite la mod LiveMap). */
+export type WorldEditOp =
+  | { op: 'place-tile'; x: number; y: number; type: number; style?: number }
+  | { op: 'kill-tile'; x: number; y: number }
+  | { op: 'place-wall'; x: number; y: number; type: number }
+  | { op: 'kill-wall'; x: number; y: number }
+
+export type WorldEditResult = { applied: number; failed: number; failures: { index: number; x: number; y: number; reason: string }[] }
+
+/** Blocchi e muri che l'editor può piazzare: nome interno (TileID/WallID o della mod), mod, oggetto di più tile. */
+export type WorldEditorCatalogEntry = { type: number; name: string; mod?: string; object?: boolean }
+export type WorldEditorCatalog = { format: 1; tiles: WorldEditorCatalogEntry[]; walls: WorldEditorCatalogEntry[] }
 
 export type ImportablePack = { name: string; format: 'json' | 'folder'; mods: number; files: number }
 

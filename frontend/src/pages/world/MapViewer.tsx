@@ -6,6 +6,53 @@ import SpriteLayer, { SPRITE_ZOOM } from './SpriteLayer'
 /** Vista: tile in alto a sinistra e pixel dello schermo per tile. */
 type View = { x: number; y: number; zoom: number }
 
+type Tile = { x: number; y: number }
+
+/** Editor del mondo: pennello attivo (col tasto sinistro si disegna invece di trascinare) e tile segnate. */
+export type MapPaint = {
+  /** Lato del pennello in tile (quadrato centrato sul cursore). */
+  brush: number
+  /** Gomma: le tile segnate sono rosse. */
+  erase: boolean
+  /** Fine del tratto: le tile toccate, senza doppioni. */
+  onStroke: (tiles: Tile[]) => void
+}
+
+/** Tile modificate in attesa che la mappa le ridisegni. */
+export type MapMark = Tile & { erase: boolean }
+
+/** Tile del pennello di lato `brush` centrato su (x, y). */
+function brushTiles(x: number, y: number, brush: number): Tile[] {
+  const start = -Math.floor((brush - 1) / 2)
+  const tiles: Tile[] = []
+  for (let dy = 0; dy < brush; dy++) for (let dx = 0; dx < brush; dx++) tiles.push({ x: x + start + dx, y: y + start + dy })
+  return tiles
+}
+
+/** Tile della linea da a a b (Bresenham): un trascinamento veloce non lascia buchi. */
+function line(a: Tile, b: Tile): Tile[] {
+  const tiles: Tile[] = []
+  const dx = Math.abs(b.x - a.x)
+  const dy = -Math.abs(b.y - a.y)
+  const sx = a.x < b.x ? 1 : -1
+  const sy = a.y < b.y ? 1 : -1
+  let { x, y } = a
+  let err = dx + dy
+  for (;;) {
+    tiles.push({ x, y })
+    if (x === b.x && y === b.y) return tiles
+    const e2 = 2 * err
+    if (e2 >= dy) {
+      err += dy
+      x += sx
+    }
+    if (e2 <= dx) {
+      err += dx
+      y += sy
+    }
+  }
+}
+
 const MAX_ZOOM = 16
 /** Colori dei team di Terraria (0 = nessun team). */
 const TEAM_COLOR = ['#f1e6d6', '#ff5a5a', '#5adf6e', '#5a9bff', '#ffd84a', '#e46cff']
@@ -33,6 +80,8 @@ export default function MapViewer({
   focus,
   typesVersion = null,
   vanillaSprites = null,
+  paint = null,
+  marks = [],
 }: {
   serverId: string
   source: MapSource
@@ -44,6 +93,10 @@ export default function MapViewer({
   typesVersion?: number | null
   /** Versione delle texture di Terraria nel pannello (anche i blocchi vanilla hanno lo sprite), oppure null. */
   vanillaSprites?: string | null
+  /** Editor del mondo: col pennello il tasto sinistro (o un dito) disegna; si sposta col destro o il centrale. */
+  paint?: MapPaint | null
+  /** Tile modificate dall'editor, segnate finché la mappa non le ridisegna. */
+  marks?: MapMark[]
 }) {
   const { world, chunkWidth: cw, chunkHeight: ch, cols, rows, overview } = manifest
   const frame = useRef<HTMLDivElement>(null)
@@ -53,6 +106,9 @@ export default function MapViewer({
   const [fullscreen, setFullscreen] = useState(false)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const playersRef = useRef(players)
+  /** Tratto del pennello in corso: puntatore, ultima tile, tile toccate ("x,y"). */
+  const stroke = useRef<{ pointer: number; last: Tile; tiles: Map<string, Tile> } | null>(null)
+  const [strokeTiles, setStrokeTiles] = useState<Tile[]>([])
   const handledFocus = useRef<number | null>(null)
 
   const fitZoom = size.w && size.h ? Math.min(size.w / world.width, size.h / world.height) : 1
@@ -143,9 +199,38 @@ export default function MapViewer({
     return { x: e.clientX - rect.left, y: e.clientY - rect.top }
   }
 
+  const tileAt = (p: { x: number; y: number }): Tile | null => (view ? { x: Math.floor(view.x + p.x / view.zoom), y: Math.floor(view.y + p.y / view.zoom) } : null)
+
+  const addToStroke = (tiles: Tile[]) => {
+    const s = stroke.current
+    if (!s || !paint) return
+    for (const t of tiles) {
+      for (const b of brushTiles(t.x, t.y, paint.brush)) {
+        if (b.x >= 0 && b.y >= 0 && b.x < world.width && b.y < world.height) s.tiles.set(`${b.x},${b.y}`, b)
+      }
+    }
+    setStrokeTiles([...s.tiles.values()])
+  }
+
+  const cancelStroke = () => {
+    stroke.current = null
+    setStrokeTiles([])
+  }
+
   const onPointerDown = (e: React.PointerEvent) => {
     frame.current?.setPointerCapture(e.pointerId)
-    pointers.current.set(e.pointerId, local(e))
+    const p = local(e)
+    // Pennello: tasto sinistro o un dito solo. Un secondo dito annulla il tratto (è un pizzico)
+    if (paint && e.button === 0 && pointers.current.size === 0) {
+      const t = tileAt(p)
+      if (t) {
+        stroke.current = { pointer: e.pointerId, last: t, tiles: new Map() }
+        addToStroke([t])
+      }
+    } else if (stroke.current) {
+      cancelStroke()
+    }
+    pointers.current.set(e.pointerId, p)
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -155,6 +240,15 @@ export default function MapViewer({
     if (!previous) return
     const all = [...pointers.current.entries()]
     pointers.current.set(e.pointerId, p)
+
+    if (stroke.current?.pointer === e.pointerId) {
+      const t = tileAt(p)
+      if (t && (t.x !== stroke.current.last.x || t.y !== stroke.current.last.y)) {
+        addToStroke(line(stroke.current.last, t))
+        stroke.current.last = t
+      }
+      return
+    }
 
     if (all.length === 1) {
       // Trascinamento
@@ -173,6 +267,11 @@ export default function MapViewer({
 
   const onPointerUp = (e: React.PointerEvent) => {
     pointers.current.delete(e.pointerId)
+    if (stroke.current?.pointer === e.pointerId) {
+      const tiles = [...stroke.current.tiles.values()]
+      cancelStroke()
+      if (e.type === 'pointerup' && tiles.length) paint?.onStroke(tiles)
+    }
   }
 
   const toggleFullscreen = () => {
@@ -207,13 +306,15 @@ export default function MapViewer({
     <div className={fullscreen ? 'world-map world-map-fullscreen' : 'world-map'}>
       <div
         ref={frame}
-        className="world-map-frame"
+        className={paint ? 'world-map-frame world-map-painting' : 'world-map-frame'}
+        onContextMenu={(e) => paint && e.preventDefault()}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onPointerLeave={() => setHover(null)}
         onDoubleClick={(e) => {
+          if (paint) return
           const p = local(e as unknown as React.PointerEvent)
           zoomAt(2, p.x, p.y)
         }}
@@ -252,6 +353,27 @@ export default function MapViewer({
             vanilla={vanillaSprites}
             visible={visible}
           />
+        )}
+
+        {v && (marks.length > 0 || strokeTiles.length > 0 || (paint && hover)) && (
+          // Tile modificate (in attesa del ridisegno), tratto in corso e pennello sotto il cursore
+          <div
+            className="world-map-layer world-map-marks"
+            style={{ transform: `translate(${-v.x * v.zoom}px, ${-v.y * v.zoom}px) scale(${v.zoom})`, '--zoom': v.zoom } as React.CSSProperties}
+          >
+            {marks.map((m) => (
+              <span key={`m${m.x},${m.y}`} className={m.erase ? 'world-map-mark world-map-mark-erase' : 'world-map-mark'} style={{ left: m.x, top: m.y }} />
+            ))}
+            {strokeTiles.map((t) => (
+              <span key={`s${t.x},${t.y}`} className={paint?.erase ? 'world-map-mark world-map-mark-erase' : 'world-map-mark'} style={{ left: t.x, top: t.y }} />
+            ))}
+            {paint && hover && strokeTiles.length === 0 && (
+              <span
+                className="world-map-brush"
+                style={{ left: hover.x - Math.floor((paint.brush - 1) / 2), top: hover.y - Math.floor((paint.brush - 1) / 2), width: paint.brush, height: paint.brush }}
+              />
+            )}
+          </div>
         )}
 
         {v && (
