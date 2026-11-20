@@ -95,7 +95,7 @@ public sealed class WorldEditor : IDisposable
             }
             catch (Exception ex)
             {
-                Log.Warn($"Editor: alive non scritto: {ex.Message}");
+                Log.Warn(Text.T($"Editor: alive not written: {ex.Message}", $"Editor: alive non scritto: {ex.Message}"));
             }
         }
         // Il gioco gira: ci pensa il suo thread
@@ -144,7 +144,7 @@ public sealed class WorldEditor : IDisposable
             {
                 TryDelete(file);
                 result = new Result { Error = ex.Message };
-                Log.Warn($"Editor: comando {id} non eseguito: {ex.Message}");
+                Log.Warn(Text.T($"Editor: command {id} not run: {ex.Message}", $"Editor: comando {id} non eseguito: {ex.Message}"));
             }
             try
             {
@@ -154,7 +154,7 @@ public sealed class WorldEditor : IDisposable
             }
             catch (Exception ex)
             {
-                Log.Warn($"Editor: esito di {id} non scritto: {ex.Message}");
+                Log.Warn(Text.T($"Editor: result of {id} not written: {ex.Message}", $"Editor: esito di {id} non scritto: {ex.Message}"));
             }
         }
     }
@@ -302,7 +302,7 @@ public sealed class WorldEditor : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Warn($"Editor: catalogo non scritto: {ex.Message}");
+            Log.Warn(Text.T($"Editor: catalog not written: {ex.Message}", $"Editor: catalogo non scritto: {ex.Message}"));
         }
     }
 

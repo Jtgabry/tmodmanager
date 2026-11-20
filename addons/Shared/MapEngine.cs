@@ -141,7 +141,7 @@ public sealed class MapEngine : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error($"Disegno della mappa non riuscito: {ex.Message}");
+            Log.Error(Text.T($"Drawing the map failed: {ex.Message}", $"Disegno della mappa non riuscito: {ex.Message}"));
         }
         finally
         {
@@ -356,16 +356,24 @@ public sealed class MapEngine : IDisposable
         int dirty;
         lock (_lock) dirty = _dirtyCount;
         var config = _config;
-        var state = config.SempreAttiva ? "attiva (SempreAttiva)" : _active ? "attiva (il pannello la sta guardando)" : "in pausa (nessuno la guarda)";
+        var state = config.SempreAttiva
+            ? Text.T("active (SempreAttiva)", "attiva (SempreAttiva)")
+            : _active
+                ? Text.T("active (the panel is watching it)", "attiva (il pannello la sta guardando)")
+                : Text.T("paused (nobody is watching it)", "in pausa (nessuno la guarda)");
         var lines = new List<string>
         {
-            $"Mappa {state}.",
-            $"Riquadri disegnati da questo avvio: {_writer.Drawn}/{_writer.Total}; modificati in attesa: {dirty}.",
+            Text.T($"Map {state}.", $"Mappa {state}."),
+            Text.T(
+                $"Chunks drawn since this start: {_writer.Drawn}/{_writer.Total}; changed and waiting: {dirty}.",
+                $"Riquadri disegnati da questo avvio: {_writer.Drawn}/{_writer.Total}; modificati in attesa: {dirty}."),
         };
         if (_tilesDrawn > 0)
         {
             var micro = _drawTicks * 1_000_000.0 / Stopwatch.Frequency / _tilesDrawn;
-            lines.Add($"Costo: {micro:0.00} µs per tile, {_tilesDrawn:N0} tile disegnate" + (_errors > 0 ? $", {_errors} non colorabili" : "") + ".");
+            lines.Add(Text.T(
+                $"Cost: {micro:0.00} µs per tile, {_tilesDrawn:N0} tiles drawn" + (_errors > 0 ? $", {_errors} without color" : "") + ".",
+                $"Costo: {micro:0.00} µs per tile, {_tilesDrawn:N0} tile disegnate" + (_errors > 0 ? $", {_errors} non colorabili" : "") + "."));
         }
         return lines;
     }

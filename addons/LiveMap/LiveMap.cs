@@ -20,7 +20,7 @@ public class LiveMap : TerrariaPlugin
     public override string Name => "LiveMap";
     public override Version Version => new(1, 6, 0);
     public override string Author => "tModManager";
-    public override string Description => "Mappa del mondo in tempo reale per il pannello di tModManager.";
+    public override string Description => "Live world map for the tModManager panel.";
 
     private static string ConfigPath => Path.Combine(TShock.SavePath, "LiveMap.json");
     private static string MapDir => Path.Combine(TShock.SavePath, "map");
@@ -38,11 +38,12 @@ public class LiveMap : TerrariaPlugin
         Log.Info = message => TShock.Log.ConsoleInfo($"[LiveMap] {message}");
         Log.Warn = message => TShock.Log.ConsoleWarn($"[LiveMap] {message}");
         Log.Error = message => TShock.Log.ConsoleError($"[LiveMap] {message}");
+        Text.Culture = () => Terraria.Localization.Language.ActiveCulture.Name;
         Directory.CreateDirectory(MapDir);
 
-        _command = new Command("livemap.admin", MapCommand, "mappa", "livemap")
+        _command = new Command("livemap.admin", MapCommand, "map", "mappa", "livemap")
         {
-            HelpText = "Stato della mappa del pannello. Uso: /mappa [rigenera]",
+            HelpText = Text.T("Panel map status. Usage: /map [regenerate]", "Stato della mappa del pannello. Uso: /mappa [rigenera]"),
         };
         Commands.ChatCommands.Add(_command);
 
@@ -75,8 +76,10 @@ public class LiveMap : TerrariaPlugin
         _wallFramed = new BitArray(Main.maxTilesX * Main.maxTilesY);
         var config = Config.Load(ConfigPath);
         _engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players, ReadTile, Types());
-        Log.Info($"Mappa pronta: {_engine.Cols}×{_engine.Rows} riquadri in {MapDir}" +
-                 (config.SempreAttiva ? " (sempre attiva)" : " (si aggiorna quando il pannello la apre)"));
+        Log.Info(Text.T($"Map ready: {_engine.Cols}×{_engine.Rows} chunks in {MapDir}", $"Mappa pronta: {_engine.Cols}×{_engine.Rows} riquadri in {MapDir}") +
+                 (config.SempreAttiva
+                     ? Text.T(" (always active)", " (sempre attiva)")
+                     : Text.T(" (updated when the panel opens it)", " (si aggiorna quando il pannello la apre)")));
     }
 
     /// <summary>
@@ -93,7 +96,7 @@ public class LiveMap : TerrariaPlugin
         }
         catch (Exception ex)
         {
-            Log.Error($"I colori della mappa non sono disponibili su questo server, plugin disattivato: {ex}");
+            Log.Error(Text.T($"The map colors are not available on this server, plugin disabled: {ex}", $"I colori della mappa non sono disponibili su questo server, plugin disattivato: {ex}"));
             return false;
         }
     }
@@ -175,14 +178,14 @@ public class LiveMap : TerrariaPlugin
         var player = args.Player;
         if (_engine == null)
         {
-            player.SendErrorMessage("[LiveMap] La mappa non è attiva (mondo non ancora caricato o colori non disponibili).");
+            player.SendErrorMessage(Text.T("[LiveMap] The map is not active (world not loaded yet or colors not available).", "[LiveMap] La mappa non è attiva (mondo non ancora caricato o colori non disponibili)."));
             return;
         }
 
-        if (args.Parameters.Count > 0 && args.Parameters[0].Equals("rigenera", StringComparison.OrdinalIgnoreCase))
+        if (args.Parameters.Count > 0 && args.Parameters[0].ToLowerInvariant() is "rigenera" or "regenerate")
         {
             _engine.Regenerate();
-            player.SendSuccessMessage("[LiveMap] La mappa verrà ridisegnata da capo.");
+            player.SendSuccessMessage(Text.T("[LiveMap] The map will be redrawn from scratch.", "[LiveMap] La mappa verrà ridisegnata da capo."));
             return;
         }
         foreach (var line in _engine.Status()) player.SendInfoMessage($"[LiveMap] {line}");
@@ -191,6 +194,6 @@ public class LiveMap : TerrariaPlugin
     private void OnReload(ReloadEventArgs args)
     {
         if (_engine != null) _engine.Config = Config.Load(ConfigPath);
-        args.Player.SendSuccessMessage("[LiveMap] Configurazione ricaricata (ScalaPanoramica vale dal prossimo riavvio).");
+        args.Player.SendSuccessMessage(Text.T("[LiveMap] Configuration reloaded (ScalaPanoramica applies from the next restart).", "[LiveMap] Configurazione ricaricata (ScalaPanoramica vale dal prossimo riavvio)."));
     }
 }

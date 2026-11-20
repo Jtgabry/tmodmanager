@@ -42,7 +42,7 @@ public class Config
         }
         catch (Exception ex)
         {
-            Log.Error($"{path} non valido, uso i valori di default: {ex.Message}");
+            Log.Error(Text.T($"{path} is not valid, using the default values: {ex.Message}", $"{path} non valido, uso i valori di default: {ex.Message}"));
             return new Config();
         }
 
@@ -59,7 +59,7 @@ public class Config
         }
         catch (Exception ex)
         {
-            Log.Warn($"{path} non si è potuto creare: {ex.Message}");
+            Log.Warn(Text.T($"{path} could not be created: {ex.Message}", $"{path} non si è potuto creare: {ex.Message}"));
         }
         return config;
     }

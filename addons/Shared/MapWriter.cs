@@ -115,7 +115,7 @@ public sealed class MapWriter : IDisposable
         var queued = _queue.Writer.TryWrite(() =>
         {
             try { action(); }
-            catch (Exception ex) { Log.Error($"Scrittura della mappa non riuscita: {ex.Message}"); }
+            catch (Exception ex) { Log.Error(Text.T($"Writing the map failed: {ex.Message}", $"Scrittura della mappa non riuscita: {ex.Message}")); }
             finally { if (counted) Interlocked.Decrement(ref _pending); }
         });
         if (!queued && counted) Interlocked.Decrement(ref _pending);
@@ -157,7 +157,7 @@ public sealed class MapWriter : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Warn($"manifest.json illeggibile, rigenero la mappa: {ex.Message}");
+            Log.Warn(Text.T($"manifest.json unreadable, regenerating the map: {ex.Message}", $"manifest.json illeggibile, rigenero la mappa: {ex.Message}"));
         }
 
         // Mondo diverso (o primo avvio): via i riquadri vecchi

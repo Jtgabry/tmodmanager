@@ -25,6 +25,7 @@ public class TmmLiveMap : Mod
         Log.Info = message => { Logger.Info(message); Console.WriteLine($"[LiveMap] {message}"); };
         Log.Warn = message => { Logger.Warn(message); Console.WriteLine($"[LiveMap] {message}"); };
         Log.Error = message => { Logger.Error(message); Console.WriteLine($"[LiveMap] {message}"); };
+        Text.Culture = () => Terraria.Localization.Language.ActiveCulture.Name;
         On_NetMessage.SendData += OnSendData;
         IL_MapHelper.CreateMapTile += MapColors.WithoutPlayerMap;
     }
@@ -66,8 +67,10 @@ public class LiveMapSystem : ModSystem
         _wallFramed = new System.Collections.BitArray(Main.maxTilesX * Main.maxTilesY);
         var config = Config.Load(ConfigPath);
         Engine = new MapEngine(MapDir, config, Main.maxTilesX, Main.maxTilesY, Pixel, World, Players, ReadTile, Types());
-        Log.Info($"Mappa pronta: {Engine.Cols}×{Engine.Rows} riquadri in {MapDir}" +
-                 (config.SempreAttiva ? " (sempre attiva)" : " (si aggiorna quando il pannello la apre)"));
+        Log.Info(Text.T($"Map ready: {Engine.Cols}×{Engine.Rows} chunks in {MapDir}", $"Mappa pronta: {Engine.Cols}×{Engine.Rows} riquadri in {MapDir}") +
+                 (config.SempreAttiva
+                     ? Text.T(" (always active)", " (sempre attiva)")
+                     : Text.T(" (updated when the panel opens it)", " (si aggiorna quando il pannello la apre)")));
     }
 
     public override void OnWorldUnload()
@@ -221,7 +224,7 @@ internal static class MapColors
             c.Next.Operand = il.Import(typeof(MapColors).GetMethod(nameof(MapAt))!);
             replaced++;
         }
-        if (replaced == 0) Log.Warn("CreateMapTile non legge più Main.Map: nessuna modifica (va bene, se non serve)");
+        if (replaced == 0) Log.Warn(Text.T("CreateMapTile no longer reads Main.Map: no change (fine, if not needed)", "CreateMapTile non legge più Main.Map: nessuna modifica (va bene, se non serve)"));
     }
 
     public static MapTile MapAt(WorldMap? map, int x, int y) => map == null ? default : map[x, y];
@@ -245,12 +248,12 @@ internal static class MapColors
 
             var tile = MapHelper.CreateMapTile(Main.spawnTileX, Main.spawnTileY, 255);
             MapHelper.GetMapTileXnaColor(ref tile);
-            Log.Info($"Colori della mappa: {ColorLookup!.Length} ({modColors} dalle mod)");
+            Log.Info(Text.T($"Map colors: {ColorLookup!.Length} ({modColors} from mods)", $"Colori della mappa: {ColorLookup!.Length} ({modColors} dalle mod)"));
             return true;
         }
         catch (Exception ex)
         {
-            Log.Error($"I colori della mappa non sono disponibili su questo server, LiveMap disattivato: {ex}");
+            Log.Error(Text.T($"The map colors are not available on this server, LiveMap disabled: {ex}", $"I colori della mappa non sono disponibili su questo server, LiveMap disattivato: {ex}"));
             return false;
         }
     }
@@ -308,26 +311,26 @@ public class MapCommand : ModCommand
 {
     public override CommandType Type => CommandType.Console;
     public override string Command => "mappa";
-    public override string Usage => "/mappa [rigenera|ricarica]";
-    public override string Description => "Stato della mappa del pannello di tModManager (LiveMap)";
+    public override string Usage => Text.T("/mappa [regenerate|reload]", "/mappa [rigenera|ricarica]");
+    public override string Description => Text.T("Status of the tModManager panel map (LiveMap)", "Stato della mappa del pannello di tModManager (LiveMap)");
 
     public override void Action(CommandCaller caller, string input, string[] args)
     {
         var engine = LiveMapSystem.Engine;
         if (engine == null)
         {
-            caller.Reply("[LiveMap] La mappa non è attiva (mondo non ancora caricato o colori non disponibili).", Color.Red);
+            caller.Reply(Text.T("[LiveMap] The map is not active (world not loaded yet or colors not available).", "[LiveMap] La mappa non è attiva (mondo non ancora caricato o colori non disponibili)."), Color.Red);
             return;
         }
         switch (args.FirstOrDefault()?.ToLowerInvariant())
         {
-            case "rigenera":
+            case "rigenera" or "regenerate":
                 engine.Regenerate();
-                caller.Reply("[LiveMap] La mappa verrà ridisegnata da capo.", Color.LightGreen);
+                caller.Reply(Text.T("[LiveMap] The map will be redrawn from scratch.", "[LiveMap] La mappa verrà ridisegnata da capo."), Color.LightGreen);
                 return;
-            case "ricarica":
+            case "ricarica" or "reload":
                 engine.Config = Config.Load(LiveMapSystem.ConfigPath);
-                caller.Reply("[LiveMap] Configurazione ricaricata (ScalaPanoramica vale dal prossimo riavvio).", Color.LightGreen);
+                caller.Reply(Text.T("[LiveMap] Configuration reloaded (ScalaPanoramica applies from the next restart).", "[LiveMap] Configurazione ricaricata (ScalaPanoramica vale dal prossimo riavvio)."), Color.LightGreen);
                 return;
         }
         foreach (var line in engine.Status()) caller.Reply($"[LiveMap] {line}");
