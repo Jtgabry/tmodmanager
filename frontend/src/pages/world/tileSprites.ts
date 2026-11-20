@@ -286,22 +286,26 @@ export function drawSprites(
     if (blockAt(chunk, i) && !tileSheet(chunk, i)) return null
     return source.sheet('walls', wall, wallPaint(chunk, i))
   }
-  /** Colore dello sfondo (cielo, caverne) vicino: quello di una tile vicina senza blocco, muro né liquido. */
-  const airAround = (x: number, y: number): number | null => {
+  /** Colore della mappa della tile più vicina (entro 3) che soddisfa `match`. */
+  const pixelAround = (x: number, y: number, match: (chunk: TileChunk, i: number) => boolean): number | null => {
     for (let r = 1; r <= 3; r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
           const t = at(x + dx, y + dy)
-          if (!t || !t[0].pixels) continue
-          const [chunk, i] = t
-          if (blockAt(chunk, i) || wallOf(chunk, i) !== 0 || flagsOf(chunk, i) & LIQUID) continue
-          return chunk.pixels![i]
+          if (!t || !t[0].pixels || !match(t[0], t[1])) continue
+          return t[0].pixels[t[1]]
         }
       }
     }
     return null
   }
+  /** Colore dello sfondo (cielo, caverne) vicino: quello di una tile vicina senza blocco, muro né liquido. */
+  const airAround = (x: number, y: number) =>
+    pixelAround(x, y, (chunk, i) => !blockAt(chunk, i) && wallOf(chunk, i) === 0 && !(flagsOf(chunk, i) & LIQUID))
+  /** Colore dell'acqua (o di un altro liquido) vicino, come la mappa lo mostra in una tile di solo liquido. */
+  const liquidAround = (x: number, y: number) =>
+    pixelAround(x, y, (chunk, i) => tileType(chunk, i) === NO_TILE && wallOf(chunk, i) === 0 && liquidOf(chunk, i) !== null)
 
   // 1. Sfondo dietro i blocchi con uno sprite e senza muro: sotto c'è il colore piatto del blocco (la mappa a pixel),
   //    che dove lo sprite è trasparente si vedrebbe; ci va lo sfondo, come nel gioco
@@ -317,11 +321,10 @@ export function drawSprites(
         const n = at(x + dx, y + dy)
         return n !== null && blockAt(n[0], n[1])
       })) continue
-      // In fondo all'acqua (pendenze e mezzi blocchi) non c'è aria vicino: il colore della mappa del liquido accanto,
-      // come sotto le tile di liquido
+      // In fondo all'acqua (piante sommerse, pendenze, mezzi blocchi) non c'è aria vicino: il colore della mappa del
+      // liquido accanto, come sotto le tile di solo liquido
       let fill = airAround(x, y)
-      const behind = fill === null ? liquidBehind(x, y, chunk, i) : null
-      if (behind?.tile[0].pixels) fill = behind.tile[0].pixels[behind.tile[1]]
+      if (fill === null && (liquidOf(chunk, i) || liquidBehind(x, y, chunk, i))) fill = liquidAround(x, y)
       if (fill === null) continue
       const { sx, sy, w, h } = rect(x, y)
       ctx.fillStyle = hex(fill)
