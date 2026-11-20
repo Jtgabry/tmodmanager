@@ -245,6 +245,29 @@ export function drawSprites(
     const type = chunk.data.getUint8(i * chunk.stride + 12)
     return amount > 0 && type < 4 ? { type, amount } : null
   }
+  /**
+   * Liquido senza superficie (niente riga chiara in cima): sopra c'è altro liquido, o un blocco che fa da soffitto
+   * (anche in pendenza o mezzo blocco: il lato verso il liquido è pieno).
+   */
+  const coveredAt = (x: number, y: number) => {
+    const above = y > 0 ? at(x, y - 1) : null
+    if (!above) return false
+    if (liquidOf(above[0], above[1])) return true
+    return blockAt(above[0], above[1]) && !!types.solid[tileType(above[0], above[1])]
+  }
+  /**
+   * Liquido dietro un mezzo blocco o un blocco in pendenza: la tile non ne ha, ma nel gioco la parte vuota mostra quello
+   * delle tile vicine (sopra, ai lati). Restituisce il vicino da cui prenderlo e se la tile è tutta sommersa.
+   */
+  const liquidBehind = (x: number, y: number, chunk: TileChunk, i: number) => {
+    if (!vanilla || (flagsOf(chunk, i) & 0x07) === 0 || !blockAt(chunk, i)) return null
+    for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0]]) {
+      const n = at(x + dx, y + dy)
+      const liquid = n && liquidOf(n[0], n[1])
+      if (n && liquid) return { tile: n, liquid, covered: dy === -1 || coveredAt(x + dx, y) }
+    }
+    return null
+  }
   /** Foglio di sprite del blocco della tile, se c'è (e il blocco si vede). */
   const tileSheet = (chunk: TileChunk, i: number) => {
     if (!blockAt(chunk, i)) return null
@@ -294,7 +317,11 @@ export function drawSprites(
         const n = at(x + dx, y + dy)
         return n !== null && blockAt(n[0], n[1])
       })) continue
-      const fill = airAround(x, y)
+      // In fondo all'acqua (pendenze e mezzi blocchi) non c'è aria vicino: il colore della mappa del liquido accanto,
+      // come sotto le tile di liquido
+      let fill = airAround(x, y)
+      const behind = fill === null ? liquidBehind(x, y, chunk, i) : null
+      if (behind?.tile[0].pixels) fill = behind.tile[0].pixels[behind.tile[1]]
       if (fill === null) continue
       const { sx, sy, w, h } = rect(x, y)
       ctx.fillStyle = hex(fill)
@@ -360,13 +387,15 @@ export function drawSprites(
     for (let x = x0; x <= x1; x++) {
       const t = at(x, y)
       if (!t) continue
-      const liquid = liquidOf(t[0], t[1])
+      // Il liquido della tile, o quello che si vede dietro un blocco in pendenza o un mezzo blocco
+      const own = liquidOf(t[0], t[1])
+      const behind = own ? null : liquidBehind(x, y, t[0], t[1])
+      const liquid = own ?? behind?.liquid
       if (!liquid) continue
       const style = LIQUID_STYLE[liquid.type] >= 0 ? LIQUID_STYLE[liquid.type] : waterStyle(x, y)
       const sheet = source.sheet('liquids', style)
       if (!sheet) continue
-      const above = y > 0 ? at(x, y - 1) : null
-      const covered = above !== null && liquidOf(above[0], above[1]) !== null
+      const covered = behind ? behind.covered : coveredAt(x, y)
       const { sx, sy, w, h } = rect(x, y)
       ctx.globalAlpha = LIQUID_ALPHA[liquid.type]
       if (covered) {
