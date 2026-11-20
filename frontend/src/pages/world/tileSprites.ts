@@ -138,6 +138,14 @@ const treeVariant = (ground: number, y: number, surface: number) => {
 const TOPS_BY_VARIANT: Record<number, number> = { [-1]: 0, 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 13, 6: 14 }
 /** Palme (Tiles_323): una riga per bioma della sabbia, +4 per le oasi (lontano dal mare); frameY è la piega del tronco. */
 const PALM = 323
+/** Piattaforme (TileID.Sets.Platforms): in pendenza fanno da scala, con lo sprite intero e un raccordo sotto. */
+const PLATFORMS = new Set([19, 427, 435, 436, 437, 438, 439])
+/** Blocchi con i propri pezzi per le pendenze (nastri trasportatori): sprite intero. */
+const SLOPE_FRAMES = new Set([421, 422])
+/** Blocchi che non fanno scendere il raccordo delle scale (TileID.Sets.BlocksStairs). */
+const BLOCKS_STAIRS = new Set([54, 328, 386, 387, 459, 541])
+/** Blocchi disegnati sempre pieni, anche se in pendenza (TileID.Sets.DontDrawTileSlopes). */
+const NO_SLOPE_DRAW = new Set([137, 138, 235, 388, 476, 630, 631, 664, 665, 711, 712, 713, 714, 715, 716, 723, 726])
 const PALM_GROUND: Record<number, number> = { 53: 0, 234: 1, 116: 2, 112: 3 }
 /** Funghi giganti (Tiles_72): il cappello è Shroom_Tops, sopra la tile con frameX da 36 in su. */
 const MUSHROOM = 72
@@ -280,8 +288,9 @@ export function drawSprites(
       if (!t) continue
       const [chunk, i] = t
       if (!(tileSheet(chunk, i) || liquidOf(chunk, i)) || wallSheet(chunk, i)) continue
-      // Blocco pieno in mezzo ad altri blocchi: lo sprite lo copre tutto (il caso più comune sottoterra)
-      if (types.solid[tileType(chunk, i)] && [[0, -1], [0, 1], [-1, 0], [1, 0]].every(([dx, dy]) => {
+      // Blocco pieno (non mezzo blocco né in pendenza) in mezzo ad altri blocchi: lo sprite lo copre tutto (il caso più
+      // comune sottoterra)
+      if (types.solid[tileType(chunk, i)] && (flagsOf(chunk, i) & 0x07) === 0 && [[0, -1], [0, 1], [-1, 0], [1, 0]].every(([dx, dy]) => {
         const n = at(x + dx, y + dy)
         return n !== null && blockAt(n[0], n[1])
       })) continue
@@ -403,6 +412,38 @@ export function drawSprites(
     return x > OCEAN_ZONE && x < grid.worldWidth - OCEAN_ZONE ? base + 4 : base
   }
 
+  // 3c. Scale di piattaforme: sotto ogni gradino il gioco disegna, dietro i blocchi, un raccordo verso il gradino
+  //     successivo (TileDrawing.DrawBasicTile), nella tile di sotto
+  for (let y = y0 - 1; y < y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const t = at(x, y)
+      if (!t) continue
+      const [chunk, i] = t
+      const type = tileType(chunk, i)
+      const slope = (flagsOf(chunk, i) & 0x07) - 1
+      if (!PLATFORMS.has(type) || (slope !== 1 && slope !== 2)) continue
+      // Il gradino successivo: in basso a destra (pendenza 1) o a sinistra (2), pieno o una piattaforma
+      const next = at(slope === 1 ? x + 1 : x - 1, y + 1)
+      if (!next) continue
+      const nextType = tileType(next[0], next[1])
+      const nextShape = flagsOf(next[0], next[1]) & 0x07
+      if (nextType === NO_TILE || !(types.solid[nextType] || PLATFORMS.has(nextType)) || nextShape === 1 || nextShape === (slope === 1 ? 3 : 2)) continue
+      const below = at(x, y + 1)
+      if (below) {
+        const belowType = tileType(below[0], below[1])
+        const belowShape = flagsOf(below[0], below[1]) & 0x07
+        if (belowType !== NO_TILE && (belowShape === 0 || belowShape === (slope === 1 ? 5 : 4)) && BLOCKS_STAIRS.has(belowType)) continue
+      }
+      const sheet = tileSheet(chunk, i)
+      if (!sheet) continue
+      const fy = chunk.data.getInt16(i * chunk.stride + 4, true)
+      const fx = PLATFORMS.has(nextType) && nextShape === 0 ? (slope === 1 ? 324 : 306) : slope === 1 ? 198 : 162
+      if (fy < 0 || fx + 16 > sheet.naturalWidth || fy + 16 > sheet.naturalHeight) continue
+      const { sx, sy, w, h } = rect(x, y + 1)
+      ctx.drawImage(sheet, fx, fy, 16, 16, sx, sy, w, h)
+    }
+  }
+
   // 4. Blocchi
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
@@ -445,8 +486,10 @@ export function drawSprites(
       }
       if (fx + 16 > sheet.naturalWidth || fy + 16 > sheet.naturalHeight) continue
       const { sx, sy, w, h } = rect(x, y)
-      // Mezzo blocco: la metà alta dello sprite, nella metà bassa della tile (le pendenze per ora restano piene)
-      if ((flags & 0x07) === 1) ctx.drawImage(sheet, fx, fy, 16, 8, sx, sy + Math.round(h / 2), w, h - Math.round(h / 2))
+      const shape = flags & 0x07
+      // Mezzo blocco: la metà alta dello sprite, nella metà bassa della tile
+      if (shape === 1) ctx.drawImage(sheet, fx, fy, 16, 8, sx, sy + Math.round(h / 2), w, h - Math.round(h / 2))
+      else if (shape > 1 && !PLATFORMS.has(type) && !SLOPE_FRAMES.has(type) && !NO_SLOPE_DRAW.has(type)) drawSlope(ctx, sheet, fx, fy, shape - 1, (x - view.x) * z, (y - view.y) * z, z / 16)
       else ctx.drawImage(sheet, fx, fy, 16, 16, sx, sy, w, h)
     }
   }
@@ -563,4 +606,24 @@ export function paintPixels(data: Uint8ClampedArray, paint: number) {
     data[i + 1] = lum * tg * k
     data[i + 2] = lum * tb * k
   }
+}
+
+/**
+ * Blocco in pendenza come lo disegna il gioco (TileDrawing.DrawSingleTile): 8 strisce verticali da 2 pixel della
+ * texture, a scaletta, più una riga piena di 2 pixel sul lato pieno. Pendenze 1 e 2: pieno in basso (a sinistra, a
+ * destra), con la parte alta dello sprite spostata in giù; 3 e 4: pieno in alto, con la parte bassa spostata in su.
+ */
+export function drawSlope(ctx: CanvasRenderingContext2D, sheet: CanvasImageSource, fx: number, fy: number, slope: number, x: number, y: number, px: number) {
+  const put = (srcX: number, srcY: number, w: number, h: number, dx: number, dy: number) => {
+    const sx = Math.round(x + dx * px)
+    const sy = Math.round(y + dy * px)
+    ctx.drawImage(sheet, fx + srcX, fy + srcY, w, h, sx, sy, Math.round(x + (dx + w) * px) - sx, Math.round(y + (dy + h) * px) - sy)
+  }
+  for (let q = 0; q < 8; q++) {
+    const col = slope === 1 || slope === 3 ? q * 2 : 14 - q * 2
+    if (slope <= 2) put(col, 0, 2, 14 - q * 2, col, q * 2)
+    else put(col, q * 2, 2, 16 - q * 2, col, 0)
+  }
+  const row = slope <= 2 ? 14 : 0
+  put(0, row, 16, 2, 0, row)
 }
