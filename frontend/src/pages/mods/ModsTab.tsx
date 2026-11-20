@@ -12,6 +12,7 @@ import VersionArchive from './VersionArchive'
 import { useUploadQueue } from './uploadQueue'
 import WorkshopQueue from './WorkshopQueue'
 import WorkshopUpdates from './WorkshopUpdates'
+import { t } from '../../i18n'
 
 export default function ModsTab() {
   const server = useCurrentServer()
@@ -40,24 +41,24 @@ export default function ModsTab() {
       <PageActions>
         {mods.data && (
           <span className="muted page-summary">
-            {list.length} installate · {enabledCount} abilitate
+            {t('{count} installed', { count: list.length })} · {t('{count} enabled', { count: enabledCount })}
           </span>
         )}
         <div className="btn-row">
-          <button type="button" className="btn" onClick={() => setDialog('archive')} title="Archivio delle versioni">
+          <button type="button" className="btn" onClick={() => setDialog('archive')} title={t('Version archive')}>
             <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
               <rect x="3" y="4" width="18" height="5" rx="1" />
               <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
               <path d="M10 13h4" />
             </svg>
-            <span className="hide-narrow">Archivio</span>
+            <span className="hide-narrow">{t('Archive')}</span>
           </button>
           <button type="button" className="btn" onClick={() => setDialog('updates')}>
             <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M20 11a8 8 0 1 0-2.3 5.7" />
               <path d="M20 4v7h-7" />
             </svg>
-            <span className="hide-narrow">{updating ? 'Aggiornamento…' : 'Aggiornamenti'}</span>
+            <span className="hide-narrow">{updating ? t('Updating…') : t('Updates')}</span>
             {updatableCount > 0 && <span className="count-badge">{updatableCount}</span>}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => setDialog('upload')}>
@@ -66,7 +67,7 @@ export default function ModsTab() {
               <path d="M7 9l5-5 5 5" />
               <path d="M4 20h16" />
             </svg>
-            Carica mod
+            {t('Upload mods')}
           </button>
         </div>
       </PageActions>
@@ -79,7 +80,7 @@ export default function ModsTab() {
 
       {missingEnabled.length > 0 && (
         <div className="alert alert-warning">
-          In enabled.json risultano abilitate mod che non sono nella cartella: {missingEnabled.join(', ')}. tModLoader le ignorerà.
+          {t('enabled.json lists as enabled mods that are not in the folder: {mods}. tModLoader will ignore them.', { mods: missingEnabled.join(', ') })}
         </div>
       )}
 
@@ -96,15 +97,15 @@ export default function ModsTab() {
         />
       )}
 
-      <Sheet open={dialog === 'upload'} title="Carica mod" keepMounted onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'upload'} title={t('Upload mods')} keepMounted onClose={() => setDialog(null)}>
         <UploadZone queue={queue} />
       </Sheet>
 
-      <Sheet open={dialog === 'archive'} title="Archivio delle versioni" wide onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'archive'} title={t('Version archive')} wide onClose={() => setDialog(null)}>
         {dialog === 'archive' && <VersionArchive serverId={server.id} />}
       </Sheet>
 
-      <Sheet open={dialog === 'updates'} title="Aggiornamenti dal Workshop" wide keepMounted onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'updates'} title={t('Workshop updates')} wide keepMounted onClose={() => setDialog(null)}>
         <WorkshopUpdates
           serverId={server.id}
           report={updates.data}
@@ -124,8 +125,8 @@ export default function ModsTab() {
               <path d="M8 6.5a.5.5 0 0 1 .5.5v1.5H10a.5.5 0 0 1 0 1H8.5V11a.5.5 0 0 1-1 0V9.5H6a.5.5 0 0 1 0-1h1.5V7a.5.5 0 0 1 .5-.5" />
               <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5z" />
             </svg>
-            <strong>Rilascia per aggiungere la mod</strong>
-            <span className="muted">File .tmod: se la mod c'è già viene aggiornata</span>
+            <strong>{t('Drop to add the mod')}</strong>
+            <span className="muted">{t('.tmod files: if the mod is already there it is updated')}</span>
           </div>
         </div>
       )}

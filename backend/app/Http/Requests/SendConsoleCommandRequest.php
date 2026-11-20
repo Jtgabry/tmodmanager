@@ -22,7 +22,7 @@ class SendConsoleCommandRequest extends FormRequest
      */
     public function messages(): array
     {
-        return ['command.regex' => 'Il comando deve stare su una riga e non può contenere caratteri di controllo.'];
+        return ['command.regex' => __('The command must fit on one line and cannot contain control characters.')];
     }
 
     /**

@@ -34,7 +34,7 @@ test('nome del backup: mondo normalizzato e data YmdHis', () => {
   assert.equal(normalizeWorldName('Il mio Mondo'), 'Il_mio_Mondo')
   assert.equal(normalizeWorldName("Città dell'Ombra 2"), 'Citta_dellOmbra')
   assert.equal(normalizeWorldName('a-b  c__d'), 'a-b_c_d')
-  assert.equal(normalizeWorldName('1234 !!'), 'Mondo')
+  assert.equal(normalizeWorldName('1234 !!'), 'World')
   assert.equal(timestamp(new Date(2026, 10, 17, 4, 5, 9)), '20261117040509')
 })
 

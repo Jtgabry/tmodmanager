@@ -77,8 +77,8 @@ test('LiveMap nel Workshop del pannello: c\'è anche senza Steam, e si installa 
 
   // Mai collegata allo Steam Workshop
   assert.equal((await checkUpdates(server)).mods.some((m) => m.name === 'TmmLiveMap'), false)
-  await assert.rejects(setLink(server, 'TmmLiveMap', '123'), /add-on di tModManager/)
-  await assert.rejects(startUpdate(server, ['TmmLiveMap']), /add-on di tModManager/)
+  await assert.rejects(setLink(server, 'TmmLiveMap', '123'), /tModManager add-on/)
+  await assert.rejects(startUpdate(server, ['TmmLiveMap']), /tModManager add-on/)
 
   // Si aggiorna con il pannello: la copia nel server viene sostituita, niente archivio delle versioni
   await writeFile(join(config.addonsDir, 'TmmLiveMap.tmod'), tmod('TmmLiveMap', '1.1'))
@@ -93,7 +93,7 @@ test('server con tModLoader più vecchio di quella per cui è compilata: LiveMap
   await writeFile(join(server.installDir, VERSION_FILE), '2026.7.3.0\n')
   const [item] = (await browseWorkshop(server, {})).items
   assert.deepEqual([item.compatibleVersion, item.requiresTml], [null, '2026.8.3.0'])
-  await assert.rejects(startInstall(server, ['tmm-TmmLiveMap']), /richiede tModLoader 2026\.8\.3\.0/)
+  await assert.rejects(startInstall(server, ['tmm-TmmLiveMap']), /requires tModLoader 2026\.8\.3\.0/)
 })
 
 test('esportazione dei modpack: LiveMap resta sempre fuori', async () => {
@@ -114,7 +114,7 @@ test('esportazione dei modpack: LiveMap resta sempre fuori', async () => {
   await zip.cleanup()
 
   const only = await createModpack(server, { name: 'Solo mappa', description: '', mods: ['TmmLiveMap'], versions: {} })
-  await assert.rejects(exportModpackZip(server, only.id), /solo add-on/)
+  await assert.rejects(exportModpackZip(server, only.id), /only contains tModManager add-ons/)
 })
 
 test('Mondo su tModLoader: con LiveMap installata e abilitata la mappa è quella in tempo reale', async () => {

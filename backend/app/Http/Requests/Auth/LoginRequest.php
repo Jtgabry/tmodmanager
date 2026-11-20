@@ -34,14 +34,14 @@ class LoginRequest extends FormRequest
             event(new Lockout($this));
 
             throw ValidationException::withMessages([
-                'email' => sprintf('Troppi tentativi. Riprova tra %d secondi.', RateLimiter::availableIn($this->throttleKey())),
+                'email' => __('Too many attempts. Try again in :seconds seconds.', ['seconds' => RateLimiter::availableIn($this->throttleKey())]),
             ]);
         }
 
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
-            throw ValidationException::withMessages(['email' => 'Email o password non corretti.']);
+            throw ValidationException::withMessages(['email' => __('Wrong email or password.')]);
         }
 
         RateLimiter::clear($this->throttleKey());

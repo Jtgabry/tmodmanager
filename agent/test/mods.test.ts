@@ -70,7 +70,7 @@ test('readModInfo rifiuta file non .tmod e nomi interni pericolosi', async () =>
 
   const evil = join(dir, 'evil.tmod')
   await writeFile(evil, buildTmod('../../etc', '1.0'))
-  await assert.rejects(readModInfo(evil), /Nome interno/)
+  await assert.rejects(readModInfo(evil), /Invalid internal mod name/)
 })
 
 test('dependencyClosure e enabledDependents seguono le dipendenze indirette', () => {

@@ -14,6 +14,7 @@ import {
   usePluginVersion,
 } from '../plugins.js'
 import { findServer, type ServerDefinition } from '../registry.js'
+import { tr } from '../i18n.js'
 
 type Params = { Params: { id: string; name?: string; version?: string } }
 
@@ -35,11 +36,11 @@ export async function pluginRoutes(app: FastifyInstance) {
   const server = async (id: string, reply: FastifyReply): Promise<ServerDefinition | null> => {
     const found = await findServer(id)
     if (!found) {
-      reply.code(404).send({ error: 'not_found', message: `Server "${id}" non trovato` })
+      reply.code(404).send({ error: 'not_found', message: tr('Server "{id}" not found', { id }) })
       return null
     }
     if (found.game !== 'tshock') {
-      reply.code(409).send({ error: 'conflict', message: `${found.name} non è un server TShock: i plugin esistono solo con TShock` })
+      reply.code(409).send({ error: 'conflict', message: tr('{server} is not a TShock server: plugins only exist with TShock', { server: found.name }) })
       return null
     }
     return found
@@ -53,7 +54,7 @@ export async function pluginRoutes(app: FastifyInstance) {
   app.put<Params & { Querystring: { filename?: string; enable?: string } }>('/servers/:id/plugins', async (req, reply) => {
     const s = await server(req.params.id, reply)
     if (!s) return
-    if (req.headers['content-type'] !== 'application/octet-stream') throw new ModError('Invia la .dll come application/octet-stream', 422)
+    if (req.headers['content-type'] !== 'application/octet-stream') throw new ModError(tr('Send the .dll as application/octet-stream'), 422)
     const result = await uploadPlugin(s, req.query.filename, req.body as Readable, truthy(req.query.enable), (task) => withServerLock(s, task))
     return reply.code(result.duplicate ? 200 : 201).send({ data: result })
   })
@@ -62,7 +63,7 @@ export async function pluginRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const enabled = req.body?.enabled
-    if (typeof enabled !== 'boolean') throw new ModError('Campo "enabled" mancante', 422)
+    if (typeof enabled !== 'boolean') throw new ModError(tr('Missing "{field}" field', { field: 'enabled' }), 422)
     return { data: await withServerLock(s, () => setPluginEnabled(s, req.params.name, enabled)) }
   })
 

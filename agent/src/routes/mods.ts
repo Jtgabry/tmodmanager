@@ -22,6 +22,7 @@ import { modsOnlyForTmodloader } from './modsOnly.js'
 import { findServer, type ServerDefinition } from '../registry.js'
 import { readModIcon } from '../tmod.js'
 import { workshopIds } from '../workshop.js'
+import { tr } from '../i18n.js'
 
 type Params = { Params: { id: string; name?: string; packId?: string; version?: string } }
 
@@ -44,12 +45,12 @@ export async function modRoutes(app: FastifyInstance) {
 
   const server = async (id: string, reply: FastifyReply): Promise<ServerDefinition | null> => {
     const found = await findServer(id)
-    if (!found) reply.code(404).send({ error: 'not_found', message: `Server "${id}" non trovato` })
+    if (!found) reply.code(404).send({ error: 'not_found', message: tr('Server "{id}" not found', { id }) })
     return found ?? null
   }
 
   const modName = (name: string | undefined) => {
-    if (!name || !MOD_NAME.test(name)) throw new ModError('Nome mod non valido', 422)
+    if (!name || !MOD_NAME.test(name)) throw new ModError(tr('Invalid mod name'), 422)
     return name
   }
 
@@ -69,7 +70,7 @@ export async function modRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     if (req.headers['content-type'] !== 'application/octet-stream') {
-      throw new ModError('Invia il file .tmod come application/octet-stream', 422)
+      throw new ModError(tr('Send the .tmod file as application/octet-stream'), 422)
     }
     const result = await uploadMod(s, req.body as Readable, truthy(req.query.enable))
     return reply.code(result.replacedVersion ? 200 : 201).send({ data: result })
@@ -79,7 +80,7 @@ export async function modRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const name = modName(req.params.name)
-    if (typeof req.body?.enabled !== 'boolean') throw new ModError('Campo "enabled" mancante', 422)
+    if (typeof req.body?.enabled !== 'boolean') throw new ModError(tr('Missing "{field}" field', { field: 'enabled' }), 422)
     const enabled = req.body.enabled
     return {
       data: await withServerLock(s, async () =>
@@ -102,7 +103,7 @@ export async function modRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const icon = await readModIcon(await modPath(s, modName(req.params.name)))
-    if (!icon) return reply.code(404).send({ error: 'not_found', message: 'La mod non ha un\'icona' })
+    if (!icon) return reply.code(404).send({ error: 'not_found', message: tr('The mod has no icon') })
     return reply.header('Content-Type', 'image/png').send(icon)
   })
 
@@ -121,7 +122,7 @@ export async function modRoutes(app: FastifyInstance) {
   // --- Archivio delle versioni ------------------------------------------------------------------
 
   const modVersion = (version: string | undefined) => {
-    if (!version || !MOD_VERSION.test(version)) throw new ModError('Versione non valida', 422)
+    if (!version || !MOD_VERSION.test(version)) throw new ModError(tr('Invalid version'), 422)
     return version
   }
 
@@ -134,7 +135,7 @@ export async function modRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     if (req.headers['content-type'] !== 'application/octet-stream') {
-      throw new ModError('Invia il file .tmod come application/octet-stream', 422)
+      throw new ModError(tr('Send the .tmod file as application/octet-stream'), 422)
     }
     return reply.code(201).send({ data: await uploadToArchive(s, req.body as Readable) })
   })
@@ -147,7 +148,7 @@ export async function modRoutes(app: FastifyInstance) {
     await withServerLock(s, async () => {
       const packs = await packsPinning(s, name, version)
       if (packs.length) {
-        throw new ModError(`La versione ${version} è bloccata nei modpack: ${packs.join(', ')}. Cambia versione lì prima di eliminarla.`, 409, { packs })
+        throw new ModError(tr('Version {version} is locked in the modpacks: {packs}. Change the version there before deleting it.', { version, packs: packs.join(', ') }), 409, { packs })
       }
       await deleteArchived(s, name, version)
     })
@@ -223,7 +224,7 @@ export async function modRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     if (req.headers['content-type'] !== 'application/octet-stream') {
-      throw new ModError('Invia il file come application/octet-stream', 422)
+      throw new ModError(tr('Send the file as application/octet-stream'), 422)
     }
     const result = await importUpload(s, req.query.filename, req.body as Readable, truthy(req.query.replaceExisting))
     return reply.code(201).send({ data: result })

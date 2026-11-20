@@ -18,8 +18,8 @@ class RegistrationController extends Controller
 {
     public function store(RegisterRequest $request): JsonResponse
     {
-        abort_unless($request->hasSession(), 400, 'Il login funziona solo dalla SPA (sessione assente).');
-        abort_if(InitialSetup::required(), 409, 'Il sito non è ancora configurato: va prima creato l\'amministratore.');
+        abort_unless($request->hasSession(), 400, __('Login only works from the web app (no session).'));
+        abort_if(InitialSetup::required(), 409, __('The site is not set up yet: the administrator must be created first.'));
 
         $invitation = $request->invitation();
 

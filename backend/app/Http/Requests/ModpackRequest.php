@@ -28,7 +28,7 @@ class ModpackRequest extends FormRequest
         $validator->after(function (Validator $validator): void {
             foreach (array_keys((array) $this->input('versions', [])) as $mod) {
                 if (! is_string($mod) || ! preg_match('/^[A-Za-z0-9_]{1,64}$/', $mod)) {
-                    $validator->errors()->add('versions', 'Nome mod non valido nelle versioni.');
+                    $validator->errors()->add('versions', __('Invalid mod name in the versions.'));
 
                     return;
                 }

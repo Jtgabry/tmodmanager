@@ -120,11 +120,11 @@ export const ConfigValues = z
   .object({
     secure: choice('0', '1'),
     language: choice('en-US', 'de-DE', 'it-IT', 'fr-FR', 'es-ES', 'ru-RU', 'zh-Hans', 'pt-BR', 'pl-PL'),
-    npcstream: z.string().regex(/^\d{1,4}$/, 'un numero da 0 a 9999'),
+    npcstream: z.string().regex(/^\d{1,4}$/, 'a number from 0 to 9999'),
     autocreate: choice('1', '2', '3'),
     worldname: z.string().regex(/^[A-Za-z0-9 _'-]{1,40}$/, 'lettere, numeri, spazi, _ - \' (max 40)'),
     difficulty: choice('0', '1', '2', '3'),
-    seed: z.string().max(64).regex(/^[^\r\n\0]*$/, 'non può contenere a capo'),
+    seed: z.string().max(64).regex(/^[^\r\n\0]*$/, 'cannot contain line breaks'),
     ...Object.fromEntries(JOURNEY_PERMISSIONS.map((p) => [`journeypermission_${p}`, journey])),
   })
   .partial()

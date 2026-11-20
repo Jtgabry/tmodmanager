@@ -1,4 +1,5 @@
 import { useRegisterSW } from 'virtual:pwa-register/react'
+import { t } from '../i18n'
 
 /** Ogni quanto controllare se è uscita una nuova versione dell'app (oltre che a ogni apertura). */
 const UPDATE_CHECK_INTERVAL = 60 * 60 * 1000
@@ -24,13 +25,13 @@ export default function UpdatePrompt() {
 
   return (
     <div className="update-prompt" role="status">
-      <span>È disponibile una nuova versione di tModManager.</span>
+      <span>{t('A new version of tModManager is available.')}</span>
       <div className="btn-row">
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNeedRefresh(false)}>
-          Più tardi
+          {t('Later')}
         </button>
         <button type="button" className="btn btn-primary btn-sm" onClick={() => void updateServiceWorker(true)}>
-          Aggiorna
+          {t('Update')}
         </button>
       </div>
     </div>

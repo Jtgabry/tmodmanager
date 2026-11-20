@@ -27,6 +27,8 @@ import { useAuth } from '../auth/AuthContext'
 import { useServer } from '../lib/servers'
 import type { Server } from '../lib/types'
 import logo from '../assets/logo.png'
+import { t } from '../i18n'
+import { LanguageSelect } from '../i18n/LocaleProvider'
 
 function NavItem({ to, end, icon, children }: { to: string; end?: boolean; icon: ReactNode; children: ReactNode }) {
   return (
@@ -48,7 +50,7 @@ function ServerCard({ server }: { server: Server }) {
         <StateBadge state={server.state} />
       </div>
       <div className="server-panel-meta">
-        Giocatori {on ? `${server.players.online} / ${server.players.max}` : '—'} · Porta {server.port}
+        {t('Players')} {on ? `${server.players.online} / ${server.players.max}` : '—'} · {t('Port')} {server.port}
       </div>
       {can(server.id, 'power') && <PowerButtons server={server} variant="tile" />}
     </div>
@@ -62,9 +64,9 @@ function ServerNav({ serverId, server }: { serverId: string; server: Server | un
   return (
     <>
       {server ? <ServerCard server={server} /> : <div className="server-panel server-panel-loading" />}
-      <nav className="sidebar-nav" aria-label="Server corrente">
+      <nav className="sidebar-nav" aria-label={t('Current server')}>
         <NavItem to={base} end icon={<IconOverview />}>
-          Panoramica
+          {t('Overview')}
         </NavItem>
         {can(serverId, 'console') && (
           <NavItem to={`${base}/console`} icon={<IconConsole />}>
@@ -72,12 +74,12 @@ function ServerNav({ serverId, server }: { serverId: string; server: Server | un
           </NavItem>
         )}
         <NavItem to={`${base}/world`} icon={<IconWorld />}>
-          Mondo
+          {t('World')}
         </NavItem>
         {can(serverId, 'mods') && server?.game === 'tmodloader' && (
           <>
             <NavItem to={`${base}/mods`} icon={<IconMods />}>
-              Mod
+              {t('Mods')}
             </NavItem>
             <NavItem to={`${base}/workshop`} icon={<IconWorkshop />}>
               Workshop
@@ -89,27 +91,27 @@ function ServerNav({ serverId, server }: { serverId: string; server: Server | un
         )}
         {can(serverId, 'mods') && server?.game === 'tshock' && (
           <NavItem to={`${base}/plugins`} icon={<IconPlugins />}>
-            Plugin
+            {t('Plugins')}
           </NavItem>
         )}
         {can(serverId, 'files') && (
           <NavItem to={`${base}/files`} icon={<IconFiles />}>
-            File
+            {t('Files')}
           </NavItem>
         )}
         {can(serverId, 'backups') && (
           <NavItem to={`${base}/backups`} icon={<IconBackup />}>
-            Backup
+            {t('Backups')}
           </NavItem>
         )}
         {(can(serverId, 'files') || can(serverId, 'mods')) && (
           <NavItem to={`${base}/trash`} icon={<IconTrash />}>
-            Cestino
+            {t('Trash')}
           </NavItem>
         )}
         {user?.isAdmin && (
           <NavItem to={`${base}/settings`} icon={<IconSettings />}>
-            Impostazioni
+            {t('Settings')}
           </NavItem>
         )}
       </nav>
@@ -148,7 +150,7 @@ export default function Layout() {
         <button
           type="button"
           className="icon-btn menu-btn"
-          aria-label={drawerOpen ? 'Chiudi menu' : 'Apri menu'}
+          aria-label={drawerOpen ? t('Close menu') : t('Open menu')}
           aria-expanded={drawerOpen}
           aria-controls="sidebar"
           onClick={() => setDrawerOpen((o) => !o)}
@@ -168,9 +170,10 @@ export default function Layout() {
         )}
         <div className="topbar-user">
           <span className="muted">{user?.name}</span>
+          <LanguageSelect />
           <button type="button" className="btn btn-ghost btn-sm" onClick={handleLogout}>
             <IconLogout />
-            Esci
+            {t('Log out')}
           </button>
         </div>
       </header>
@@ -178,36 +181,37 @@ export default function Layout() {
       <button
         type="button"
         className="sidebar-backdrop"
-        aria-label="Chiudi menu"
+        aria-label={t('Close menu')}
         tabIndex={-1}
         onClick={() => setDrawerOpen(false)}
       />
 
       <aside id="sidebar" className="sidebar">
         {serverId && <ServerNav serverId={serverId} server={server} />}
-        <nav className="sidebar-nav" aria-label="Generale">
+        <nav className="sidebar-nav" aria-label={t('General')}>
           <NavItem to="/" end icon={<IconServers />}>
-            Server
+            {t('Servers')}
           </NavItem>
           {user?.isAdmin && (
             <>
               <NavItem to="/admin/servers" icon={<IconAdmin />}>
-                Gestione server
+                {t('Server management')}
               </NavItem>
               <NavItem to="/admin/users" icon={<IconUsers />}>
-                Utenti
+                {t('Users')}
               </NavItem>
               <NavItem to="/admin/invitations" icon={<IconInvites />}>
-                Inviti
+                {t('Invitations')}
               </NavItem>
             </>
           )}
         </nav>
         <div className="sidebar-user">
           <span className="muted">{user?.name}</span>
+          <LanguageSelect />
           <button type="button" className="btn btn-ghost btn-sm" onClick={handleLogout}>
             <IconLogout />
-            Esci
+            {t('Log out')}
           </button>
         </div>
       </aside>

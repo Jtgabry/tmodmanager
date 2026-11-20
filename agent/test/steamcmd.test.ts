@@ -44,8 +44,8 @@ test('annullare un download ferma steamcmd e i suoi processi figli', async () =>
   assert.ok(Date.now() - t0 < 5000)
   assert.deepEqual(started, ['111'])
   assert.deepEqual(errors.sort(), [
-    ['111', 'Download annullato'],
-    ['222', 'Download annullato'],
+    ['111', 'Download cancelled'],
+    ['222', 'Download cancelled'],
   ])
   const pid = Number(await readFile(join(dir, 'child.pid'), 'utf8'))
   await new Promise((r) => setTimeout(r, 100))

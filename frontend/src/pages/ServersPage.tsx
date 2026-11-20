@@ -6,6 +6,7 @@ import StateBadge from '../components/StateBadge'
 import { errorMessage } from '../lib/api'
 import { formatDate } from '../lib/format'
 import { useServers } from '../lib/servers'
+import { t } from '../i18n'
 
 export default function ServersPage() {
   const { can, user } = useAuth()
@@ -14,7 +15,7 @@ export default function ServersPage() {
   return (
     <section>
       <div className="page-header">
-        <h1>Server</h1>
+        <h1>{t('Servers')}</h1>
       </div>
 
       {isLoading && <div className="spinner" />}
@@ -22,8 +23,8 @@ export default function ServersPage() {
       {servers?.length === 0 && (
         <div className="empty">
           {user?.isAdmin
-            ? 'Nessun server registrato. Aggiungilo in agent/data/servers.json.'
-            : 'Non hai accesso a nessun server. Chiedi a un amministratore.'}
+            ? t('No server yet. Create one from the Server management page.')
+            : t('You do not have access to any server. Ask an administrator.')}
         </div>
       )}
 
@@ -45,7 +46,7 @@ export default function ServersPage() {
             <footer className="server-card-footer">
               {can(server.id, 'power') ? <PowerButtons server={server} /> : <span />}
               <Link to={`/servers/${server.id}`} className="btn btn-ghost">
-                Apri →
+                {t('Open')} →
               </Link>
             </footer>
           </article>

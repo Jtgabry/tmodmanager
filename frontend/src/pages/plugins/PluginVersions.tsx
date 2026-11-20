@@ -3,6 +3,7 @@ import { errorMessage } from '../../lib/api'
 import { formatBytes, formatDate } from '../../lib/format'
 import { pluginDownloadUrl, pluginTitle, useDeletePluginVersion, usePruneVersions, useUsePluginVersion, versionLabel } from '../../lib/plugins'
 import type { Plugin } from '../../lib/types'
+import { t, tn } from '../../i18n'
 
 const trashIcon = (
   <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
@@ -49,8 +50,8 @@ export default function PluginVersions({ serverId, plugin }: { serverId: string;
           const v = p.versions.find((x) => x.id === id)
           setNotice(
             p.enabled
-              ? `${title}: in uso la ${v ? versionLabel(v) : 'versione scelta'}. Riavvia il server per caricarla.`
-              : `${title}: scelta la ${v ? versionLabel(v) : 'versione'}, verrà usata quando attivi il plugin.`,
+              ? t('{plugin}: now using {version}. Restart the server to load it.', { plugin: title, version: v ? versionLabel(v) : t('the chosen version') })
+              : t('{plugin}: chose {version}, it will be used when you activate the plugin.', { plugin: title, version: v ? versionLabel(v) : t('the version') }),
           )
         },
         onError: (err) => setError(errorMessage(err)),
@@ -64,7 +65,7 @@ export default function PluginVersions({ serverId, plugin }: { serverId: string;
     remove.mutate(
       { name: plugin.name, id },
       {
-        onSuccess: () => setNotice(`${title} ${v ? versionLabel(v) : ''} spostata nel cestino.`),
+        onSuccess: () => setNotice(t('{plugin} {version} moved to the trash.', { plugin: title, version: v ? versionLabel(v) : '' })),
         onError: (err) => setError(errorMessage(err)),
         onSettled: () => setConfirm(null),
       },
@@ -74,7 +75,7 @@ export default function PluginVersions({ serverId, plugin }: { serverId: string;
   const onPrune = () => {
     reset()
     prune.mutate(plugin.name, {
-      onSuccess: (r) => setNotice(`${r.removed === 1 ? '1 versione spostata' : `${r.removed} versioni spostate`} nel cestino.`),
+      onSuccess: (r) => setNotice(r.removed === 1 ? t('1 version moved to the trash.') : t('{count} versions moved to the trash.', { count: r.removed })),
       onError: (err) => setError(errorMessage(err)),
       onSettled: () => setConfirm(null),
     })
@@ -83,8 +84,10 @@ export default function PluginVersions({ serverId, plugin }: { serverId: string;
   return (
     <div className="stack">
       <p className="hint">
-        Ogni .dll caricata resta salvata qui. Solo la versione scelta è in <span className="mono">ServerPlugins/</span>: cambiarla
-        sostituisce il file, e TShock la carica al prossimo riavvio. Le versioni eliminate vanno nel cestino.
+        {tn(
+          'Every uploaded .dll stays saved here. Only the chosen version is in {folder}: changing it replaces the file, and TShock loads it on the next restart. Deleted versions go to the trash.',
+          { folder: <span className="mono">ServerPlugins/</span> },
+        )}
       </p>
 
       {notice && <div className="alert alert-success">{notice}</div>}
@@ -96,34 +99,34 @@ export default function PluginVersions({ serverId, plugin }: { serverId: string;
           return (
             <li key={v.id} className={selected ? 'archive-version archive-version-installed' : 'archive-version'}>
               <span className="archive-version-name">{versionLabel(v)}</span>
-              {selected && <span className={plugin.enabled ? 'pill pill-on' : 'pill pill-plain'}>{plugin.enabled ? 'in uso' : 'scelta'}</span>}
+              {selected && <span className={plugin.enabled ? 'pill pill-on' : 'pill pill-plain'}>{plugin.enabled ? t('in use') : t('chosen')}</span>}
               <span className="archive-version-meta">
-                {formatBytes(v.size)} · caricata {formatDate(v.uploadedAt)}
+                {formatBytes(v.size)} · {t('uploaded {date}', { date: formatDate(v.uploadedAt) })}
                 {(repeated.has(v.version) || !v.version) && <span className="mono"> · {v.id.slice(0, 8)}</span>}
               </span>
               <span className="archive-version-actions">
                 {confirm === v.id ? (
                   <>
                     <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => onDelete(v.id)}>
-                      Elimina
+                      {t('Delete')}
                     </button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => setConfirm(null)}>
-                      Annulla
+                      {t('Cancel')}
                     </button>
                   </>
                 ) : (
                   <>
                     {!selected && (
                       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => onUse(v.id)}>
-                        {plugin.enabled ? 'Usa questa' : 'Scegli questa'}
+                        {plugin.enabled ? t('Use this one') : t('Choose this one')}
                       </button>
                     )}
                     <a
                       className="btn btn-sm btn-icon"
                       href={pluginDownloadUrl(serverId, plugin.name, v.id)}
                       download
-                      aria-label={`Scarica ${title} ${versionLabel(v)}`}
-                      title="Scarica"
+                      aria-label={t('Download {name}', { name: `${title} ${versionLabel(v)}` })}
+                      title={t('Download')}
                     >
                       {downloadIcon}
                     </a>
@@ -133,8 +136,8 @@ export default function PluginVersions({ serverId, plugin }: { serverId: string;
                         type="button"
                         className="btn btn-sm btn-icon btn-danger-outline"
                         disabled={busy}
-                        aria-label={`Elimina ${title} ${versionLabel(v)}`}
-                        title="Elimina questa versione"
+                        aria-label={t('Delete {name}', { name: `${title} ${versionLabel(v)}` })}
+                        title={t('Delete this version')}
                         onClick={() => setConfirm(v.id)}
                       >
                         {trashIcon}
@@ -153,19 +156,21 @@ export default function PluginVersions({ serverId, plugin }: { serverId: string;
           {confirm === 'old' ? (
             <>
               <span className="small">
-                {old.length === 1 ? 'La versione non scelta' : `Le ${old.length} versioni non scelte`} andranno nel cestino.
+                {old.length === 1
+                  ? t('The version not chosen will go to the trash.')
+                  : t('The {count} versions not chosen will go to the trash.', { count: old.length })}
               </span>
               <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={onPrune}>
-                Conferma
+                {t('Confirm')}
               </button>
               <button type="button" className="btn btn-sm btn-ghost" onClick={() => setConfirm(null)}>
-                Annulla
+                {t('Cancel')}
               </button>
             </>
           ) : (
             <button type="button" className="btn btn-sm btn-danger-outline" disabled={busy} onClick={() => setConfirm('old')}>
               {trashIcon}
-              Elimina le altre versioni ({old.length})
+              {t('Delete the other versions ({count})', { count: old.length })}
             </button>
           )}
         </div>

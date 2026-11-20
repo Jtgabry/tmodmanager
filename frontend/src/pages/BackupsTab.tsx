@@ -4,16 +4,17 @@ import { errorMessage } from '../lib/api'
 import { backupDownloadUrl, type BackupResult, type WorldBackup, useBackupActions, useBackups } from '../lib/backups'
 import { useCurrentServer } from '../lib/currentServer'
 import { formatBytes, formatDate } from '../lib/format'
+import { t, tn } from '../i18n'
 
 /** Tempo trascorso, per "Ultimo backup: 3 ore fa". */
 function ago(iso: string): string {
   const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000)
-  if (minutes < 1) return 'adesso'
-  if (minutes < 60) return minutes === 1 ? '1 minuto fa' : `${minutes} minuti fa`
+  if (minutes < 1) return t('just now')
+  if (minutes < 60) return minutes === 1 ? t('1 minute ago') : t('{count} minutes ago', { count: minutes })
   const hours = Math.round(minutes / 60)
-  if (hours < 24) return hours === 1 ? '1 ora fa' : `${hours} ore fa`
+  if (hours < 24) return hours === 1 ? t('1 hour ago') : t('{count} hours ago', { count: hours })
   const days = Math.round(hours / 24)
-  return days === 1 ? 'ieri' : `${days} giorni fa`
+  return days === 1 ? t('yesterday') : t('{count} days ago', { count: days })
 }
 
 export default function BackupsTab() {
@@ -51,80 +52,86 @@ export default function BackupsTab() {
     <div className="stack">
       <PageActions>
         <button type="button" className="btn btn-primary" disabled={create.isPending} onClick={start}>
-          {create.isPending ? (on ? 'Salvataggio del mondo…' : 'Backup in corso…') : 'Fai un backup ora'}
+          {create.isPending ? (on ? t('Saving the world…') : t('Backing up…')) : t('Back up now')}
         </button>
       </PageActions>
       <div className="card">
         <dl className="stats">
           <div>
-            <dt>Ultimo backup</dt>
-            <dd>{last ? `${formatDate(last.createdAt)} (${ago(last.createdAt)})` : 'Mai'}</dd>
+            <dt>{t('Last backup')}</dt>
+            <dd>{last ? `${formatDate(last.createdAt)} (${ago(last.createdAt)})` : t('Never')}</dd>
           </div>
           <div>
-            <dt>Backup automatico</dt>
-            <dd>{schedule.time ? `Ogni giorno alle ${schedule.time}` : 'Disattivato'}</dd>
+            <dt>{t('Automatic backup')}</dt>
+            <dd>{schedule.time ? t('Every day at {time}', { time: schedule.time }) : t('Off')}</dd>
           </div>
           <div>
-            <dt>Prossimo</dt>
+            <dt>{t('Next')}</dt>
             <dd>{schedule.next ? formatDate(schedule.next) : '—'}</dd>
           </div>
         </dl>
         <p className="muted small">
-          Ogni backup è uno .zip con il mondo{server.game === 'tmodloader' ? ' (.wld) e i dati delle mod (.twld)' : ' (.wld)'}.
-          {on && ' Con il server acceso, prima del backup il mondo viene salvato.'} Dei backup automatici si tengono gli
-          ultimi {schedule.keep}; quelli fatti a mano restano finché non li elimini. Per ripristinare un backup il server
-          dev'essere spento.
-          {schedule.time && ` Orario del server: ${schedule.timeZone}.`}
+          {server.game === 'tmodloader'
+            ? t('Each backup is a .zip with the world (.wld) and the mod data (.twld).')
+            : t('Each backup is a .zip with the world (.wld).')}
+          {on && ` ${t('With the server running, the world is saved before the backup.')}`}{' '}
+          {t(
+            'The last {keep} automatic backups are kept; the manual ones stay until you delete them. To restore a backup the server must be stopped.',
+            { keep: schedule.keep },
+          )}
+          {schedule.time && ` ${t('Server time zone: {zone}.', { zone: schedule.timeZone })}`}
         </p>
       </div>
 
       {create.isError && <div className="alert alert-error">{errorMessage(create.error)}</div>}
       {done && (
         <div className={done.running && !done.saved ? 'alert alert-warning' : 'alert alert-success'}>
-          Backup creato: <span className="mono">{done.backup.name}</span> ({formatBytes(done.backup.size)}).
-          {done.running && !done.saved && ' Il server non ha confermato il salvataggio in tempo: contiene l\'ultimo salvataggio su disco.'}
+          {tn('Backup created: {name} ({size}).', { name: <span className="mono">{done.backup.name}</span>, size: formatBytes(done.backup.size) })}
+          {done.running && !done.saved && ` ${t('The server did not confirm the save in time: it contains the last save on disk.')}`}
         </div>
       )}
       {remove.isError && <div className="alert alert-error">{errorMessage(remove.error)}</div>}
       {restore.isError && <div className="alert alert-error">{errorMessage(restore.error)}</div>}
       {restored && (
         <div className="alert alert-success">
-          Ripristinato il backup del {formatDate(restored.backup.createdAt)}.
-          {restored.trashed.length > 0 && ` Il mondo che c'era (${restored.trashed.join(', ')}) è nel cestino del server.`} Al
-          prossimo avvio il server apre il mondo ripristinato.
+          {t('Restored the backup of {date}.', { date: formatDate(restored.backup.createdAt) })}
+          {restored.trashed.length > 0 && ` ${t('The previous world ({files}) is in the server trash.', { files: restored.trashed.join(', ') })}`}{' '}
+          {t('On the next start the server opens the restored world.')}
         </div>
       )}
       {confirmRestore && (
         <div className="alert alert-warning">
           <p>
-            Ripristinare il backup del <strong>{formatDate(confirmRestore.createdAt)}</strong>? Il mondo attuale viene
-            sostituito: finisce nel cestino del server, da cui si può recuperare per 30 giorni.
-            {confirmRestore.files.length > 0 && ` Il backup contiene ${confirmRestore.files.join(', ')}.`}
+            {tn(
+              'Restore the backup of {date}? The current world is replaced: it goes to the server trash, where it can be recovered for 30 days.',
+              { date: <strong>{formatDate(confirmRestore.createdAt)}</strong> },
+            )}
+            {confirmRestore.files.length > 0 && ` ${t('The backup contains {files}.', { files: confirmRestore.files.join(', ') })}`}
           </p>
-          {on && <p className="small"><strong>Spegni il server per ripristinare il backup.</strong></p>}
+          {on && <p className="small"><strong>{t('Stop the server to restore the backup.')}</strong></p>}
           <div className="btn-row">
             <button type="button" className="btn btn-warning btn-sm" disabled={on || restore.isPending} onClick={() => doRestore(confirmRestore)}>
-              {restore.isPending ? 'Ripristino…' : 'Conferma il ripristino'}
+              {restore.isPending ? t('Restoring…') : t('Confirm the restore')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmRestore(null)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </div>
         </div>
       )}
 
       <div className="card">
-        <h2>Backup</h2>
+        <h2>{t('Backups')}</h2>
         {list.length === 0 ? (
-          <p className="muted">Nessun backup ancora.</p>
+          <p className="muted">{t('No backups yet.')}</p>
         ) : (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Data</th>
-                  <th>File</th>
-                  <th>Dimensione</th>
+                  <th>{t('Date')}</th>
+                  <th>{t('File')}</th>
+                  <th>{t('Size')}</th>
                   <th />
                 </tr>
               </thead>
@@ -133,7 +140,7 @@ export default function BackupsTab() {
                   <tr key={b.name}>
                     <td>
                       <strong>{formatDate(b.createdAt)}</strong>{' '}
-                      <span className={b.auto ? 'tag' : 'tag tag-accent'}>{b.auto ? 'automatico' : 'manuale'}</span>
+                      <span className={b.auto ? 'tag' : 'tag tag-accent'}>{b.auto ? t('automatic') : t('manual')}</span>
                     </td>
                     <td>
                       <div className="mono small">{b.name}</div>
@@ -143,19 +150,19 @@ export default function BackupsTab() {
                     <td>
                       <div className="btn-row nowrap">
                         <a className="btn btn-sm" href={backupDownloadUrl(server.id, b.name)} download>
-                          Scarica
+                          {t('Download')}
                         </a>
                         <button
                           type="button"
                           className="btn btn-sm"
                           disabled={on || restore.isPending}
-                          title={on ? 'Spegni il server per ripristinare un backup' : 'Rimette questo mondo al posto di quello attuale'}
+                          title={on ? t('Stop the server to restore a backup') : t('Puts this world in place of the current one')}
                           onClick={() => {
                             setRestored(null)
                             setConfirmRestore(b)
                           }}
                         >
-                          Ripristina
+                          {t('Restore')}
                         </button>
                         {confirm === b.name ? (
                           <>
@@ -165,15 +172,15 @@ export default function BackupsTab() {
                               disabled={remove.isPending}
                               onClick={() => remove.mutate(b.name, { onSettled: () => setConfirm(null) })}
                             >
-                              Conferma
+                              {t('Confirm')}
                             </button>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>
-                              Annulla
+                              {t('Cancel')}
                             </button>
                           </>
                         ) : (
                           <button type="button" className="btn btn-danger-outline btn-sm" onClick={() => setConfirm(b.name)}>
-                            Elimina
+                            {t('Delete')}
                           </button>
                         )}
                       </div>

@@ -12,12 +12,13 @@ import type { BrowseItem, BrowseSort, Mod, UpdateJobItem } from '../../lib/types
 import { useCancelJobItem, useInstallFromWorkshop, usePendingMods, useUpdateJob, useWorkshopBrowse, useWorkshopItem } from '../../lib/workshop'
 import CardJobProgress from './CardJobProgress'
 import WorkshopQueue from './WorkshopQueue'
+import { intlLocale, t, tn } from '../../i18n'
 
-const SORTS: { value: BrowseSort; label: string }[] = [
-  { value: 'popular', label: 'Più scaricate' },
-  { value: 'trend', label: 'Di tendenza' },
-  { value: 'recent', label: 'Nuove' },
-  { value: 'updated', label: 'Aggiornate' },
+const sorts = (): { value: BrowseSort; label: string }[] => [
+  { value: 'popular', label: t('Most downloaded') },
+  { value: 'trend', label: t('Trending') },
+  { value: 'recent', label: t('New|sort') },
+  { value: 'updated', label: t('Updated|sort') },
 ]
 
 /** Categorie del Workshop di tModLoader: valore usato da Steam → etichetta. */
@@ -132,7 +133,8 @@ export default function WorkshopTab() {
       <PageActions>
         {browse.data && (
           <span className="muted page-summary">
-            {total.toLocaleString('it')} mod{tmlVersion ? ` · tModLoader del server ${tmlVersion}` : ''}
+            {t('{count} mods', { count: total.toLocaleString(intlLocale()) })}
+            {tmlVersion ? ` · ${t('Server tModLoader: {version}', { version: tmlVersion })}` : ''}
           </span>
         )}
       </PageActions>
@@ -140,10 +142,10 @@ export default function WorkshopTab() {
       {targetPack && (
         <div className="alert alert-success pack-alert">
           <span>
-            Le mod che installi vengono aggiunte al modpack <strong>{targetPack.name}</strong>.
+            {tn('The mods you install are added to the modpack {pack}.', { pack: <strong>{targetPack.name}</strong> })}
           </span>
           <Link className="btn btn-sm" to={`../modpacks/${targetPack.id}?tab=add`} relative="path">
-            Torna al modpack
+            {t('Back to the modpack')}
           </Link>
         </div>
       )}
@@ -159,26 +161,26 @@ export default function WorkshopTab() {
           </svg>
           <input
             type="search"
-            placeholder="Cerca nel Workshop di tModLoader…"
-            aria-label="Cerca nel Workshop"
+            placeholder={t('Search the tModLoader Workshop…')}
+            aria-label={t('Search the Workshop')}
             value={search}
             maxLength={100}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
-        <div className="segmented" role="group" aria-label="Ordinamento">
-          {SORTS.map((s) => (
+        <div className="segmented" role="group" aria-label={t('Sort')}>
+          {sorts().map((s) => (
             <button key={s.value} type="button" className={sort === s.value ? 'active' : ''} aria-pressed={sort === s.value} onClick={() => setSort(s.value)}>
-              {s.value === 'popular' && q ? 'Pertinenza' : s.label}
+              {s.value === 'popular' && q ? t('Relevance') : s.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="tag-filters" role="group" aria-label="Categoria">
-        {TAGS.map((t) => (
-          <button key={t.value} type="button" className={tag === t.value ? 'tag-filter active' : 'tag-filter'} aria-pressed={tag === t.value} onClick={() => setTag(tag === t.value ? null : t.value)}>
-            {t.label}
+      <div className="tag-filters" role="group" aria-label={t('Category')}>
+        {TAGS.map((tg) => (
+          <button key={tg.value} type="button" className={tag === tg.value ? 'tag-filter active' : 'tag-filter'} aria-pressed={tag === tg.value} onClick={() => setTag(tag === tg.value ? null : tg.value)}>
+            {tg.label}
           </button>
         ))}
       </div>
@@ -189,7 +191,7 @@ export default function WorkshopTab() {
       {browse.data?.pages[0]?.steamError && <div className="alert alert-info">{browse.data.pages[0].steamError}</div>}
       {browse.isLoading && <div className="spinner" />}
 
-      {browse.data && items.length === 0 && <div className="empty">Nessuna mod trovata.</div>}
+      {browse.data && items.length === 0 && <div className="empty">{t('No mods found.')}</div>}
 
       {items.length > 0 && (
         <div className="mod-grid">
@@ -213,7 +215,7 @@ export default function WorkshopTab() {
       {browse.hasNextPage && (
         <div className="load-more">
           <button type="button" className="btn" disabled={browse.isFetchingNextPage} onClick={() => void browse.fetchNextPage()}>
-            {browse.isFetchingNextPage ? 'Caricamento…' : 'Carica altre'}
+            {browse.isFetchingNextPage ? t('Loading…') : t('Load more')}
           </button>
         </div>
       )}
@@ -260,11 +262,14 @@ function Thumb({ item, size = 80 }: { item: BrowseItem; size?: number }) {
 function StatusPills({ item, status }: { item: BrowseItem; status: ItemStatus }) {
   return (
     <div className="pill-row">
-      {status.kind === 'installed' && <span className="pill pill-on">Installata{status.mod.version ? ` v${status.mod.version}` : ''}</span>}
-      {status.kind === 'pending' && <span className="pill pill-update">Da abilitare</span>}
+      {status.kind === 'installed' && <span className="pill pill-on">
+          {t('Installed|mod')}
+          {status.mod.version ? ` v${status.mod.version}` : ''}
+        </span>}
+      {status.kind === 'pending' && <span className="pill pill-update">{t('To enable')}</span>}
       {status.kind === 'incompatible' && (
-        <span className="pill pill-warning" title="Nel Workshop non c'è una versione per la tModLoader di questo server">
-          Richiede tModLoader {status.requiresTml}
+        <span className="pill pill-warning" title={t('There is no version on the Workshop for the tModLoader of this server')}>
+          {t('Requires tModLoader {version}', { version: status.requiresTml })}
         </span>
       )}
       {status.kind !== 'installed' && status.kind !== 'incompatible' && item.compatibleVersion && (
@@ -281,12 +286,12 @@ function InstallButton({ status, installing, onInstall }: { status: ItemStatus; 
     const { item } = status
     const text =
       item.state === 'queued'
-        ? 'In coda'
+        ? t('Queued')
         : item.state === 'installing'
-          ? 'Installazione…'
+          ? t('Installing…|mod')
           : item.bytes != null && item.totalBytes
-            ? `Download ${Math.min(99, Math.round((item.bytes / item.totalBytes) * 100))}%`
-            : 'Download…'
+            ? t('Download {percent}%', { percent: Math.min(99, Math.round((item.bytes / item.totalBytes) * 100)) })
+            : t('Download…')
     return (
       <button type="button" className="btn btn-sm" disabled>
         {text}
@@ -295,14 +300,14 @@ function InstallButton({ status, installing, onInstall }: { status: ItemStatus; 
   }
   if (status.kind === 'incompatible') {
     return (
-      <button type="button" className="btn btn-sm" disabled title="Aggiorna tModLoader per poterla installare">
-        Incompatibile
+      <button type="button" className="btn btn-sm" disabled title={t('Update tModLoader to be able to install it')}>
+        {t('Incompatible')}
       </button>
     )
   }
   return (
     <button type="button" className="btn btn-sm btn-primary" disabled={installing} onClick={onInstall}>
-      {installing ? 'Avvio…' : status.kind === 'failed' ? 'Riprova' : 'Installa'}
+      {installing ? t('Starting…') : status.kind === 'failed' ? t('Retry') : t('Install')}
     </button>
   )
 }
@@ -326,13 +331,13 @@ function workshopActions(
     actions.push({
       key: 'install',
       priority: 4,
-      label: 'Incompatibile',
+      label: t('Incompatible'),
       disabled: true,
       onSelect: () => undefined,
       inline: <InstallButton status={status} installing={props.installing} onInstall={props.onInstall} />,
     })
   } else if (status.kind === 'installable' || status.kind === 'failed') {
-    const label = props.installing ? 'Avvio…' : status.kind === 'failed' ? 'Riprova' : 'Installa'
+    const label = props.installing ? t('Starting…') : status.kind === 'failed' ? t('Retry') : t('Install')
     actions.push({
       key: 'install',
       priority: 4,
@@ -347,14 +352,14 @@ function workshopActions(
     actions.push({
       key: 'pack',
       priority: 3,
-      label: inPack ? 'Già nel pack' : 'Aggiungi al pack',
+      label: inPack ? t('Already in the pack') : t('Add to the pack'),
       disabled: inPack || props.packBusy,
       onSelect: onAdd,
       inline: inPack ? (
-        <span className="pill pill-on">Nel pack</span>
+        <span className="pill pill-on">{t('In the pack')}</span>
       ) : (
         <button type="button" className="btn btn-sm" disabled={props.packBusy} onClick={onAdd}>
-          Aggiungi al pack
+          {t('Add to the pack')}
         </button>
       ),
     })
@@ -364,11 +369,11 @@ function workshopActions(
     key: 'steam',
     priority: 1,
     end: true,
-    label: 'Apri su Steam',
+    label: t('Open on Steam'),
     icon: steamIcon,
     onSelect: () => window.open(item.url, '_blank', 'noopener,noreferrer'),
     inline: (
-      <a className="btn btn-sm btn-icon" href={item.url} target="_blank" rel="noreferrer noopener" aria-label={`${title} su Steam`} title="Apri su Steam">
+      <a className="btn btn-sm btn-icon" href={item.url} target="_blank" rel="noreferrer noopener" aria-label={t('{name} on Steam', { name: title })} title={t('Open on Steam')}>
         {steamIcon}
       </a>
     ),
@@ -394,7 +399,7 @@ function WorkshopCard(props: {
   return (
     <article className="mod-card">
       <div className="mod-card-head">
-        <button type="button" className="mod-icon-button" onClick={props.onDetails} aria-label={`Dettagli di ${title}`}>
+        <button type="button" className="mod-icon-button" onClick={props.onDetails} aria-label={t('Details of {name}', { name: title })}>
           <Thumb item={item} />
         </button>
         <div className="mod-card-heading">
@@ -404,9 +409,9 @@ function WorkshopCard(props: {
             </button>
           </h3>
           {item.addon ? (
-            <div className="mod-author">di tModManager</div>
+            <div className="mod-author">{t('by {author}', { author: 'tModManager' })}</div>
           ) : (
-            item.subscriptions != null && <div className="mod-author">{item.subscriptions.toLocaleString('it')} iscritti</div>
+            item.subscriptions != null && <div className="mod-author">{t('{count} subscribers', { count: item.subscriptions.toLocaleString(intlLocale()) })}</div>
           )}
           <StatusPills item={item} status={status} />
         </div>
@@ -415,9 +420,9 @@ function WorkshopCard(props: {
       {item.description && <p className="mod-description-short">{item.description}</p>}
 
       <div className="mod-tags">
-        {tags.slice(0, 4).map((t) => (
-          <span key={t} className="mod-tag">
-            {t}
+        {tags.slice(0, 4).map((tg) => (
+          <span key={tg} className="mod-tag">
+            {tg}
           </span>
         ))}
         {tags.length > 4 && (
@@ -431,13 +436,13 @@ function WorkshopCard(props: {
 
       <div className="mod-meta">
         {item.fileSize != null ? formatBytes(item.fileSize) : '—'}
-        {item.timeUpdated ? ` · aggiornata ${formatDate(item.timeUpdated)}` : ''}
+        {item.timeUpdated ? ` · ${t('updated {date}', { date: formatDate(item.timeUpdated) })}` : ''}
       </div>
 
       {status.kind === 'job' ? (
         <CardJobProgress item={status.item} cancelling={props.cancelling} onCancel={() => props.onCancel(status.item.name)} />
       ) : (
-        <OverflowActions actions={workshopActions(props, title)} menuLabel={`Altre azioni per ${title}`} />
+        <OverflowActions actions={workshopActions(props, title)} menuLabel={t('More actions for {name}', { name: title })} />
       )}
     </article>
   )
@@ -468,7 +473,7 @@ function WorkshopDetails(props: {
             <InstallButton status={status} installing={props.installing} onInstall={props.onInstall} />
             {!item.addon && (
               <a className="btn btn-sm" href={item.url} target="_blank" rel="noreferrer noopener">
-                Apri su Steam
+                {t('Open on Steam')}
               </a>
             )}
           </div>
@@ -480,62 +485,62 @@ function WorkshopDetails(props: {
       <dl className="details">
         {item.subscriptions != null && (
           <>
-            <dt>Iscritti</dt>
-            <dd>{item.subscriptions.toLocaleString('it')}</dd>
+            <dt>{t('Subscribers')}</dt>
+            <dd>{item.subscriptions.toLocaleString(intlLocale())}</dd>
           </>
         )}
         {tags.length > 0 && (
           <>
             <dt>Tag</dt>
             <dd className="mod-tags">
-              {tags.map((t) => (
-                <span key={t} className="mod-tag">
-                  {t}
+              {tags.map((tg) => (
+                <span key={tg} className="mod-tag">
+                  {tg}
                 </span>
               ))}
             </dd>
           </>
         )}
-        <dt>Versione per il server</dt>
+        <dt>{t('Version for the server')}</dt>
         <dd>
           {item.compatibleVersion
             ? `v${item.compatibleVersion}`
             : item.requiresTml
-              ? `nessuna: serve tModLoader ${item.requiresTml} o successiva`
-              : 'non dichiarata'}
+              ? t('none: tModLoader {version} or later is needed', { version: item.requiresTml })
+              : t('not declared')}
         </dd>
-        <dt>Dipendenze</dt>
+        <dt>{t('Dependencies')}</dt>
         <dd>
           {item.dependencies.length === 0
             ? '—'
             : full.isLoading
-              ? 'caricamento…'
+              ? t('loading…')
               : deps.map((d) => {
                   const present = d.modName !== null && props.installedNames.has(d.modName)
                   return (
-                    <span key={d.id} className={present ? 'tag tag-used' : 'tag'} title={present ? 'Già installata' : 'Verrà scaricata insieme alla mod, se richiesta'}>
+                    <span key={d.id} className={present ? 'tag tag-used' : 'tag'} title={present ? t('Already installed') : t('It will be downloaded along with the mod, if required')}>
                       {d.title ?? d.id}
                     </span>
                   )
                 })}
         </dd>
-        <dt>Dimensione</dt>
+        <dt>{t('Size')}</dt>
         <dd>{formatBytes(item.fileSize)}</dd>
-        <dt>Aggiornata</dt>
+        <dt>{t('Updated|date')}</dt>
         <dd>
           {formatDate(item.timeUpdated)}
-          {item.timeCreated ? ` · pubblicata ${formatDate(item.timeCreated)}` : ''}
+          {item.timeCreated ? ` · ${t('published {date}', { date: formatDate(item.timeCreated) })}` : ''}
         </dd>
         {item.addon && (
           <>
-            <dt>Autore</dt>
-            <dd>tModManager · si aggiorna insieme al pannello</dd>
+            <dt>{t('Author')}</dt>
+            <dd>tModManager · {t('it is updated together with the panel')}</dd>
           </>
         )}
       </dl>
 
       {full.error ? <div className="alert alert-error">{errorMessage(full.error)}</div> : null}
-      {full.isLoading && <p className="muted small">Caricamento della descrizione…</p>}
+      {full.isLoading && <p className="muted small">{t('Loading the description…')}</p>}
       {data.description && <p className="mod-description workshop-description">{data.description}</p>}
 
       {(full.data?.images.length ?? 0) > 0 && (

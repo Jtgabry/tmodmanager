@@ -11,6 +11,7 @@ import { loadServers, type ServerDefinition } from './registry.js'
 import { applyServerConfig, readServerConfig } from './serverConfig.js'
 import { trashWorld } from './serverAdmin.js'
 import { readZipComment, writeZip } from './zip.js'
+import { tr } from './i18n.js'
 
 /**
  * Backup dei mondi: uno .zip per backup in data/servers/<id>/backups/, con il .wld (e il .twld dei server
@@ -51,7 +52,7 @@ export function normalizeWorldName(name: string): string {
     .replace(/_+/g, '_')
     .replace(/^[_-]+|[_-]+$/g, '')
     .slice(0, 40)
-  return clean || 'Mondo'
+  return clean || 'World'
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -73,7 +74,7 @@ const exists = (path: string) =>
 async function worldFiles(server: ServerDefinition): Promise<{ world: string; files: string[] }> {
   const { world } = await readServerConfig(server.configPath)
   if (!world || !(await exists(world))) {
-    throw new BackupError('Il server non ha ancora un mondo: viene generato al primo avvio', 409)
+    throw new BackupError(tr('The server has no world yet: it is generated on the first start'), 409)
   }
   const files = [world]
   const twld = world.replace(/\.wld$/i, '.twld')
@@ -110,7 +111,7 @@ export type BackupResult = { backup: Backup; saved: boolean; running: boolean }
 
 /** Fa un backup del mondo del server. `auto`: backup giornaliero (ruotato). */
 export async function createBackup(server: ServerDefinition, manager: ServerManager, auto = false): Promise<BackupResult> {
-  if (running.has(server.id)) throw new BackupError('C\'è già un backup in corso per questo server', 409)
+  if (running.has(server.id)) throw new BackupError(tr('There is already a backup in progress for this server'), 409)
   running.add(server.id)
   try {
     const { world, files } = await worldFiles(server)
@@ -146,10 +147,10 @@ export async function createBackup(server: ServerDefinition, manager: ServerMana
 
 async function describe(server: ServerDefinition, name: string): Promise<Backup> {
   const match = name.match(BACKUP_NAME)
-  if (!match) throw new BackupError('Backup non trovato', 404)
+  if (!match) throw new BackupError(tr('Backup not found'), 404)
   const path = join(paths.backups(server.id), name)
   const info = await stat(path).catch(() => null)
-  if (!info?.isFile()) throw new BackupError('Backup non trovato', 404)
+  if (!info?.isFile()) throw new BackupError(tr('Backup not found'), 404)
   let meta: { auto?: boolean; files?: string[] } = {}
   const comment = await readZipComment(path).catch(() => '')
   if (comment.startsWith(COMMENT_PREFIX)) {
@@ -197,22 +198,22 @@ export type RestoreResult = { world: string; restored: string[]; trashed: string
  * i file del backup prendono il suo posto nella stessa cartella e serverconfig.txt punta al mondo ripristinato.
  */
 export async function restoreBackup(server: ServerDefinition, name: string, manager: ServerManager): Promise<RestoreResult> {
-  if (running.has(server.id)) throw new BackupError('C\'è già un backup o un ripristino in corso per questo server', 409)
+  if (running.has(server.id)) throw new BackupError(tr('There is already a backup or a restore in progress for this server'), 409)
   running.add(server.id)
   const work = join(paths.tmp(), `restore-${randomBytes(4).toString('hex')}`)
   try {
     const status = await manager.status(server)
-    if (status.state !== 'stopped' || status.operation) throw new BackupError('Spegni il server prima di ripristinare un backup', 409)
+    if (status.state !== 'stopped' || status.operation) throw new BackupError(tr('Stop the server before restoring a backup'), 409)
     const { path } = await backupPath(server, name)
 
     // -j: solo i nomi dei file, niente percorsi (nessun file può finire fuori dalla cartella)
     await mkdir(work, { recursive: true })
     await run('unzip', ['-qq', '-j', '-o', path, '-d', work], { maxBuffer: 1024 * 1024 }).catch(() => {
-      throw new BackupError('Il backup è danneggiato: impossibile estrarlo', 422)
+      throw new BackupError(tr('The backup is damaged: it cannot be extracted'), 422)
     })
     const files = (await readdir(work)).filter((f) => /^[^/\\]+\.(wld|twld)$/i.test(f))
     const worlds = files.filter((f) => /\.wld$/i.test(f))
-    if (worlds.length !== 1) throw new BackupError('Il backup non contiene un mondo (.wld)', 422)
+    if (worlds.length !== 1) throw new BackupError(tr('The backup does not contain a world (.wld)'), 422)
     const wld = worlds[0]
     const base = wld.replace(/\.wld$/i, '')
     // Il .twld va solo con il suo mondo

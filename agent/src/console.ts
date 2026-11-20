@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { enableLogging, hardcopy, type ScreenSession } from './screen.js'
+import { tr } from './i18n.js'
 
 /** Quanto log restituire alla prima apertura della console. */
 const INITIAL_TAIL_BYTES = 64 * 1024
@@ -103,10 +104,10 @@ export async function readConsole(server: ServerDefinition, offset?: number): Pr
 
 /** Una riga di comando valida: niente caratteri di controllo, lunghezza ragionevole. */
 export function validateCommand(command: unknown): string {
-  if (typeof command !== 'string') throw new ConsoleError('Comando mancante')
+  if (typeof command !== 'string') throw new ConsoleError(tr('Missing command'))
   const trimmed = command.trim()
-  if (!trimmed) throw new ConsoleError('Comando vuoto')
-  if (trimmed.length > 500) throw new ConsoleError('Comando troppo lungo (max 500 caratteri)')
-  if (/[\u0000-\u001f\u007f]/.test(trimmed)) throw new ConsoleError('Il comando contiene caratteri non ammessi')
+  if (!trimmed) throw new ConsoleError(tr('Empty command'))
+  if (trimmed.length > 500) throw new ConsoleError(tr('Command too long (max 500 characters)'))
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) throw new ConsoleError(tr('The command contains characters that are not allowed'))
   return trimmed
 }

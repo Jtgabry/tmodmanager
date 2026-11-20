@@ -4,19 +4,21 @@ import { useAuth } from '../auth/AuthContext'
 import { api, errorMessage } from '../lib/api'
 import { useConsoleStream } from '../lib/consoleStream'
 import { useCurrentServer } from '../lib/currentServer'
+import { t } from '../i18n'
 
-const QUICK_COMMANDS = [
-  { label: 'Salva', command: 'save' },
-  { label: 'Giocatori', command: 'playing' },
-  { label: 'Ora', command: 'time' },
-  { label: 'Versione', command: 'version' },
+const quickCommands = () => [
+  { label: t('Save'), command: 'save' },
+  { label: t('Players'), command: 'playing' },
+  { label: t('Time'), command: 'time' },
+  { label: t('Version'), command: 'version' },
 ]
 
-const MODE_LABEL = {
-  live: { text: 'In tempo reale', className: 'tag tag-active' },
-  connecting: { text: 'Connessione…', className: 'tag' },
-  polling: { text: 'Aggiornamento ogni secondo', className: 'tag tag-warning' },
-}
+const modeLabel = (mode: 'live' | 'connecting' | 'polling') =>
+  ({
+    live: { text: t('Live'), className: 'tag tag-active' },
+    connecting: { text: t('Connecting…'), className: 'tag' },
+    polling: { text: t('Refreshing every second'), className: 'tag tag-warning' },
+  })[mode]
 
 export default function ConsoleTab() {
   const server = useCurrentServer()
@@ -80,7 +82,7 @@ export default function ConsoleTab() {
     <div className="console card">
       <div className="console-toolbar">
         <div className="btn-row">
-          {QUICK_COMMANDS.map((q) => (
+          {quickCommands().map((q) => (
             <button key={q.command} type="button" className="btn btn-sm" disabled={!isOn || send.isPending} onClick={() => submit(q.command)}>
               {q.label}
             </button>
@@ -88,22 +90,22 @@ export default function ConsoleTab() {
         </div>
         <div className="btn-row">
           <span
-            className={MODE_LABEL[mode].className}
-            title={mode === 'polling' ? 'WebSocket non disponibile: la console viene aggiornata ogni secondo' : undefined}
+            className={modeLabel(mode).className}
+            title={mode === 'polling' ? t('WebSocket not available: the console is refreshed every second') : undefined}
           >
-            {MODE_LABEL[mode].text}
+            {modeLabel(mode).text}
           </span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOutput('')}>
-            Pulisci
+            {t('Clear')}
           </button>
         </div>
       </div>
 
       <pre ref={outputRef} className="console-output" onScroll={onScroll} aria-live="polite">
-        {output || <span className="muted">Nessun output.</span>}
+        {output || <span className="muted">{t('No output.')}</span>}
       </pre>
 
-      {streamError && mode !== 'live' && <p className="error-text">Aggiornamento console: {streamError}</p>}
+      {streamError && mode !== 'live' && <p className="error-text">{t('Console refresh: {error}', { error: streamError })}</p>}
 
       <form className="console-input" onSubmit={onSubmit}>
         <span className="prompt">&gt;</span>
@@ -111,21 +113,21 @@ export default function ConsoleTab() {
           value={command}
           onChange={(e) => setCommand(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={isOn ? 'Comando (es. say Ciao a tutti) — ↑/↓ per la cronologia' : 'Il server è spento'}
+          placeholder={isOn ? t('Command (e.g. say Hello everyone) — ↑/↓ for history') : t('The server is stopped')}
           disabled={!isOn}
           maxLength={500}
           autoComplete="off"
           spellCheck={false}
         />
         <button type="submit" className="btn btn-primary" disabled={!isOn || send.isPending || !command.trim()}>
-          Invia
+          {t('Send')}
         </button>
       </form>
       {isExit && (
         <p className="hint">
           {can(server.id, 'power')
-            ? 'Attenzione: "exit" spegne il server (meglio usare il pulsante Spegni).'
-            : 'Non hai il permesso di spegnere il server.'}
+            ? t('Warning: "exit" stops the server (better to use the Stop button).')
+            : t('You do not have permission to stop the server.')}
         </p>
       )}
       {send.isError && <p className="error-text">{errorMessage(send.error)}</p>}

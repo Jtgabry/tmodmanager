@@ -11,6 +11,7 @@ import {
   type TmlRelease,
   type UpdateReportAdmin,
 } from './types'
+import { t } from '../i18n'
 
 export type NewServer = {
   id: string
@@ -158,7 +159,7 @@ const WORLD_VERSIONS: [number, string][] = [
 
 export function worldVersionLabel(release: number): string {
   const known = WORLD_VERSIONS.find(([r]) => r === release)
-  return known ? `Terraria ${known[1]}` : `versione del mondo ${release}`
+  return known ? `Terraria ${known[1]}` : t('world version {release}', { release })
 }
 
 /** La versione di destinazione è più vecchia di quella che ha salvato il mondo (se entrambe note). */
@@ -181,8 +182,8 @@ export const choiceLabel = (c: InstallationChoice) => `${GAME_LABEL[c.kind]} ${v
 
 /** Solo la parte di versione dell'etichetta: "6.2.1 (Terraria 1.4.5.8) — principale". */
 export const versionLabel = (c: InstallationChoice) => {
-  if (!c.installed) return c.installing ? `${c.version ?? ''} — installazione in corso` : c.pinned ? `${c.version} — da installare` : 'ultima versione — da installare'
+  if (!c.installed) return c.installing ? `${c.version ?? ''} — ${t('installing')}` : c.pinned ? `${c.version} — ${t('to install')}` : `${t('latest version')} — ${t('to install')}`
   const game = c.kind !== 'terraria' && c.gameVersion ? ` (Terraria ${c.gameVersion})` : ''
-  const role = !c.managed ? ` — ${c.path}` : c.pinned ? ' — fissa' : ' — principale'
+  const role = !c.managed ? ` — ${c.path}` : c.pinned ? ` — ${t('pinned')}` : ` — ${t('main')}`
   return `${c.version ?? '?'}${game}${role}`
 }

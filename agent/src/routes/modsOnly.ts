@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { findServer } from '../registry.js'
+import { tr } from '../i18n.js'
 
 /**
  * Mod, Workshop e modpack esistono solo per i server tModLoader: su un server vanilla o TShock le rotte
@@ -13,7 +14,7 @@ export function modsOnlyForTmodloader(app: FastifyInstance) {
     if (server && server.game !== 'tmodloader') {
       return reply.code(409).send({
         error: 'conflict',
-        message: `${server.name} è un server ${server.game === 'tshock' ? 'TShock' : 'Terraria vanilla'}: passa a tModLoader per usare le mod`,
+        message: tr('{server} is a {game} server: switch to tModLoader to use mods', { server: server.name, game: server.game === 'tshock' ? 'TShock' : tr('vanilla Terraria') }),
       })
     }
   })

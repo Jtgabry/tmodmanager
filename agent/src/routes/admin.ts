@@ -18,6 +18,7 @@ import {
 import { GAMES } from '../games.js'
 import { addVersion, findInstallation, listInstallations, listReleases, removeInstallation, startJob, TmlError, VERSION_NAME } from '../tml.js'
 import { switchGame, updateNotices } from '../updates.js'
+import { tr } from '../i18n.js'
 
 /** Operazioni da amministratore: server (creazione, impostazioni, rimozione) e installazioni di Terraria, TShock e tModLoader. */
 export async function adminRoutes(app: FastifyInstance, { manager }: { manager: ServerManager }) {
@@ -87,8 +88,8 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
   // Versioni fisse (Terraria, TShock, tModLoader): ogni server può stare su una versione sua
   app.post<{ Params: { game: string } }>('/admin/installations/:game/versions', async (req, reply) => {
     const game = z.enum(GAMES).safeParse(req.params.game)
-    if (!game.success) return reply.code(404).send({ error: 'not_found', message: 'Gioco sconosciuto' })
-    const { version } = z.object({ version: z.string().regex(VERSION_NAME, 'versione non valida') }).parse(req.body)
+    if (!game.success) return reply.code(404).send({ error: 'not_found', message: tr('Unknown game') })
+    const { version } = z.object({ version: z.string().regex(VERSION_NAME, 'invalid version') }).parse(req.body)
     return reply.code(202).send({ data: await addVersion(game.data, version, manager) })
   })
 
@@ -99,7 +100,7 @@ export async function adminRoutes(app: FastifyInstance, { manager }: { manager: 
 
   app.get<{ Params: { game: string }; Querystring: { refresh?: string } }>('/admin/releases/:game', async (req, reply) => {
     const game = z.enum(GAMES).safeParse(req.params.game)
-    if (!game.success) return reply.code(404).send({ error: 'not_found', message: 'Gioco sconosciuto' })
+    if (!game.success) return reply.code(404).send({ error: 'not_found', message: tr('Unknown game') })
     return { data: await listReleases(game.data, req.query.refresh === '1') }
   })
 

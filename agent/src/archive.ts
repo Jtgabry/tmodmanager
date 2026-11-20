@@ -9,6 +9,7 @@ import { installModFile, listMods, MOD_NAME, ModError, tmpDir, type UploadResult
 import type { ServerDefinition } from './registry.js'
 import { compareVersions } from './tml.js'
 import { type ModInfo, readModInfo, TmodError } from './tmod.js'
+import { tr } from './i18n.js'
 
 /**
  * Archivio delle versioni delle mod, per server: le versioni NON installate di ogni mod, così un
@@ -155,7 +156,7 @@ export async function uploadToArchive(server: ServerDefinition, body: Readable):
     let received = 0
     body.on('data', (chunk: Buffer) => {
       received += chunk.length
-      if (received > MAX_UPLOAD_BYTES) body.destroy(new ModError('File troppo grande (max 1 GB)', 413))
+      if (received > MAX_UPLOAD_BYTES) body.destroy(new ModError(tr('File too large (max {size})', { size: '1 GB' }), 413))
     })
     await pipeline(body, createWriteStream(tmp))
 
@@ -163,14 +164,14 @@ export async function uploadToArchive(server: ServerDefinition, body: Readable):
     try {
       info = await readModInfo(tmp)
     } catch (err) {
-      throw new ModError(err instanceof TmodError ? err.message : 'File .tmod non leggibile', 422)
+      throw new ModError(err instanceof TmodError ? err.message : tr('Unreadable .tmod file'), 422)
     }
-    if (!MOD_VERSION.test(info.version)) throw new ModError(`Versione della mod non valida: "${info.version}"`, 422)
+    if (!MOD_VERSION.test(info.version)) throw new ModError(tr('Invalid mod version: "{version}"', { version: info.version }), 422)
 
     return await withServerLock(server, async () => {
       const installed = (await listMods(server)).mods.find((m) => m.name === info.name)
       if (installed?.version === info.version) {
-        throw new ModError(`La versione ${info.version} di ${info.displayName ?? info.name} è quella installata: è già disponibile`, 409)
+        throw new ModError(tr('Version {version} of {mod} is the installed one: it is already available', { version: info.version ?? '?', mod: info.displayName ?? info.name }), 409)
       }
       await moveToArchive(server, tmp, info)
       const { size, mtimeMs } = await stat(versionPath(server, info.name, info.version))
@@ -183,7 +184,7 @@ export async function uploadToArchive(server: ServerDefinition, body: Readable):
 
 /** Elimina definitivamente una versione dall'archivio. Da chiamare dentro withServerLock. */
 export async function deleteArchived(server: ServerDefinition, name: string, version: string) {
-  if (!(await hasArchivedVersion(server, name, version))) throw new ModError(`Versione ${version} di "${name}" non presente nell'archivio`, 404)
+  if (!(await hasArchivedVersion(server, name, version))) throw new ModError(tr('Version {version} of "{mod}" is not in the archive', { version, mod: name }), 404)
   await unlink(versionPath(server, name, version))
   infoCache.delete(versionPath(server, name, version))
   await rmdir(modDir(server, name)).catch(() => undefined)
@@ -194,7 +195,7 @@ export async function deleteArchived(server: ServerDefinition, name: string, ver
  * La mod resta abilitata se lo era. Da chiamare dentro withServerLock.
  */
 export async function useArchivedVersion(server: ServerDefinition, name: string, version: string): Promise<UploadResult> {
-  if (!(await hasArchivedVersion(server, name, version))) throw new ModError(`Versione ${version} di "${name}" non presente nell'archivio`, 404)
+  if (!(await hasArchivedVersion(server, name, version))) throw new ModError(tr('Version {version} of "{mod}" is not in the archive', { version, mod: name }), 404)
   const source = versionPath(server, name, version)
   const info = await readModInfo(source)
   // Fuori dalla cartella dell'archivio prima di installare: installModFile vi rimette la versione attuale

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAdminServerActions, useGameUpdates } from '../lib/admin'
 import { errorMessage } from '../lib/api'
 import { GAME_LABEL, type SwitchJob, type UpdateNotice } from '../lib/types'
+import { t, tn } from '../i18n'
 
 /**
  * Avvisi per gli amministratori dal controllo giornaliero degli aggiornamenti (fatto dall'agent al
@@ -73,7 +74,7 @@ function SwitchProgress({ job, onClose }: { job: SwitchJob; onClose: () => void 
       {!running && (
         <div className="btn-row">
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            Chiudi
+            {t('Close')}
           </button>
         </div>
       )}
@@ -92,6 +93,13 @@ function Notice({ notice, switches, onDismiss }: { notice: UpdateNotice; switche
   return busy(notice.server.id) ? null : <TshockReady notice={notice} onDismiss={onDismiss} />
 }
 
+const releaseNotes = (url: string | null | undefined) =>
+  url && (
+    <a href={url} target="_blank" rel="noreferrer">
+      {t('Release notes')}
+    </a>
+  )
+
 function UpdateAvailable({
   notice,
   busy,
@@ -108,12 +116,16 @@ function UpdateAvailable({
   const singleServer = notice.servers.find((s) => s.id === single)
   const others = notice.servers.filter((s) => !busy(s.id))
   const label = GAME_LABEL[notice.game]
-  const forTerraria = notice.game !== 'terraria' && notice.gameVersion ? ` (per Terraria ${notice.gameVersion})` : ''
+  const forTerraria = notice.game !== 'terraria' && notice.gameVersion ? ` ${t('(for Terraria {version})', { version: notice.gameVersion })}` : ''
 
   if (updateTml.isSuccess) {
     return (
       <div className="alert alert-info">
-        Aggiornamento di {label} alla {notice.to} avviato. L'avanzamento è in <Link to="/admin/servers">Gestione server</Link>.
+        {tn('Update of {game} to {version} started. Progress is shown in {link}.', {
+          game: label,
+          version: notice.to,
+          link: <Link to="/admin/servers">{t('Server management')}</Link>,
+        })}
       </div>
     )
   }
@@ -121,29 +133,32 @@ function UpdateAvailable({
   return (
     <div className="alert alert-info">
       <p>
-        È disponibile <strong>{label} {notice.to}</strong>
-        {forTerraria} — installata la {notice.from ?? '?'}
-        {notice.servers.length > 0 ? `, usata da ${names(notice.servers)}` : ', nessun server la usa'}.{' '}
-        {notice.url && (
-          <a href={notice.url} target="_blank" rel="noreferrer">
-            Note di rilascio
-          </a>
-        )}
+        {tn('{release} is available', { release: <strong>{label} {notice.to}</strong> })}
+        {forTerraria} — {t('{version} installed', { version: notice.from ?? '?' })}
+        {notice.servers.length > 0 ? t(', used by {servers}', { servers: names(notice.servers) }) : t(', no server uses it')}.{' '}
+        {releaseNotes(notice.url)}
       </p>
       {singleServer && (
         <p className="small">
-          Solo <strong>{singleServer.name}</strong> passa a {label} {notice.to}, installato come versione fissa; gli altri
-          server restano sulla {notice.from ?? 'versione attuale'}. Se è acceso viene spento (salvando il mondo) e riacceso.
+          {tn(
+            'Only {server} moves to {game} {version}, installed as a pinned version; the other servers stay on {current}. If it is running it is stopped (saving the world) and started again.',
+            {
+              server: <strong>{singleServer.name}</strong>,
+              game: label,
+              version: notice.to,
+              current: notice.from ?? t('the current version'),
+            },
+          )}
         </p>
       )}
       {confirm && (
         <p className="small">
           {notice.servers.length > 0
-            ? `Si aggiornano tutti i server che la usano (${names(notice.servers)}): quelli accesi vengono spenti (salvando il mondo) e riaccesi alla fine. `
+            ? `${t('All the servers that use it are updated ({servers}): the running ones are stopped (saving the world) and started again at the end.', { servers: names(notice.servers) })} `
             : ''}
           {notice.game === 'tmodloader'
-            ? 'Le mod potrebbero richiedere un aggiornamento per la nuova versione.'
-            : 'I giocatori devono avere la stessa versione di Terraria del server per entrare.'}
+            ? t('Mods might need an update for the new version.')
+            : t('Players need the same Terraria version as the server to join.')}
         </p>
       )}
       <div className="btn-row">
@@ -157,10 +172,10 @@ function UpdateAvailable({
                 switchGame.mutate({ id: singleServer.id, game: notice.game, version: notice.to }, { onSettled: () => setSingle(null) })
               }
             >
-              Conferma: aggiorna solo {singleServer.name}
+              {t('Confirm: update only {server}', { server: singleServer.name })}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSingle(null)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </>
         ) : confirm ? (
@@ -171,25 +186,25 @@ function UpdateAvailable({
               disabled={updateTml.isPending}
               onClick={() => updateTml.mutate({ id: notice.installation, version: notice.to, restartServers: true })}
             >
-              Conferma aggiornamento
+              {t('Confirm update')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(false)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </>
         ) : (
           <>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setConfirm(true)}>
-              {notice.servers.length > 1 ? `Aggiorna ${label} per tutti` : `Aggiorna ${label}`}
+              {notice.servers.length > 1 ? t('Update {game} for all', { game: label }) : t('Update {game}', { game: label })}
             </button>
             {notice.servers.length > 1 &&
               others.map((s) => (
                 <button key={s.id} type="button" className="btn btn-sm" onClick={() => setSingle(s.id)}>
-                  Aggiorna solo {s.name}
+                  {t('Update only {server}', { server: s.name })}
                 </button>
               ))}
             <button type="button" className="btn btn-ghost btn-sm" onClick={onDismiss}>
-              Nascondi
+              {t('Hide')}
             </button>
           </>
         )}
@@ -205,24 +220,26 @@ function ServerUpdate({ notice, onDismiss }: { notice: Extract<UpdateNotice, { t
   const { switchGame } = useAdminServerActions()
   const [confirm, setConfirm] = useState(false)
   const label = GAME_LABEL[notice.game]
-  const forTerraria = notice.game !== 'terraria' && notice.gameVersion ? ` (per Terraria ${notice.gameVersion})` : ''
+  const forTerraria = notice.game !== 'terraria' && notice.gameVersion ? ` ${t('(for Terraria {version})', { version: notice.gameVersion })}` : ''
 
   return (
     <div className="alert alert-info">
       <p>
-        È disponibile <strong>{label} {notice.to}</strong>
-        {forTerraria} per <strong>{notice.server.name}</strong>, che è sulla versione fissa {notice.from}.{' '}
-        {notice.url && (
-          <a href={notice.url} target="_blank" rel="noreferrer">
-            Note di rilascio
-          </a>
-        )}
+        {tn('{release} is available', { release: <strong>{label} {notice.to}</strong> })}
+        {forTerraria}{' '}
+        {tn('for {server}, which is on the pinned version {version}.', {
+          server: <strong>{notice.server.name}</strong>,
+          version: notice.from,
+        })}{' '}
+        {releaseNotes(notice.url)}
       </p>
       {confirm && (
         <p className="small">
-          {label} {notice.to} viene installato come versione fissa (se non c'è già) e solo questo server ci passa. Se è
-          acceso viene spento (salvando il mondo) e riacceso.
-          {notice.game === 'tmodloader' && ' Le mod potrebbero richiedere un aggiornamento per la nuova versione.'}
+          {t(
+            '{game} {version} is installed as a pinned version (if not there already) and only this server moves to it. If it is running it is stopped (saving the world) and started again.',
+            { game: label, version: notice.to },
+          )}
+          {notice.game === 'tmodloader' && ` ${t('Mods might need an update for the new version.')}`}
         </p>
       )}
       <div className="btn-row">
@@ -234,19 +251,19 @@ function ServerUpdate({ notice, onDismiss }: { notice: Extract<UpdateNotice, { t
               disabled={switchGame.isPending}
               onClick={() => switchGame.mutate({ id: notice.server.id, game: notice.game, version: notice.to }, { onSettled: () => setConfirm(false) })}
             >
-              Conferma aggiornamento
+              {t('Confirm update')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(false)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </>
         ) : (
           <>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setConfirm(true)}>
-              Aggiorna {notice.server.name}
+              {t('Update {server}', { server: notice.server.name })}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={onDismiss}>
-              Nascondi
+              {t('Hide')}
             </button>
           </>
         )}
@@ -264,18 +281,27 @@ function TshockBehind({ notice, onDismiss }: { notice: Extract<UpdateNotice, { t
   return (
     <div className="alert alert-warning">
       <p>
-        È uscito <strong>Terraria {notice.terrariaVersion}</strong>, ma TShock supporta ancora Terraria{' '}
-        {notice.tshockGameVersion ?? '?'}: chi ha già aggiornato il gioco non può entrare in {names(notice.servers)}.
+        {tn(
+          '{release} is out, but TShock still supports Terraria {supported}: whoever already updated the game cannot join {servers}.',
+          {
+            release: <strong>Terraria {notice.terrariaVersion}</strong>,
+            supported: notice.tshockGameVersion ?? '?',
+            servers: names(notice.servers),
+          },
+        )}
       </p>
       <p className="small">
-        Nel frattempo puoi passare il server a Terraria vanilla {notice.terrariaVersion}. Mondo, dati di TShock e plugin
-        restano dove sono (i plugin non sono attivi finché il server è vanilla), e quando esce TShock aggiornato qui
-        compare il pulsante per tornarci.
+        {t(
+          'Meanwhile you can switch the server to vanilla Terraria {version}. World, TShock data and plugins stay where they are (plugins are inactive while the server is vanilla), and when an updated TShock comes out a button to switch back appears here.',
+          { version: notice.terrariaVersion },
+        )}
       </p>
       {target && (
         <p className="small">
-          <strong>{target.name}</strong>, se acceso, viene spento salvando il mondo e riacceso su vanilla. Se usi i
-          personaggi salvati sul server (SSC di TShock), su vanilla ognuno entra con il suo personaggio locale.
+          {tn(
+            '{server}, if running, is stopped saving the world and started again on vanilla. If you use characters saved on the server (TShock SSC), on vanilla everyone joins with their local character.',
+            { server: <strong>{target.name}</strong> },
+          )}
         </p>
       )}
       <div className="btn-row">
@@ -287,21 +313,23 @@ function TshockBehind({ notice, onDismiss }: { notice: Extract<UpdateNotice, { t
               disabled={switchGame.isPending}
               onClick={() => switchGame.mutate({ id: target.id, game: 'terraria' }, { onSettled: () => setConfirm(null) })}
             >
-              Conferma: passa a Terraria {notice.terrariaVersion}
+              {t('Confirm: switch to Terraria {version}', { version: notice.terrariaVersion })}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </>
         ) : (
           <>
             {notice.servers.map((s) => (
               <button key={s.id} type="button" className="btn btn-warning btn-sm" onClick={() => setConfirm(s.id)}>
-                Passa {notice.servers.length > 1 ? `«${s.name}» ` : ''}a Terraria {notice.terrariaVersion}
+                {notice.servers.length > 1
+                  ? t('Switch «{server}» to Terraria {version}', { server: s.name, version: notice.terrariaVersion })
+                  : t('Switch to Terraria {version}', { version: notice.terrariaVersion })}
               </button>
             ))}
             <button type="button" className="btn btn-ghost btn-sm" onClick={onDismiss}>
-              Nascondi
+              {t('Hide')}
             </button>
           </>
         )}
@@ -318,13 +346,17 @@ function TshockReady({ notice, onDismiss }: { notice: Extract<UpdateNotice, { ty
   return (
     <div className="alert alert-success">
       <p>
-        <strong>TShock {notice.tshockVersion}</strong> supporta Terraria {notice.tshockGameVersion}:{' '}
-        <strong>{notice.server.name}</strong> può tornare su TShock, con i suoi dati e plugin.
+        {tn('{release} supports Terraria {version}: {server} can go back to TShock, with its data and plugins.', {
+          release: <strong>TShock {notice.tshockVersion}</strong>,
+          version: notice.tshockGameVersion,
+          server: <strong>{notice.server.name}</strong>,
+        })}
       </p>
       {confirm && (
         <p className="small">
-          {notice.needsUpdate && `Prima viene installata TShock ${notice.tshockVersion} (gli altri server TShock accesi vengono riavviati). `}
-          Il server, se acceso, viene spento salvando il mondo e riacceso su TShock.
+          {notice.needsUpdate &&
+            `${t('First TShock {version} is installed (the other running TShock servers are restarted).', { version: notice.tshockVersion })} `}
+          {t('The server, if running, is stopped saving the world and started again on TShock.')}
         </p>
       )}
       <div className="btn-row">
@@ -336,25 +368,25 @@ function TshockReady({ notice, onDismiss }: { notice: Extract<UpdateNotice, { ty
               disabled={switchGame.isPending}
               onClick={() => switchGame.mutate({ id: notice.server.id, game: 'tshock' }, { onSettled: () => setConfirm(false) })}
             >
-              Conferma: torna su TShock
+              {t('Confirm: go back to TShock')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(false)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </>
         ) : (
           <>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setConfirm(true)}>
-              Riporta su TShock
+              {t('Move back to TShock')}
             </button>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
               disabled={stayVanilla.isPending}
-              title="Non proporlo più per questo server"
+              title={t("Don't suggest it again for this server")}
               onClick={() => stayVanilla.mutate(notice.server.id, { onSuccess: onDismiss })}
             >
-              Resta su vanilla
+              {t('Stay on vanilla')}
             </button>
           </>
         )}

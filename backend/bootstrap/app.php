@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureUserIsApproved;
+use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,6 +17,9 @@ $app = Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // La SPA React si autentica con sessione e cookie (stesso dominio), non con token.
         $middleware->statefulApi();
+
+        // Messaggi delle API nella lingua scelta nel pannello (Accept-Language)
+        $middleware->api(append: [SetLocale::class]);
 
         // Il contenuto dei file dall'editor va salvato esattamente com'è (spazi e a capo compresi)
         $middleware->trimStrings(except: ['content']);

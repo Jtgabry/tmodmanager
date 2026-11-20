@@ -52,7 +52,7 @@ class AuthTest extends TestCase
 
         $this->postJson(route('api.v1.auth.login'), ['email' => 'utente@example.com', 'password' => 'password'])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['email' => 'Troppi tentativi']);
+            ->assertJsonValidationErrors(['email' => 'Too many attempts']);
 
         $this->assertGuest();
     }

@@ -28,6 +28,7 @@ import { listSessions, quitSession, type ScreenSession, sendLine, startSession }
 import { readConfigPassword, readServerConfig } from './serverConfig.js'
 import { type Game, gameLabel, TERRARIA_ASSEMBLY, TERRARIA_BINARY, TSHOCK_BINARY, tshockDataDir, tshockPluginsDir } from './games.js'
 import { gameVersion, installedVersion, isInstalled, recordWorldRelease } from './tml.js'
+import { tr } from './i18n.js'
 
 export type ServerState = 'stopped' | 'starting' | 'running' | 'stopping'
 type Operation = 'start' | 'stop' | 'restart'
@@ -275,21 +276,21 @@ export class ServerManager {
 
   /** Valida subito (errori → eccezione), poi esegue il resto in background: lo stato si segue con GET. */
   private async launch(server: ServerDefinition, op: Operation, task: () => Promise<void>) {
-    if (this.closing) throw new ConflictError('L\'agent si sta spegnendo: riprova tra poco')
+    if (this.closing) throw new ConflictError(tr('The agent is shutting down: try again shortly'))
     const running = this.operations.get(server.id)
-    if (running) throw new ConflictError(`Operazione "${running}" già in corso`)
+    if (running) throw new ConflictError(tr('Operation "{operation}" already in progress', { operation: running }))
     const blocked = this.blockedServers.get(server.id) ?? this.blockedInstalls.get(server.installDir)
     if (blocked) throw new ConflictError(blocked)
     if (op === 'start' && !(await isInstalled(server.installDir))) {
-      throw new ConflictError(`${gameLabel(server.game)} non è installato: installalo da Gestione server → Installazioni`)
+      throw new ConflictError(tr('{game} is not installed: install it from Server management → Installations', { game: gameLabel(server.game) }))
     }
 
     const { main, managed } = this.locate(server, await listProcesses(), await listSessions())
-    if (op === 'start' && main) throw new ConflictError('Il server è già acceso')
-    if (op !== 'start' && !main) throw new ConflictError('Il server è spento')
+    if (op === 'start' && main) throw new ConflictError(tr('The server is already running'))
+    if (op !== 'start' && !main) throw new ConflictError(tr('The server is stopped'))
     if (op !== 'start' && !managed) {
       throw new ConflictError(
-        `Il server non gira nella sessione screen "${server.screenSession}": l'agent non può inviargli comandi`,
+        tr('The server is not running in the screen session "{session}": the agent cannot send it commands', { session: server.screenSession }),
       )
     }
 
@@ -308,7 +309,7 @@ export class ServerManager {
   /** Avvio/spegnimento atteso fino alla fine (per l'aggiornamento di tModLoader). Ignora il blocco dell'installazione. */
   async runBlocking(server: ServerDefinition, op: 'start' | 'stop') {
     const running = this.operations.get(server.id)
-    if (running) throw new ConflictError(`Operazione "${running}" già in corso su ${server.name}`)
+    if (running) throw new ConflictError(tr('Operation "{operation}" already in progress on {server}', { operation: running, server: server.name }))
     this.operations.set(server.id, op)
     this.errors.delete(server.id)
     try {
@@ -355,16 +356,16 @@ export class ServerManager {
       if (server.game !== 'tmodloader' && alive) answeredAt = await this.answerPrompts(server, alive, answeredAt)
       // Al primo avvio lo script di tModLoader scarica .NET prima di lanciare il server: finché la
       // sessione screen è viva l'avvio è in corso anche se il processo del server non c'è ancora
-      if (!main && !alive) throw new Error(`Il server si è chiuso durante l'avvio (vedi ${logFile})`)
+      if (!main && !alive) throw new Error(tr('The server shut down during startup (see {file})', { file: logFile }))
       if ((await socketsOnPort(settings.port)).listening) return
     }
-    throw new Error(`Il server non ha aperto la porta ${settings.port} entro ${config.startTimeout}s`)
+    throw new Error(tr('The server did not open port {port} within {seconds}s', { port: settings.port, seconds: config.startTimeout }))
   }
 
   private async doStop(server: ServerDefinition) {
     this.phases.set(server.id, 'stopping')
     const { session } = this.locate(server, await listProcesses(), await listSessions())
-    if (!session) throw new Error('Sessione screen non trovata')
+    if (!session) throw new Error(tr('Screen session not found'))
 
     // "exit" salva il mondo e chiude il server (e i subworld)
     await sendLine(session, 'exit')
@@ -378,7 +379,7 @@ export class ServerManager {
         return
       }
     }
-    throw new Error(`Il server non si è chiuso entro ${config.stopTimeout}s dopo "exit"`)
+    throw new Error(tr('The server did not shut down within {seconds}s after "exit"', { seconds: config.stopTimeout }))
   }
 
   /**
@@ -465,8 +466,8 @@ export class ServerManager {
   async sendCommand(server: ServerDefinition, command: unknown) {
     const line = validateCommand(command)
     const { session, main, managed } = this.locate(server, await listProcesses(), await listSessions())
-    if (!main) throw new ConflictError('Il server è spento')
-    if (!session || !managed) throw new ConflictError('Il server non gira nella sessione screen gestita')
+    if (!main) throw new ConflictError(tr('The server is stopped'))
+    if (!session || !managed) throw new ConflictError(tr('The server is not running in the managed screen session'))
     await ensureConsoleLog(server, session)
     await sendLine(session, line)
   }

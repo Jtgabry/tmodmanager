@@ -1,5 +1,6 @@
 import { formatBytes, formatDuration } from '../lib/format'
 import { GAME_LABEL, type Server } from '../lib/types'
+import { t } from '../i18n'
 
 /** `tiles`: ogni valore in un riquadro a sé (pagina Panoramica). */
 export default function ServerStats({ server, tiles = false }: { server: Server; tiles?: boolean }) {
@@ -7,7 +8,7 @@ export default function ServerStats({ server, tiles = false }: { server: Server;
   return (
     <dl className={tiles ? 'stats stats-tiles' : 'stats'}>
       <div>
-        <dt>Giocatori</dt>
+        <dt>{t('Players')}</dt>
         <dd>{on ? `${server.players.online} / ${server.players.max}` : '—'}</dd>
       </div>
       <div>
@@ -23,11 +24,11 @@ export default function ServerStats({ server, tiles = false }: { server: Server;
         <dd>{formatDuration(server.uptimeSeconds)}</dd>
       </div>
       <div>
-        <dt>Mondo</dt>
+        <dt>{t('World')}</dt>
         <dd>{server.world ?? '—'}</dd>
       </div>
       <div>
-        <dt>Porta</dt>
+        <dt>{t('Port')}</dt>
         <dd>{server.port}</dd>
       </div>
       <div>

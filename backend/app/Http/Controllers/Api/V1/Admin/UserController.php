@@ -49,7 +49,7 @@ class UserController extends Controller
     public function destroy(Request $request, User $user): Response|JsonResponse
     {
         if ($user->is($request->user())) {
-            return response()->json(['error' => 'forbidden', 'message' => 'Non puoi eliminare il tuo account.'], 422);
+            return response()->json(['error' => 'forbidden', 'message' => __('You cannot delete your own account.')], 422);
         }
 
         $this->logoutEverywhere($user);

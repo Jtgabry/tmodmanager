@@ -56,7 +56,7 @@ export class ConsoleHub {
   async attach(serverId: string, socket: WebSocket) {
     const server = await findServer(serverId)
     if (!server) {
-      socket.close(4004, 'server non trovato')
+      socket.close(4004, 'server not found')
       return
     }
     // Prima risposta: la coda del log (come la GET /console senza offset); assicura anche che il log sia attivo
@@ -104,7 +104,7 @@ export class ConsoleHub {
       }
       for (const client of channel.clients) {
         if (Date.now() - client.openedAt > MAX_SESSION_MS) {
-          client.socket.close(4001, 'sessione scaduta')
+          client.socket.close(4001, 'session expired')
           continue
         }
         const chunk = await readConsole(channel.server, client.offset)

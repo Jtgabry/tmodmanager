@@ -22,6 +22,7 @@ import {
   startJob,
   TmlError,
 } from './tml.js'
+import { tr } from './i18n.js'
 
 /**
  * Aggiornamenti di Terraria, TShock e tModLoader.
@@ -300,14 +301,14 @@ async function versionTarget(game: Game, version: string, manager: ServerManager
 async function installationTarget(installDir: string, manager: ServerManager): Promise<Target> {
   const installation = (await listInstallations()).find((i) => i.path === installDir)
   if (!installation || (!installation.installed && !installation.managed)) {
-    throw new ServerAdminError('Installazione sconosciuta', 422, 'installDir')
+    throw new ServerAdminError(tr('Unknown installation'), 422, 'installDir')
   }
   const { kind: game } = installation
   if (busy(installation.job)) return { game, dir: installDir, version: installation.job.toVersion, job: installation.job }
   if (installation.installed) return { game, dir: installDir, version: installation.version, job: null }
-  if (installation.pinned) throw new ServerAdminError('Questa versione fissa non è installata: aggiungila di nuovo', 409, 'installDir')
+  if (installation.pinned) throw new ServerAdminError(tr('This pinned version is not installed: add it again'), 409, 'installDir')
   const latest = latestOf(await listReleases(game))
-  if (!latest) throw new ServerAdminError(`Nessuna versione stabile di ${gameLabel(game)} trovata`, 409)
+  if (!latest) throw new ServerAdminError(tr('No stable version of {game} found', { game: gameLabel(game) }), 409)
   return { game, dir: installDir, version: latest.version, job: await startJob(installation, { version: latest.version }, false, manager) }
 }
 
@@ -318,7 +319,7 @@ async function installationTarget(installDir: string, manager: ServerManager): P
 async function terrariaTarget(manager: ServerManager): Promise<Target> {
   const s = await loadState()
   const version = s.latest.terraria?.version ?? latestOf(await listReleases('terraria'))?.version
-  if (!version) throw new ServerAdminError('Nessuna versione di Terraria trovata', 409)
+  if (!version) throw new ServerAdminError(tr('No Terraria version found'), 409)
   const installations = await listInstallations()
   const ready = installations.find((i) => i.kind === 'terraria' && i.installed && i.version === version)
   if (ready) return { game: 'terraria', dir: ready.path, version, job: null }
@@ -333,16 +334,16 @@ async function terrariaTarget(manager: ServerManager): Promise<Target> {
 async function tshockTarget(server: ServerDefinition, manager: ServerManager): Promise<Target> {
   const installations = await listInstallations()
   const main = mainInstallation(installations, 'tshock')
-  if (!main) throw new ServerAdminError('Installazione di TShock non trovata', 409)
+  if (!main) throw new ServerAdminError(tr('TShock installation not found'), 409)
   const needed = await gameVersion(server.installDir, server.game).catch(() => null)
   if (busy(main.job)) return { game: 'tshock', dir: main.path, version: main.job.toVersion, job: main.job }
   if (main.installed && (!needed || atLeast(main.gameVersion, needed))) return { game: 'tshock', dir: main.path, version: main.version, job: null }
 
   const latest = latestOf(await listReleases('tshock'))
-  if (!latest) throw new ServerAdminError('Nessuna versione stabile di TShock trovata', 409)
+  if (!latest) throw new ServerAdminError(tr('No stable version of {game} found', { game: 'TShock' }), 409)
   if (needed && !atLeast(latest.gameVersion, needed)) {
     throw new ServerAdminError(
-      `TShock ${latest.version} supporta Terraria ${latest.gameVersion ?? '?'}, ma il server è su Terraria ${needed}: aspetta una versione di TShock più recente`,
+      tr('TShock {version} supports Terraria {supported}, but the server is on Terraria {needed}: wait for a newer TShock version', { version: latest.version, supported: latest.gameVersion ?? '?', needed }),
       409,
     )
   }
@@ -362,7 +363,7 @@ export type SwitchRequest = { installDir: string } | { game: Game; version?: str
 async function resolveTarget(server: ServerDefinition, request: SwitchRequest, manager: ServerManager): Promise<Target> {
   if ('installDir' in request) return installationTarget(request.installDir, manager)
   if (request.version) return versionTarget(request.game, request.version, manager)
-  if (server.game === request.game) throw new ServerAdminError(`${server.name} è già un server ${gameLabel(request.game)}`, 409)
+  if (server.game === request.game) throw new ServerAdminError(tr('{server} is already a {game} server', { server: server.name, game: gameLabel(request.game) }), 409)
   if (request.game === 'terraria') return terrariaTarget(manager)
   if (request.game === 'tshock') return tshockTarget(server, manager)
   return installationTarget(paths.tmlInstall(), manager)
@@ -375,19 +376,19 @@ async function resolveTarget(server: ServerDefinition, request: SwitchRequest, m
  */
 export async function switchGame(id: string, request: SwitchRequest, manager: ServerManager): Promise<SwitchJob> {
   const server = (await loadServers()).find((s) => s.id === id)
-  if (!server) throw new ServerAdminError('Server non trovato', 404)
+  if (!server) throw new ServerAdminError(tr('Server not found'), 404)
   const current = switches.get(id)
-  if (current && !finished(current)) throw new ServerAdminError(`Passaggio di ${server.name} già in corso`, 409)
+  if (current && !finished(current)) throw new ServerAdminError(tr('Switch of {server} already in progress', { server: server.name }), 409)
   const status = await manager.status(server)
-  if (status.operation) throw new ServerAdminError(`Operazione in corso su ${server.name}: riprova tra poco`, 409)
+  if (status.operation) throw new ServerAdminError(tr('Operation in progress on {server}: try again shortly', { server: server.name }), 409)
   if (status.state !== 'stopped' && !status.managed) {
-    throw new ServerAdminError(`${server.name} è acceso fuori dal pannello: spegnilo prima`, 409)
+    throw new ServerAdminError(tr('{server} is running outside the panel: stop it first', { server: server.name }), 409)
   }
   if ('installDir' in request && request.installDir === server.installDir) {
-    throw new ServerAdminError(`${server.name} usa già questa installazione`, 409, 'installDir')
+    throw new ServerAdminError(tr('{server} already uses this installation', { server: server.name }), 409, 'installDir')
   }
   if ('game' in request && request.version && paths.gameVersion(request.game, request.version) === server.installDir) {
-    throw new ServerAdminError(`${server.name} usa già ${gameLabel(request.game)} ${request.version}`, 409)
+    throw new ServerAdminError(tr('{server} already uses {game} {version}', { server: server.name, game: gameLabel(request.game), version: request.version ?? '' }), 409)
   }
 
   let target: Target
@@ -406,18 +407,18 @@ export async function switchGame(id: string, request: SwitchRequest, manager: Se
     to,
     version: target.version,
     phase: target.job ? 'installing' : 'stopping',
-    message: target.job ? `Installazione di ${gameLabel(to)} ${target.version ?? ''}…` : 'Preparazione…',
+    message: target.job ? tr('Installing {game} {version}…', { game: gameLabel(to), version: target.version ?? '' }) : tr('Preparing…'),
     error: null,
     startedAt: new Date().toISOString(),
     finishedAt: null,
   }
   switches.set(id, job)
-  manager.blockServer(id, `Passaggio a ${gameLabel(to)} in corso: riprova quando è finito`)
+  manager.blockServer(id, tr('Switch to {game} in progress: try again when it is finished', { game: gameLabel(to) }))
   runSwitch(job, server, target, manager)
     .catch((err: Error) => {
       job.phase = 'error'
       job.error = err.message
-      job.message = `Passaggio a ${gameLabel(to)} non riuscito`
+      job.message = tr('Switch to {game} failed', { game: gameLabel(to) })
       job.finishedAt = new Date().toISOString()
     })
     .finally(() => manager.unblockServer(id))
@@ -429,9 +430,9 @@ async function runSwitch(job: SwitchJob, server: ServerDefinition, target: Targe
     // L'installazione prosegue nel suo job: si aspetta che finisca
     for (;;) {
       const install = installationJob(target.dir)
-      if (!install || install.phase === 'error') throw new Error(`Installazione non riuscita: ${install?.error ?? 'interrotta'}`)
+      if (!install || install.phase === 'error') throw new Error(tr('Installation failed: {error}', { error: install?.error ?? tr('interrupted') }))
       if (install.phase === 'done') break
-      job.message = `Installazione di ${gameLabel(job.to)} ${target.version ?? ''}: ${install.message}`
+      job.message = tr('Installing {game} {version}: {progress}', { game: gameLabel(job.to), version: target.version ?? '', progress: install.message })
       await sleep(1000)
     }
   }
@@ -439,23 +440,26 @@ async function runSwitch(job: SwitchJob, server: ServerDefinition, target: Targe
   const wasRunning = (await manager.status(server)).state !== 'stopped'
   if (wasRunning) {
     job.phase = 'stopping'
-    job.message = `Spegnimento di ${server.name} (salvataggio del mondo)…`
+    job.message = tr('Stopping {server} (saving the world)…', { server: server.name })
     await manager.runBlocking(server, 'stop')
   }
 
   job.phase = 'switching'
-  job.message = `Passaggio a ${gameLabel(job.to)}…`
+  job.message = tr('Switching to {game}…', { game: gameLabel(job.to) })
   await updateServer(server.id, { installDir: target.dir }, manager)
 
   if (wasRunning) {
     job.phase = 'starting'
-    job.message = `Avvio di ${server.name}…`
+    job.message = tr('Starting {server}…', { server: server.name })
     const updated = (await loadServers()).find((s) => s.id === server.id)
     if (updated) await manager.runBlocking(updated, 'start')
   }
 
   job.phase = 'done'
-  job.message = `${server.name} ora è un server ${gameLabel(job.to)}${target.version ? ` ${target.version}` : ''}${wasRunning ? ' ed è stato riacceso' : ''}.`
+  const now = `${gameLabel(job.to)}${target.version ? ` ${target.version}` : ''}`
+  job.message = wasRunning
+    ? tr('{server} is now a {game} server and has been started again.', { server: server.name, game: now })
+    : tr('{server} is now a {game} server.', { server: server.name, game: now })
   job.finishedAt = new Date().toISOString()
 }
 

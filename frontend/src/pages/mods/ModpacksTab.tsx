@@ -6,13 +6,14 @@ import PageActions from '../../components/PageActions'
 import { errorMessage } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
 import { formatBytes } from '../../lib/format'
-import { PACK_STATE, packModsOf, packSize } from '../../lib/modpacks'
+import { packState, packModsOf, packSize } from '../../lib/modpacks'
 import { useDeleteModpack, useModpacks, useMods, useSaveModpack } from '../../lib/mods'
 import type { Mod, Modpack } from '../../lib/types'
 import ExportPackSheet from './ExportPackSheet'
 import ModpackImport from './ModpackImport'
 import { usePackActivation } from './usePackActivation'
 import PackCover from './PackCover'
+import { t, tn } from '../../i18n'
 
 type Show = 'all' | 'on' | 'off'
 
@@ -53,7 +54,7 @@ export default function ModpacksTab() {
     <div className="stack">
       <PageActions>
         <span className="muted page-summary">
-          {list.length} modpack · {activeCount} {activeCount === 1 ? 'attivo' : 'attivi'}
+          {t('{count} modpacks', { count: list.length })} · {activeCount === 1 ? t('1 active') : t('{count} active', { count: activeCount })}
         </span>
         <div className="btn-row">
           <button type="button" className="btn" onClick={() => setDialog('import')}>
@@ -62,13 +63,13 @@ export default function ModpacksTab() {
               <path d="M7 11l5 5 5-5" />
               <path d="M4 20h16" />
             </svg>
-            <span className="hide-narrow">Importa da tModLoader</span>
+            <span className="hide-narrow">{t('Import from tModLoader')}</span>
           </button>
           <button type="button" className="btn btn-primary" onClick={() => setDialog('new')}>
             <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5v14M5 12h14" />
             </svg>
-            Nuovo modpack
+            {t('New modpack')}
           </button>
         </div>
       </PageActions>
@@ -80,14 +81,14 @@ export default function ModpacksTab() {
               <circle cx="11" cy="11" r="7" />
               <path d="M20 20l-3.5-3.5" />
             </svg>
-            <input type="search" placeholder="Cerca un modpack…" aria-label="Cerca un modpack" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input type="search" placeholder={t('Search a modpack…')} aria-label={t('Search a modpack')} value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
-          <div className="segmented" role="group" aria-label="Stato dei modpack">
+          <div className="segmented" role="group" aria-label={t('Modpack status')}>
             {(
               [
-                ['all', 'Tutti', list.length],
-                ['on', 'Attivi', activeCount],
-                ['off', 'Disattivi', list.length - activeCount],
+                ['all', t('All'), list.length],
+                ['on', t('Active|packs'), activeCount],
+                ['off', t('Inactive|packs'), list.length - activeCount],
               ] as const
             ).map(([value, label, count]) => (
               <button key={value} type="button" className={show === value ? 'active' : ''} aria-pressed={show === value} onClick={() => setShow(value)}>
@@ -103,10 +104,10 @@ export default function ModpacksTab() {
 
       {list.length === 0 ? (
         <div className="empty">
-          Nessun modpack. Un modpack è un gruppo di mod da attivare o disattivare insieme, anche a versioni precise.
+          {t('No modpacks. A modpack is a group of mods to activate or deactivate together, even at specific versions.')}
         </div>
       ) : visible.length === 0 ? (
-        <div className="empty">Nessun modpack corrisponde ai filtri.</div>
+        <div className="empty">{t('No modpack matches the filters.')}</div>
       ) : (
         <div className="mod-grid">
           {visible.map((pack) => (
@@ -125,29 +126,29 @@ export default function ModpacksTab() {
         </div>
       )}
 
-      <Sheet open={dialog === 'new'} title="Nuovo modpack" onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'new'} title={t('New modpack')} onClose={() => setDialog(null)}>
         {dialog === 'new' && <NewPackForm serverId={server.id} onCancel={() => setDialog(null)} onCreated={(id) => navigate(id)} />}
       </Sheet>
 
-      <Sheet open={dialog === 'import'} title="Importa da tModLoader" wide onClose={() => setDialog(null)}>
+      <Sheet open={dialog === 'import'} title={t('Import from tModLoader')} wide onClose={() => setDialog(null)}>
         {dialog === 'import' && <ModpackImport serverId={server.id} inDialog onClose={() => setDialog(null)} />}
       </Sheet>
 
       <ExportPackSheet serverId={server.id} pack={exporting} onClose={() => setExporting(null)} />
 
-      <Sheet open={deleting !== null} title="Eliminare il modpack?" onClose={() => setDeleting(null)}>
+      <Sheet open={deleting !== null} title={t('Delete the modpack?')} onClose={() => setDeleting(null)}>
         {deleting && (
           <div className="stack">
             <p>
-              <strong>{deleting.name}</strong> verrà eliminato. Le mod restano installate così come sono.
+              {tn('{pack} will be deleted. The mods stay installed as they are.', { pack: <strong>{deleting.name}</strong> })}
             </p>
             {remove.error ? <div className="alert alert-error">{errorMessage(remove.error)}</div> : null}
             <div className="btn-row">
               <button type="button" className="btn btn-danger" disabled={remove.isPending} onClick={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(null) })}>
-                Elimina
+                {t('Delete')}
               </button>
               <button type="button" className="btn btn-ghost" onClick={() => setDeleting(null)}>
-                Annulla
+                {t('Cancel')}
               </button>
             </div>
           </div>
@@ -170,17 +171,17 @@ function NewPackForm({ serverId, onCancel, onCreated }: { serverId: string; onCa
   return (
     <form className="stack" onSubmit={submit}>
       <label className="field">
-        <span>Nome</span>
+        <span>{t('Name')}</span>
         <input required autoFocus maxLength={64} value={name} onChange={(e) => setName(e.target.value)} />
       </label>
-      <p className="muted small">Dopo la creazione si apre la pagina del modpack, dove aggiungere le mod e la descrizione.</p>
+      <p className="muted small">{t('After creating it the modpack page opens, where you add the mods and the description.')}</p>
       {save.error ? <div className="alert alert-error">{errorMessage(save.error)}</div> : null}
       <div className="btn-row btn-row-end">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
-          Annulla
+          {t('Cancel')}
         </button>
         <button type="submit" className="btn btn-primary" disabled={save.isPending || !name.trim()}>
-          {save.isPending ? 'Creazione…' : 'Crea modpack'}
+          {save.isPending ? t('Creating…') : t('Create modpack')}
         </button>
       </div>
     </form>
@@ -198,7 +199,7 @@ function PackCard(props: {
   onExport: () => void
 }) {
   const { pack, byName } = props
-  const state = PACK_STATE[pack.state]
+  const state = packState(pack.state)
   const problems = pack.missing.length + pack.unavailable.length
   const blocked = pack.mods.length === 0 || problems > 0
   const activation = usePackActivation({ ...props, blocked })
@@ -218,7 +219,7 @@ function PackCard(props: {
       <path d="M9 7V4h6v3" />
     </svg>
   )
-  const toggleLabel = activation.busy ? 'Un momento…' : pack.active ? 'Disattiva' : 'Attiva'
+  const toggleLabel = activation.busy ? t('One moment…') : pack.active ? t('Deactivate') : t('Activate')
   const toggleDisabled = activation.busy || (!pack.active && blocked)
 
   // In ordine di importanza: se la card è stretta, i meno importanti finiscono nel menu «⋯»
@@ -240,7 +241,7 @@ function PackCard(props: {
           {
             key: 'exclusive',
             priority: 3,
-            label: 'Attiva solo questo',
+            label: t('Activate only this one'),
             disabled: activation.busy || blocked,
             onSelect: activation.exclusive,
             inline: (
@@ -248,10 +249,10 @@ function PackCard(props: {
                 type="button"
                 className="btn btn-sm"
                 disabled={activation.busy || blocked}
-                title="Abilita solo le mod di questo pack e disabilita tutte le altre"
+                title={t('Enables only the mods of this pack and disables all the others')}
                 onClick={activation.exclusive}
               >
-                Solo questo
+                {t('Only this one')}
               </button>
             ),
           },
@@ -261,7 +262,7 @@ function PackCard(props: {
       key: 'export',
       priority: 1,
       end: true,
-      label: 'Esporta',
+      label: t('Export'),
       icon: exportIcon,
       disabled: pack.mods.length === 0,
       onSelect: props.onExport,
@@ -269,8 +270,8 @@ function PackCard(props: {
         <button
           type="button"
           className="btn btn-sm btn-icon"
-          aria-label={`Esporta ${pack.name}`}
-          title="Esporta: cartella del modpack (.zip) o elenco delle mod (.json)"
+          aria-label={t('Export {name}', { name: pack.name })}
+          title={t('Export: modpack folder (.zip) or list of mods (.json)')}
           disabled={pack.mods.length === 0}
           onClick={props.onExport}
         >
@@ -283,11 +284,11 @@ function PackCard(props: {
       priority: 2,
       end: true,
       danger: true,
-      label: 'Elimina',
+      label: t('Delete'),
       icon: deleteIcon,
       onSelect: props.onDelete,
       inline: (
-        <button type="button" className="btn btn-sm btn-icon btn-danger-outline" aria-label={`Elimina ${pack.name}`} title="Elimina" onClick={props.onDelete}>
+        <button type="button" className="btn btn-sm btn-icon btn-danger-outline" aria-label={t('Delete {name}', { name: pack.name })} title={t('Delete')} onClick={props.onDelete}>
           {deleteIcon}
         </button>
       ),
@@ -305,11 +306,11 @@ function PackCard(props: {
             </Link>
           </h3>
           <div className="mod-author">
-            {pack.mods.length === 0 ? 'Nessuna mod' : `${pack.mods.length} mod · ${formatBytes(packSize(pack, byName))}`}
+            {pack.mods.length === 0 ? t('No mods') : `${t('{count} mods', { count: pack.mods.length })} · ${formatBytes(packSize(pack, byName))}`}
           </div>
           <div className="pill-row">
             <span className={state.className}>{state.text}</span>
-            {problems > 0 && <span className="pill pill-warning">{problems === 1 ? '1 mod da sistemare' : `${problems} mod da sistemare`}</span>}
+            {problems > 0 && <span className="pill pill-warning">{problems === 1 ? t('1 mod to fix') : t('{count} mods to fix', { count: problems })}</span>}
           </div>
         </div>
       </div>
@@ -317,10 +318,10 @@ function PackCard(props: {
       {pack.description ? (
         <p className="mod-description-short pack-card-description">{pack.description}</p>
       ) : (
-        <p className="mod-description-short pack-card-description pack-card-placeholder">Nessuna descrizione: aggiungila dalla pagina del modpack.</p>
+        <p className="mod-description-short pack-card-description pack-card-placeholder">{t('No description: add it from the modpack page.')}</p>
       )}
 
-      <OverflowActions actions={actions} menuLabel={`Altre azioni per ${pack.name}`} />
+      <OverflowActions actions={actions} menuLabel={t('More actions for {name}', { name: pack.name })} />
       {activation.dialog}
     </article>
   )

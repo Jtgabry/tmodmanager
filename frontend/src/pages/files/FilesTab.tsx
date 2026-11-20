@@ -5,6 +5,7 @@ import { useCurrentServer } from '../../lib/currentServer'
 import { downloadUrl, type FileEntry, isTextFile, joinPath, useFileActions, useFileRoots, useListing } from '../../lib/files'
 import { formatBytes, formatDate } from '../../lib/format'
 import TextEditor from './TextEditor'
+import { t } from '../../i18n'
 
 type UploadItem = { file: File; progress: number; status: 'queued' | 'uploading' | 'done' | 'error' | 'exists'; message?: string }
 
@@ -62,7 +63,7 @@ export default function FilesTab() {
     updateUpload(i, { status: 'uploading', progress: 0, message: undefined })
     try {
       const r = await actions.upload.mutateAsync({ root, path, file, overwrite, onProgress: (p) => updateUpload(i, { progress: p }) })
-      updateUpload(i, { status: 'done', progress: 1, message: r.replaced ? 'Sostituito (il vecchio è nel cestino)' : 'Caricato' })
+      updateUpload(i, { status: 'done', progress: 1, message: r.replaced ? t('Replaced (the old one is in the trash)') : t('Uploaded') })
     } catch (err) {
       if (statusOf(err) === 409 && !overwrite) updateUpload(i, { status: 'exists', message: errorMessage(err) })
       else updateUpload(i, { status: 'error', message: errorMessage(err) })
@@ -136,17 +137,17 @@ export default function FilesTab() {
         <div className="btn-row">
           {!limited && (
             <button type="button" className="btn btn-sm" onClick={() => setCreatingDir((v) => !v)}>
-              Nuova cartella
+              {t('New folder')}
             </button>
           )}
           {!inLogs && (
             <button type="button" className="btn btn-sm" onClick={() => fileInput.current?.click()}>
-              {limited ? 'Carica .txt' : 'Carica file'}
+              {limited ? t('Upload .txt') : t('Upload files')}
             </button>
           )}
           {(!limited || inLogs) && (
-            <a className="btn btn-ghost btn-sm" href={downloadUrl(server.id, root, path)} download title="Scarica la cartella come .zip">
-              Scarica cartella (.zip)
+            <a className="btn btn-ghost btn-sm" href={downloadUrl(server.id, root, path)} download title={t('Download the folder as .zip')}>
+              {t('Download folder (.zip)')}
             </a>
           )}
         </div>
@@ -165,22 +166,23 @@ export default function FilesTab() {
 
       {limited && (
         <p className="hint">
-          Della cartella di tModLoader si vedono solo i file di configurazione (.txt, es. serverconfig.txt e banlist.txt)
-          e i log: i file del programma non sono accessibili dal pannello.
+          {t(
+            'Of the tModLoader folder only the configuration files (.txt, e.g. serverconfig.txt and banlist.txt) and the logs are shown: the program files are not accessible from the panel.',
+          )}
         </p>
       )}
 
       {creatingDir && !limited && (
         <form className="form-inline" onSubmit={submitDir}>
           <label className="field">
-            <span>Nome della cartella</span>
+            <span>{t('Folder name')}</span>
             <input autoFocus required value={dirName} onChange={(e) => setDirName(e.target.value)} />
           </label>
           <button type="submit" className="btn btn-primary btn-sm">
-            Crea
+            {t('Create')}
           </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCreatingDir(false)}>
-            Annulla
+            {t('Cancel')}
           </button>
         </form>
       )}
@@ -204,7 +206,7 @@ export default function FilesTab() {
                 <div className="btn-row">
                   <span className="small">{u.message}</span>
                   <button type="button" className="btn btn-warning btn-sm" onClick={() => uploadOne(i, u.file, true)}>
-                    Sovrascrivi
+                    {t('Overwrite')}
                   </button>
                 </div>
               )}
@@ -222,9 +224,9 @@ export default function FilesTab() {
           <table className="table files-table">
             <thead>
               <tr>
-                <th>Nome</th>
-                <th>Dimensione</th>
-                <th>Modificato</th>
+                <th>{t('Name')}</th>
+                <th>{t('Size')}</th>
+                <th>{t('Modified')}</th>
                 <th />
               </tr>
             </thead>
@@ -251,7 +253,7 @@ export default function FilesTab() {
                             OK
                           </button>
                           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRenaming(null)}>
-                            Annulla
+                            {t('Cancel')}
                           </button>
                         </form>
                       ) : (
@@ -266,7 +268,7 @@ export default function FilesTab() {
                           ) : (
                             <span>{entry.name}</span>
                           )}
-                          {entry.type === 'link' && <span className="muted small"> (fuori dalla cartella)</span>}
+                          {entry.type === 'link' && <span className="muted small"> ({t('outside the folder')})</span>}
                         </span>
                       )}
                     </td>
@@ -276,7 +278,7 @@ export default function FilesTab() {
                       {entry.type !== 'link' && (
                         <div className="btn-row nowrap">
                           <a className="btn btn-ghost btn-sm" href={downloadUrl(server.id, root, full)} download>
-                            Scarica
+                            {t('Download')}
                           </a>
                           {canModify(entry) && (
                             <>
@@ -288,7 +290,7 @@ export default function FilesTab() {
                                   setNewName(entry.name)
                                 }}
                               >
-                                Rinomina
+                                {t('Rename')}
                               </button>
                               {confirmDelete === entry.name ? (
                                 <>
@@ -297,15 +299,15 @@ export default function FilesTab() {
                                     className="btn btn-danger btn-sm"
                                     onClick={() => run(actions.remove.mutateAsync({ root, path: full }), () => setConfirmDelete(null))}
                                   >
-                                    Conferma
+                                    {t('Confirm')}
                                   </button>
                                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(null)}>
-                                    Annulla
+                                    {t('Cancel')}
                                   </button>
                                 </>
                               ) : (
                                 <button type="button" className="btn btn-danger-outline btn-sm" onClick={() => setConfirmDelete(entry.name)}>
-                                  Elimina
+                                  {t('Delete')}
                                 </button>
                               )}
                             </>
@@ -319,7 +321,7 @@ export default function FilesTab() {
               {listing.data.entries.length === 0 && (
                 <tr>
                   <td colSpan={4} className="muted">
-                    Cartella vuota. Trascina qui i file per caricarli.
+                    {t('Empty folder. Drag files here to upload them.')}
                   </td>
                 </tr>
               )}
@@ -328,8 +330,9 @@ export default function FilesTab() {
         </div>
       )}
       <p className="muted small">
-        Gli elementi eliminati o sovrascritti finiscono nella scheda Cestino, dove restano per 30 giorni. Puoi trascinare
-        file in questo riquadro per caricarli nella cartella corrente.
+        {t(
+          'Deleted or overwritten items go to the Trash tab, where they stay for 30 days. You can drag files into this box to upload them to the current folder.',
+        )}
       </p>
     </div>
   )

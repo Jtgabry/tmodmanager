@@ -1,5 +1,6 @@
 import { type FileHandle, open } from 'node:fs/promises'
 import { inflateRawSync } from 'node:zlib'
+import { tr } from './i18n.js'
 
 /**
  * Lettore dell'intestazione dei file .tmod di tModLoader 1.4:
@@ -46,7 +47,7 @@ class Reader {
   }
 
   private need(n: number) {
-    if (this.pos + n > this.buf.length) throw new RangeError('fine del buffer')
+    if (this.pos + n > this.buf.length) throw new RangeError('end of buffer')
   }
 
   byte() {
@@ -83,7 +84,7 @@ class Reader {
       length |= (b & 0x7f) << shift
       if (b < 0x80) break
       shift += 7
-      if (shift > 28) throw new TmodError('Lunghezza stringa non valida')
+      if (shift > 28) throw new TmodError(tr('Invalid string length'))
     }
     return this.bytes(length).toString('utf8')
   }
@@ -143,7 +144,7 @@ async function readHeader(file: FileHandle): Promise<Header> {
   // L'intestazione e la tabella dei file stanno quasi sempre nei primi KB; se no, si legge di più
   const parseHeader = (): Header => {
     const r = new Reader(buf)
-    if (r.bytes(4).toString('latin1') !== 'TMOD') throw new TmodError('Non è un file .tmod (intestazione mancante)')
+    if (r.bytes(4).toString('latin1') !== 'TMOD') throw new TmodError(tr('Not a .tmod file (missing header)'))
     const tmlVersion = r.string()
     r.bytes(20) // hash
     r.bytes(256) // firma
@@ -151,7 +152,7 @@ async function readHeader(file: FileHandle): Promise<Header> {
     const name = r.string()
     const version = r.string()
     const count = r.int32()
-    if (count < 0 || count > 1_000_000) throw new TmodError('Tabella dei file non valida')
+    if (count < 0 || count > 1_000_000) throw new TmodError(tr('Invalid file table'))
     const entries: Header['entries'] = []
     for (let i = 0; i < count; i++) entries.push({ path: r.string(), length: r.int32(), compressed: r.int32() })
     return { tmlVersion, name, version, entries, dataStart: r.pos }
@@ -160,11 +161,11 @@ async function readHeader(file: FileHandle): Promise<Header> {
   for (;;) {
     try {
       const header = parseHeader()
-      if (!/^[A-Za-z0-9_]+$/.test(header.name)) throw new TmodError(`Nome interno della mod non valido: "${header.name}"`)
+      if (!/^[A-Za-z0-9_]+$/.test(header.name)) throw new TmodError(tr('Invalid internal mod name: "{name}"', { name: header.name }))
       return header
     } catch (err) {
       if (!(err instanceof RangeError) || buf.length >= size) {
-        throw err instanceof TmodError ? err : new TmodError('File .tmod troncato o corrotto')
+        throw err instanceof TmodError ? err : new TmodError(tr('Truncated or corrupted .tmod file'))
       }
       buf = Buffer.alloc(Math.min(size, buf.length * 4))
       await file.read({ buffer: buf, position: 0 })

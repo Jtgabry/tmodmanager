@@ -39,9 +39,9 @@ class RegisterRequest extends FormRequest
                 $this->invitation = Invitation::findUsable($token);
 
                 if (! $this->invitation) {
-                    $validator->errors()->add('invitation', 'Invito non valido, già usato o scaduto.');
+                    $validator->errors()->add('invitation', __('Invalid, already used or expired invitation.'));
                 } elseif (! $this->invitation->allowsEmail((string) $this->input('email'))) {
-                    $validator->errors()->add('email', 'Questo invito è riservato a un altro indirizzo email.');
+                    $validator->errors()->add('email', __('This invitation is reserved for another email address.'));
                 }
             },
         ];

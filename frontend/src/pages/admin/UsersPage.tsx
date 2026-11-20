@@ -5,15 +5,17 @@ import { api, errorMessage } from '../../lib/api'
 import { formatDate } from '../../lib/format'
 import { useServers } from '../../lib/servers'
 import { type Server, type ServerAbility, SERVER_ABILITIES, type User } from '../../lib/types'
+import { t } from '../../i18n'
 
-const ABILITY_LABELS: Record<ServerAbility, string> = {
-  view: 'Accesso',
-  console: 'Console',
-  power: 'Avvio/stop',
-  mods: 'Mod e plugin',
-  files: 'File',
-  backups: 'Backup',
-}
+const abilityLabel = (ability: ServerAbility): string =>
+  ({
+    view: t('Access'),
+    console: 'Console',
+    power: t('Start/stop'),
+    mods: t('Mods and plugins'),
+    files: t('Files'),
+    backups: t('Backups'),
+  })[ability]
 
 const USERS_KEY = ['admin', 'users']
 
@@ -27,7 +29,7 @@ export default function UsersPage() {
   return (
     <section>
       <div className="page-header">
-        <h1>Utenti</h1>
+        <h1>{t('Users')}</h1>
       </div>
       {isLoading && <div className="spinner" />}
       {error && <div className="alert alert-error">{errorMessage(error)}</div>}
@@ -82,43 +84,43 @@ function UserCard({ user, servers }: { user: User; servers: Server[] }) {
     <article className="card">
       <header className="user-header">
         <div>
-          <strong>{user.name}</strong> {isMe && <span className="tag">tu</span>}
+          <strong>{user.name}</strong> {isMe && <span className="tag">{t('you')}</span>}
           {user.isAdmin && <span className="tag tag-accent">admin</span>}
-          {!user.isApproved && <span className="tag tag-warning">in attesa</span>}
+          {!user.isApproved && <span className="tag tag-warning">{t('pending')}</span>}
           <div className="muted small">
-            {user.email} · registrato {formatDate(user.createdAt)}
+            {user.email} · {t('signed up {date}', { date: formatDate(user.createdAt) })}
           </div>
         </div>
         <div className="btn-row">
           {!user.isApproved ? (
             <button type="button" className="btn btn-success btn-sm" onClick={() => update.mutate({ isApproved: true })}>
-              Approva
+              {t('Approve')}
             </button>
           ) : (
             !isMe && (
               <button type="button" className="btn btn-sm" onClick={() => update.mutate({ isApproved: false })}>
-                Sospendi
+                {t('Suspend')}
               </button>
             )
           )}
           {!isMe && user.isApproved && (
             <button type="button" className="btn btn-sm" onClick={() => update.mutate({ isAdmin: !user.isAdmin })}>
-              {user.isAdmin ? 'Rimuovi admin' : 'Rendi admin'}
+              {user.isAdmin ? t('Remove admin') : t('Make admin')}
             </button>
           )}
           {!isMe &&
             (confirmDelete ? (
               <>
                 <button type="button" className="btn btn-danger btn-sm" onClick={() => remove.mutate()}>
-                  Conferma eliminazione
+                  {t('Confirm deletion')}
                 </button>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>
-                  Annulla
+                  {t('Cancel')}
                 </button>
               </>
             ) : (
               <button type="button" className="btn btn-danger-outline btn-sm" onClick={() => setConfirmDelete(true)}>
-                Elimina
+                {t('Delete')}
               </button>
             ))}
         </div>
@@ -127,7 +129,7 @@ function UserCard({ user, servers }: { user: User; servers: Server[] }) {
       {mutationError && <p className="error-text">{errorMessage(mutationError)}</p>}
 
       {user.isAdmin ? (
-        <p className="muted small">Gli amministratori hanno tutti i permessi su tutti i server.</p>
+        <p className="muted small">{t('Administrators have every permission on every server.')}</p>
       ) : (
         user.isApproved && (
           <div className="table-wrap">
@@ -136,7 +138,7 @@ function UserCard({ user, servers }: { user: User; servers: Server[] }) {
                 <tr>
                   <th>Server</th>
                   {SERVER_ABILITIES.map((a) => (
-                    <th key={a}>{ABILITY_LABELS[a]}</th>
+                    <th key={a}>{abilityLabel(a)}</th>
                   ))}
                 </tr>
               </thead>
@@ -151,7 +153,7 @@ function UserCard({ user, servers }: { user: User; servers: Server[] }) {
                         <td key={ability}>
                           <input
                             type="checkbox"
-                            aria-label={`${ABILITY_LABELS[ability]} su ${server.name}`}
+                            aria-label={t('{ability} on {server}', { ability: abilityLabel(ability), server: server.name })}
                             checked={abilities.includes(ability)}
                             disabled={access.isPending || (ability !== 'view' && !hasAccess)}
                             onChange={() => toggleAbility(server.id, ability)}

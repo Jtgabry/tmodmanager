@@ -1,6 +1,7 @@
 import { type DragEvent, useRef, useState } from 'react'
 import { formatBytes } from '../../lib/format'
 import type { UploadQueue } from './uploadQueue'
+import { t } from '../../i18n'
 
 /** Caricamento di uno o più .tmod: area di rilascio, scelta dei file e avanzamento. */
 export default function UploadZone({ queue }: { queue: UploadQueue }) {
@@ -28,18 +29,17 @@ export default function UploadZone({ queue }: { queue: UploadQueue }) {
         onDrop={onDrop}
       >
         <p>
-          <strong>Trascina qui i file .tmod</strong> oppure{' '}
+          <strong>{t('Drag the .tmod files here')}</strong> {t('or')}{' '}
           <button type="button" className="btn btn-sm" disabled={busy} onClick={() => input.current?.click()}>
-            Scegli file
+            {t('Choose files')}
           </button>
         </p>
         <p className="muted small">
-          Se la mod esiste già viene aggiornata (la versione precedente va nell'archivio delle versioni). Le modifiche si applicano al
-          riavvio del server.
+          {t('If the mod already exists it is updated (the previous version goes to the version archive). Changes apply when the server restarts.')}
         </p>
         <label className="checkbox">
           <input type="checkbox" checked={enable} onChange={(e) => setEnable(e.target.checked)} />
-          Abilita le mod nuove dopo il caricamento
+          {t('Enable new mods after the upload')}
         </label>
         <input
           ref={input}
@@ -67,8 +67,8 @@ export default function UploadZone({ queue }: { queue: UploadQueue }) {
                   <div style={{ width: `${Math.round(item.progress * 100)}%` }} />
                 </div>
               )}
-              {item.status === 'uploading' && item.progress >= 1 && <span className="muted small">Verifica in corso…</span>}
-              {item.status === 'queued' && <span className="muted small">In coda</span>}
+              {item.status === 'uploading' && item.progress >= 1 && <span className="muted small">{t('Checking…')}</span>}
+              {item.status === 'queued' && <span className="muted small">{t('Queued')}</span>}
               {item.message && <span className={item.status === 'error' ? 'error-text' : 'small'}>{item.message}</span>}
             </li>
           ))}

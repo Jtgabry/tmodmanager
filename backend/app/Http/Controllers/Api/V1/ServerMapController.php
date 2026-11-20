@@ -149,7 +149,7 @@ class ServerMapController extends Controller
             'bosses.*' => ['boolean'],
         ]);
         if ($validated === []) {
-            throw ValidationException::withMessages(['settings' => 'Nessun settaggio da cambiare.']);
+            throw ValidationException::withMessages(['settings' => __('No setting to change.')]);
         }
 
         return response()->json(['data' => $this->agent->json('post', "/servers/{$server}/map/editor/settings", $validated)]);

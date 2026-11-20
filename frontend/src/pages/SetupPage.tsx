@@ -6,6 +6,8 @@ import { FullPageSpinner } from '../components/RouteGuards'
 import { api, ensureCsrfCookie, errorMessage, fieldErrors } from '../lib/api'
 import { useSetupRequired } from '../lib/setup'
 import type { User } from '../lib/types'
+import { t } from '../i18n'
+import { LanguageSelect } from '../i18n/LocaleProvider'
 
 /** Primo avvio: creazione dell'amministratore con il codice mostrato dall'installer. */
 export default function SetupPage() {
@@ -46,24 +48,25 @@ export default function SetupPage() {
   return (
     <div className="center-page">
       <form className="card auth-card" onSubmit={submit}>
+        <LanguageSelect className="auth-lang" />
         <h1 className="auth-title">
-          <img className="brand-mark auth-logo" src={logo} alt="" /> Benvenuto
+          <img className="brand-mark auth-logo" src={logo} alt="" /> {t('Welcome')}
         </h1>
         <p className="muted small">
-          Crea l'account amministratore. Poi installerai tModLoader e creerai il primo server dalla pagina Gestione server.
+          {t('Create the administrator account. Then you will install tModLoader and create the first server from the Server management page.')}
         </p>
         {error && <div className="alert alert-error">{error}</div>}
         <label className="field">
-          <span>Codice di configurazione</span>
+          <span>{t('Setup code')}</span>
           <input required autoComplete="off" className="mono" value={form.code} onChange={set('code')} />
           {errors.code ? (
             <small className="error-text">{errors.code}</small>
           ) : (
-            <small className="muted">Lo mostra l'installer (oppure: php artisan setup:code).</small>
+            <small className="muted">{t('The installer shows it (or: php artisan setup:code).')}</small>
           )}
         </label>
         <label className="field">
-          <span>Nome</span>
+          <span>{t('Name')}</span>
           <input autoComplete="name" required value={form.name} onChange={set('name')} />
           {errors.name && <small className="error-text">{errors.name}</small>}
         </label>
@@ -78,11 +81,11 @@ export default function SetupPage() {
           {errors.password && <small className="error-text">{errors.password}</small>}
         </label>
         <label className="field">
-          <span>Conferma password</span>
+          <span>{t('Confirm password')}</span>
           <input type="password" autoComplete="new-password" required value={form.password_confirmation} onChange={set('password_confirmation')} />
         </label>
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-          {submitting ? 'Creazione…' : 'Crea amministratore'}
+          {submitting ? t('Creating…') : t('Create administrator')}
         </button>
       </form>
     </div>

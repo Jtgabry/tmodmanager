@@ -10,6 +10,7 @@ import { ModError } from './mods.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
 import { move, moveToTrash, type TrashMeta } from './trash.js'
+import { tr } from './i18n.js'
 
 /**
  * Plugin dei server TShock, con tutte le versioni caricate.
@@ -61,7 +62,7 @@ export type AssemblyInfo = {
  * leggibili senza caricarlo.
  */
 export function readAssemblyInfo(data: Buffer): AssemblyInfo {
-  if (!isDotnetAssembly(data)) throw new ModError('Non è un assembly .NET: i plugin TShock sono .dll compilate per .NET', 422)
+  if (!isDotnetAssembly(data)) throw new ModError(tr('Not a .NET assembly: TShock plugins are .dll files compiled for .NET'), 422)
 
   const strings = versionStrings(data)
   const name = cleanName((strings.InternalName ?? strings.OriginalFilename ?? '').replace(/\.(dll|exe)$/i, ''))
@@ -145,7 +146,7 @@ async function fileInfo(path: string): Promise<FileInfo | null> {
   if (hit?.key === key) return hit.value
   let value: FileInfo
   if (s.size > MAX_UPLOAD_BYTES) {
-    value = { id: '', size: s.size, mtimeMs: s.mtimeMs, info: null, error: 'File troppo grande per essere letto' }
+    value = { id: '', size: s.size, mtimeMs: s.mtimeMs, info: null, error: tr('File too large to be read') }
   } else {
     const data = await readFile(path)
     const id = versionId(data)
@@ -404,23 +405,23 @@ export async function refreshActiveAddons(server: ServerDefinition): Promise<str
 }
 
 const addonOnly = (plugin: PluginEntry) => {
-  if (plugin.addon) throw new ModError(`${plugin.title ?? plugin.name} è un add-on di tModManager: si attiva o si disattiva soltanto, e si aggiorna con il pannello`, 409)
+  if (plugin.addon) throw new ModError(tr('{plugin} is a tModManager add-on: it can only be activated or deactivated, and it is updated with the panel', { plugin: plugin.title ?? plugin.name }), 409)
 }
 
 async function findPlugin(server: ServerDefinition, rawName: string | undefined): Promise<PluginEntry> {
   const name = pluginName(rawName)
   const plugin = (await listPlugins(server)).plugins.find((p) => p.name === name)
-  if (!plugin) throw new ModError(`Plugin "${name}" non trovato`, 404)
+  if (!plugin) throw new ModError(tr('Plugin "{plugin}" not found', { plugin: name }), 404)
   return plugin
 }
 
 const pluginName = (name: string | undefined) => {
-  if (!name || !PLUGIN_NAME.test(name)) throw new ModError('Nome del plugin non valido', 422)
+  if (!name || !PLUGIN_NAME.test(name)) throw new ModError(tr('Invalid plugin name'), 422)
   return name
 }
 
 const pluginVersionId = (id: string | undefined) => {
-  if (!id || !PLUGIN_VERSION_ID.test(id)) throw new ModError('Versione non valida', 422)
+  if (!id || !PLUGIN_VERSION_ID.test(id)) throw new ModError(tr('Invalid version'), 422)
   return id
 }
 
@@ -442,11 +443,11 @@ export async function pluginVersionPath(server: ServerDefinition, rawName: strin
   const id = pluginVersionId(rawId)
   const addon = (await availableAddons()).find((a) => a.addon.name === name)
   if (addon) {
-    if (addon.info.id !== id) throw new ModError('Versione non trovata', 404)
+    if (addon.info.id !== id) throw new ModError(tr('Version not found'), 404)
     return { path: addon.path, filename: `${name}.dll` }
   }
   const path = versionPath(server, name, id)
-  if (!(await stat(path).catch(() => null))) throw new ModError('Versione non trovata', 404)
+  if (!(await stat(path).catch(() => null))) throw new ModError(tr('Version not found'), 404)
   return { path, filename: `${name}.dll` }
 }
 
@@ -471,7 +472,7 @@ async function deactivate(server: ServerDefinition, plugin: Pick<PluginEntry, 'f
 
 export async function setPluginEnabled(server: ServerDefinition, rawName: string | undefined, enabled: boolean): Promise<PluginEntry> {
   const plugin = await findPlugin(server, rawName)
-  if (plugin.error) throw new ModError(`${plugin.file} non è un plugin leggibile: eliminalo o sostituiscilo`, 409)
+  if (plugin.error) throw new ModError(tr('{file} is not a readable plugin: delete or replace it', { file: plugin.file ?? plugin.name }), 409)
   const addon = ADDONS.find((a) => a.name === plugin.name)
   if (plugin.addon && addon) {
     if (enabled && !plugin.enabled) await installAddon(server, addon, addonPath(addon), null)
@@ -485,7 +486,7 @@ export async function usePluginVersion(server: ServerDefinition, rawName: string
   const plugin = await findPlugin(server, rawName)
   addonOnly(plugin)
   const id = pluginVersionId(rawId)
-  if (!plugin.versions.some((v) => v.id === id)) throw new ModError('Versione non trovata', 404)
+  if (!plugin.versions.some((v) => v.id === id)) throw new ModError(tr('Version not found'), 404)
   if (plugin.enabled) await activate(server, plugin, id)
   else await writeSelected(server, plugin.name, id)
   return findPlugin(server, plugin.name)
@@ -516,7 +517,7 @@ export async function uploadPlugin(
   lock: <T>(task: () => Promise<T>) => Promise<T>,
 ): Promise<PluginUploadResult> {
   const base = (filename ?? '').split(/[\\/]/).pop() ?? ''
-  if (!/\.dll$/i.test(base)) throw new ModError('Il file deve essere una .dll', 422)
+  if (!/\.dll$/i.test(base)) throw new ModError(tr('The file must be a .dll'), 422)
 
   await mkdir(paths.tmp(), { recursive: true })
   const tmp = join(paths.tmp(), `plugin-${randomBytes(8).toString('hex')}.dll`)
@@ -524,20 +525,20 @@ export async function uploadPlugin(
     let received = 0
     body.on('data', (chunk: Buffer) => {
       received += chunk.length
-      if (received > MAX_UPLOAD_BYTES) body.destroy(new ModError('File troppo grande (max 100 MB)', 413))
+      if (received > MAX_UPLOAD_BYTES) body.destroy(new ModError(tr('File too large (max {size})', { size: '100 MB' }), 413))
     })
     await pipeline(body, createWriteStream(tmp))
     const data = await readFile(tmp)
     const info = readAssemblyInfo(data)
     const name = info.name ?? cleanName(base.slice(0, -4))
-    if (!name) throw new ModError('Nome del plugin non valido', 422)
-    if (isAddon(name)) throw new ModError(`${name} è un add-on di tModManager: è già nell'elenco dei plugin, basta attivarlo`, 409)
+    if (!name) throw new ModError(tr('Invalid plugin name'), 422)
+    if (isAddon(name)) throw new ModError(tr('{plugin} is a tModManager add-on: it is already in the plugin list, just activate it', { plugin: name }), 409)
     const id = versionId(data)
 
     return await lock(async () => {
       const { plugins, bundled } = await listPlugins(server)
       if (bundled.some((b) => b.file.toLowerCase() === `${name}.dll`.toLowerCase())) {
-        throw new ModError(`${name}.dll fa parte di TShock: si aggiorna con l'installazione, non da qui`, 409)
+        throw new ModError(tr('{plugin}.dll is part of TShock: it is updated with the installation, not from here', { plugin: name }), 409)
       }
       const before = plugins.find((p) => p.name === name)
       const duplicate = before?.versions.some((v) => v.id === id) ?? false
@@ -560,11 +561,11 @@ export async function deletePluginVersion(server: ServerDefinition, rawName: str
   addonOnly(plugin)
   const id = pluginVersionId(rawId)
   const version = plugin.versions.find((v) => v.id === id)
-  if (!version) throw new ModError('Versione non trovata', 404)
+  if (!version) throw new ModError(tr('Version not found'), 404)
   if (plugin.enabled && plugin.selected === id) {
-    throw new ModError('È la versione attiva: passa a un\'altra versione o disattiva il plugin prima di eliminarla', 409)
+    throw new ModError(tr('It is the active version: switch to another version or deactivate the plugin before deleting it'), 409)
   }
-  if (plugin.versions.length === 1) throw new ModError('È l\'unica versione: per toglierla elimina il plugin', 409)
+  if (plugin.versions.length === 1) throw new ModError(tr('It is the only version: to remove it delete the plugin'), 409)
   await trashVersion(server, plugin.name, version)
   if (plugin.selected === id) await writeSelected(server, plugin.name, plugin.versions.find((v) => v.id !== id)!.id)
   return findPlugin(server, plugin.name)
@@ -622,7 +623,7 @@ export async function deletePlugin(server: ServerDefinition, rawName: string | u
 export async function restorePlugin(server: ServerDefinition, meta: TrashMeta, from: string, overwrite: boolean) {
   if (meta.path === 'file') {
     const target = join(activePluginsDir(server), meta.name)
-    if ((await stat(target).catch(() => null)) && !overwrite) throw new ModError(`${meta.name} è già in ServerPlugins/`, 409)
+    if ((await stat(target).catch(() => null)) && !overwrite) throw new ModError(tr('{plugin} is already in ServerPlugins/', { plugin: meta.name }), 409)
     await mkdir(activePluginsDir(server), { recursive: true })
     await move(from, target)
     return { replaced: false }

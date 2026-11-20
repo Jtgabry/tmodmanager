@@ -1,5 +1,6 @@
 import { type Picked } from '../lib/installationPicker'
 import { GAME_LABEL } from '../lib/types'
+import { t } from '../i18n'
 
 /** Spiegazione della scelta: principale condivisa, versione fissa, da installare. */
 export function PickedHint({ picked }: { picked: Picked | null }) {
@@ -8,25 +9,27 @@ export function PickedHint({ picked }: { picked: Picked | null }) {
   if (picked.release) {
     return (
       <span>
-        {label} {picked.release.version} viene installato come versione fissa, solo per i server che la scelgono: non cambia
-        quando si aggiornano le altre installazioni.
+        {t(
+          '{game} {version} is installed as a pinned version, only for the servers that choose it: it does not change when the other installations are updated.',
+          { game: label, version: picked.release.version },
+        )}
       </span>
     )
   }
   const c = picked.choice
   if (!c) return null
-  if (!c.managed) return <span>Installazione esterna al pannello.</span>
+  if (!c.managed) return <span>{t('Installation outside the panel.')}</span>
   if (c.pinned) {
     return c.installed ? (
-      <span>Versione fissa: non si aggiorna da sola, il server si aggiorna passando a un'altra versione.</span>
+      <span>{t('Pinned version: it does not update by itself, the server is updated by switching to another version.')}</span>
     ) : (
-      <span>Versione fissa in installazione.</span>
+      <span>{t('Pinned version being installed.')}</span>
     )
   }
   return (
     <span>
-      Installazione principale di {label}, condivisa: aggiornandola si aggiornano tutti i server che la usano.
-      {!c.installed && (c.installing ? ' Si sta già installando.' : " Non è ancora installata: viene installata l'ultima versione.")}
+      {t('Main {game} installation, shared: updating it updates all the servers that use it.', { game: label })}
+      {!c.installed && ` ${c.installing ? t('It is already being installed.') : t('It is not installed yet: the latest version is installed.')}`}
     </span>
   )
 }

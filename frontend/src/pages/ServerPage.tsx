@@ -8,19 +8,20 @@ import { formatDate } from '../lib/format'
 import { useServer } from '../lib/servers'
 import { useCurrentServer } from '../lib/currentServer'
 import { PageActionsSlot } from '../lib/pageActions'
+import { t } from '../i18n'
 
-const TITLES: Record<string, string> = {
+const titles = (): Record<string, string> => ({
   console: 'Console',
-  world: 'Mondo',
-  mods: 'Mod',
+  world: t('World'),
+  mods: t('Mods'),
   workshop: 'Workshop',
   modpacks: 'Modpack',
-  plugins: 'Plugin',
-  files: 'File',
-  backups: 'Backup',
-  trash: 'Cestino',
-  settings: 'Impostazioni',
-}
+  plugins: t('Plugins'),
+  files: t('Files'),
+  backups: t('Backups'),
+  trash: t('Trash'),
+  settings: t('Settings'),
+})
 
 const MOD_SECTIONS = ['mods', 'workshop', 'modpacks']
 
@@ -42,7 +43,7 @@ export default function ServerPage() {
   if (server.game !== 'tmodloader' && MOD_SECTIONS.includes(section)) return <Navigate to={`/servers/${server.id}`} replace />
   // Plugin solo per TShock
   if (server.game !== 'tshock' && section === 'plugins') return <Navigate to={`/servers/${server.id}`} replace />
-  const title = TITLES[section] ?? 'Panoramica'
+  const title = titles()[section] ?? t('Overview')
 
   return (
     <section className="stack">
@@ -53,14 +54,16 @@ export default function ServerPage() {
 
       {server.lastError && (
         <div className="alert alert-error">
-          Ultima operazione fallita: {server.lastError.message}{' '}
+          {t('Last operation failed: {message}', { message: server.lastError.message })}{' '}
           <span className="muted">({formatDate(server.lastError.at)})</span>
         </div>
       )}
 
       {server.restartRequired && (
         <div className="alert alert-warning">
-          {server.game === 'tshock' ? 'I plugin sono cambiati' : 'Le mod sono cambiate'} dopo l'avvio: riavvia il server per applicare le modifiche.
+          {server.game === 'tshock'
+            ? t('Plugins changed after startup: restart the server to apply the changes.')
+            : t('Mods changed after startup: restart the server to apply the changes.')}
         </div>
       )}
 

@@ -3,11 +3,13 @@ import { errorMessage } from '../lib/api'
 import { usePowerAction } from '../lib/servers'
 import type { PowerAction, Server } from '../lib/types'
 import { IconPlay, IconRestart, IconStop } from './icons'
+import { t } from '../i18n'
 
-const CONFIRM: Partial<Record<PowerAction, string>> = {
-  stop: 'Spegnere il server? I giocatori connessi verranno disconnessi (il mondo viene salvato).',
-  restart: 'Riavviare il server? I giocatori connessi verranno disconnessi (il mondo viene salvato).',
-}
+const confirmText = (action: PowerAction): string | undefined =>
+  ({
+    stop: t('Stop the server? Connected players will be disconnected (the world is saved).'),
+    restart: t('Restart the server? Connected players will be disconnected (the world is saved).'),
+  })[action as 'stop' | 'restart']
 
 /**
  * Pulsanti di accensione. `tile`: variante compatta della scheda server nella sidebar
@@ -21,7 +23,7 @@ export default function PowerButtons({ server, variant = 'default' }: { server: 
   const isOn = server.state !== 'stopped'
 
   const run = (action: PowerAction) => {
-    if (CONFIRM[action] && pending !== action) {
+    if (confirmText(action) && pending !== action) {
       setPending(action)
       return
     }
@@ -35,7 +37,7 @@ export default function PowerButtons({ server, variant = 'default' }: { server: 
         {!isOn && (
           <button type="button" className="btn btn-success" disabled={busy} onClick={() => run('start')}>
             <IconPlay />
-            Avvia
+            {t('Start')}
           </button>
         )}
         {isOn && (
@@ -47,7 +49,7 @@ export default function PowerButtons({ server, variant = 'default' }: { server: 
               onClick={() => run('restart')}
             >
               <IconRestart />
-              {pending === 'restart' ? (tile ? 'Conferma' : 'Conferma riavvio') : 'Riavvia'}
+              {pending === 'restart' ? (tile ? t('Confirm') : t('Confirm restart')) : t('Restart')}
             </button>
             <button
               type="button"
@@ -56,19 +58,19 @@ export default function PowerButtons({ server, variant = 'default' }: { server: 
               onClick={() => run('stop')}
             >
               <IconStop />
-              {pending === 'stop' ? (tile ? 'Conferma' : 'Conferma spegnimento') : 'Spegni'}
+              {pending === 'stop' ? (tile ? t('Confirm') : t('Confirm stop')) : t('Stop')}
             </button>
           </>
         )}
         {pending && (
           <button type="button" className="btn btn-ghost" onClick={() => setPending(null)}>
-            Annulla
+            {t('Cancel')}
           </button>
         )}
       </div>
-      {pending && CONFIRM[pending] && <p className="hint">{CONFIRM[pending]}</p>}
+      {pending && confirmText(pending) && <p className="hint">{confirmText(pending)}</p>}
       {isOn && !server.managed && (
-        <p className="hint">Avviato fuori dalla sessione screen gestita: spegnilo a mano per poterlo controllare da qui.</p>
+        <p className="hint">{t('Started outside the managed screen session: stop it by hand to control it from here.')}</p>
       )}
       {power.isError && <p className="error-text">{errorMessage(power.error)}</p>}
     </div>

@@ -2,6 +2,8 @@ import { type FormEvent, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { errorMessage, fieldErrors } from '../lib/api'
+import { t } from '../i18n'
+import { LanguageSelect } from '../i18n/LocaleProvider'
 
 export default function RegisterPage() {
   const { register } = useAuth()
@@ -39,10 +41,10 @@ export default function RegisterPage() {
     return (
       <div className="center-page">
         <div className="card auth-card">
-          <h1 className="auth-title">Registrazione inviata</h1>
-          <p>Il tuo account è in attesa di approvazione da parte di un amministratore. Potrai accedere appena verrà approvato.</p>
+          <h1 className="auth-title">{t('Registration sent')}</h1>
+          <p>{t('Your account is waiting for approval by an administrator. You can log in as soon as it is approved.')}</p>
           <Link to="/login" className="btn btn-block">
-            Torna al login
+            {t('Back to login')}
           </Link>
         </div>
       </div>
@@ -52,15 +54,16 @@ export default function RegisterPage() {
   return (
     <div className="center-page">
       <form className="card auth-card" onSubmit={submit}>
-        <h1 className="auth-title">Crea un account</h1>
+        <LanguageSelect className="auth-lang" />
+        <h1 className="auth-title">{t('Create an account')}</h1>
         <p className="muted small">
           {invitation
-            ? 'Hai un invito: l’account sarà attivo subito.'
-            : 'Senza invito, l’account dovrà essere approvato da un amministratore.'}
+            ? t('You have an invitation: the account will be active right away.')
+            : t('Without an invitation, the account must be approved by an administrator.')}
         </p>
         {error && <div className="alert alert-error">{error}</div>}
         <label className="field">
-          <span>Nome</span>
+          <span>{t('Name')}</span>
           <input autoComplete="name" required value={form.name} onChange={set('name')} />
           {errors.name && <small className="error-text">{errors.name}</small>}
         </label>
@@ -75,7 +78,7 @@ export default function RegisterPage() {
           {errors.password && <small className="error-text">{errors.password}</small>}
         </label>
         <label className="field">
-          <span>Conferma password</span>
+          <span>{t('Confirm password')}</span>
           <input
             type="password"
             autoComplete="new-password"
@@ -85,10 +88,10 @@ export default function RegisterPage() {
           />
         </label>
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-          {submitting ? 'Invio…' : 'Registrati'}
+          {submitting ? t('Sending…') : t('Sign up')}
         </button>
         <p className="muted small">
-          Hai già un account? <Link to="/login">Accedi</Link>
+          {t('Already have an account?')} <Link to="/login">{t('Log in')}</Link>
         </p>
       </form>
     </div>

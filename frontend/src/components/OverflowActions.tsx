@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { t } from '../i18n'
 
 export type OverflowAction = {
   key: string
@@ -120,7 +121,7 @@ export default function OverflowActions({ actions, menuLabel }: { actions: Overf
             type="button"
             className="btn btn-sm btn-icon"
             aria-label={menuLabel}
-            title="Altre azioni"
+            title={t('More actions')}
             aria-haspopup="menu"
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}

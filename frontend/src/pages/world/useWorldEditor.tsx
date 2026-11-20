@@ -4,16 +4,17 @@ import type { WorldEditOp, WorldEditResult, WorldMapManifest } from '../../lib/t
 import { useChangeWorldSettings, useWorldEdit, useWorldEditorCatalog } from '../../lib/worldEditor'
 import type { MapMark, MapPaint } from './MapViewer'
 import TypePicker from './TypePicker'
+import { t } from '../../i18n'
 
 type Tool = 'move' | 'tile' | 'wall' | 'kill-tile' | 'kill-wall' | 'spawn'
 
-const TOOLS: { id: Tool; label: string; title: string }[] = [
-  { id: 'move', label: 'Sposta', title: 'Trascina per spostare la mappa' },
-  { id: 'tile', label: 'Blocco', title: 'Piazza il blocco scelto (sostituisce i blocchi normali)' },
-  { id: 'wall', label: 'Muro', title: 'Piazza il muro scelto' },
-  { id: 'kill-tile', label: 'Togli blocchi', title: 'Rimuove blocchi e oggetti (le casse piene restano)' },
-  { id: 'kill-wall', label: 'Togli muri', title: 'Rimuove i muri' },
-  { id: 'spawn', label: 'Spawn', title: 'Clic sulla mappa: lì rinascono i giocatori senza letto' },
+const tools = (): { id: Tool; label: string; title: string }[] => [
+  { id: 'move', label: t('Move'), title: t('Drag to move the map') },
+  { id: 'tile', label: t('Block'), title: t('Places the chosen block (replaces normal blocks)') },
+  { id: 'wall', label: t('Wall'), title: t('Places the chosen wall') },
+  { id: 'kill-tile', label: t('Remove blocks'), title: t('Removes blocks and objects (full chests stay)') },
+  { id: 'kill-wall', label: t('Remove walls'), title: t('Removes walls') },
+  { id: 'spawn', label: 'Spawn', title: t('Click on the map: players without a bed respawn there') },
 ]
 
 /** Dopo quanto le tile segnate spariscono comunque, se la mappa non le ridisegna. */
@@ -91,10 +92,10 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
 
   const toolbar = enabled ? (
     <div className="world-editor">
-      <div className="segmented" role="group" aria-label="Strumento">
-        {TOOLS.map((t) => (
-          <button key={t.id} type="button" className={tool === t.id ? 'active' : ''} title={t.title} onClick={() => setTool(t.id)}>
-            {t.label}
+      <div className="segmented" role="group" aria-label={t('Tool')}>
+        {tools().map((tl) => (
+          <button key={tl.id} type="button" className={tool === tl.id ? 'active' : ''} title={tl.title} onClick={() => setTool(tl.id)}>
+            {tl.label}
           </button>
         ))}
       </div>
@@ -104,11 +105,11 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
           entries={(tool === 'tile' ? catalog.data?.tiles : catalog.data?.walls) ?? []}
           value={tool === 'tile' ? tileType : wallType}
           onChange={tool === 'tile' ? setTileType : setWallType}
-          kind={tool === 'tile' ? 'Blocco' : 'Muro'}
+          kind={tool === 'tile' ? t('Block') : t('Wall')}
         />
       )}
       {active && tool !== 'spawn' && (
-        <select value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label="Pennello" title="Dimensione del pennello">
+        <select value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label={t('Brush')} title={t('Brush size')}>
           {[1, 2, 3, 5, 9].map((n) => (
             <option key={n} value={n}>
               {n}×{n}
@@ -118,21 +119,21 @@ export function useWorldEditor(serverId: string, manifest: WorldMapManifest | nu
       )}
       <span className="small muted">
         {tool === 'spawn'
-          ? 'Clic sulla mappa dove mettere lo spawn.'
+          ? t('Click on the map where to put the spawn.')
           : settings.isPending
-            ? 'Sposto lo spawn…'
+            ? t('Moving the spawn…')
             : settings.error
               ? <span className="error-text">{errorMessage(settings.error)}</span>
               : settings.data?.failed
-                ? <span className="error-text">Spawn non spostato: {settings.data.failures[0]?.reason}</span>
+                ? <span className="error-text">{t('Spawn not moved: {reason}', { reason: settings.data.failures[0]?.reason ?? '' })}</span>
                 : edit.isPending
-          ? 'Invio…'
+          ? t('Sending…')
           : edit.error
             ? <span className="error-text">{errorMessage(edit.error)}</span>
             : last
-              ? `${last.applied} tile modificate${last.failed ? ` · ${last.failed} no (${[...new Set(last.failures.map((f) => f.reason))].join(', ')})` : ''}`
+              ? `${t('{count} tiles changed', { count: last.applied })}${last.failed ? ` · ${t('{count} not', { count: last.failed })} (${[...new Set(last.failures.map((f) => f.reason))].join(', ')})` : ''}`
               : active
-                ? 'Tasto sinistro per disegnare, destro per spostare la mappa.'
+                ? t('Left button to draw, right button to move the map.')
                 : ''}
       </span>
       {catalog.error ? <span className="small error-text">{errorMessage(catalog.error)}</span> : null}

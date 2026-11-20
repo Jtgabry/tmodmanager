@@ -4,6 +4,7 @@ import { ModError, restoreMod, withServerLock } from '../mods.js'
 import { restorePlugin } from '../plugins.js'
 import { findServer, type ServerDefinition } from '../registry.js'
 import { emptyTrash, forgetTrashItem, getTrashItem, listTrash, removeTrashItem, type TrashKind, TrashError } from '../trash.js'
+import { tr } from '../i18n.js'
 
 type Req = {
   Params: { id: string; item?: string }
@@ -28,7 +29,7 @@ export async function trashRoutes(app: FastifyInstance) {
 
   const server = async (id: string, reply: FastifyReply): Promise<ServerDefinition | null> => {
     const found = await findServer(id)
-    if (!found) reply.code(404).send({ error: 'not_found', message: `Server "${id}" non trovato` })
+    if (!found) reply.code(404).send({ error: 'not_found', message: tr('Server "{id}" not found', { id }) })
     return found ?? null
   }
 

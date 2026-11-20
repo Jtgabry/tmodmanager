@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { config } from './config.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
+import { tr } from './i18n.js'
 
 /**
  * Cestino dell'agent: ogni elemento è una cartella data/servers/<server>/trash/<id>/ con
@@ -129,9 +130,9 @@ export async function listTrash(server: ServerDefinition, kinds: TrashKind[]): P
 
 /** Elemento del cestino, solo se di uno dei tipi consentiti a chi chiede. */
 export async function getTrashItem(server: ServerDefinition, id: string, kinds: TrashKind[]) {
-  if (!TRASH_ID.test(id)) throw new TrashError('Elemento non valido', 422)
+  if (!TRASH_ID.test(id)) throw new TrashError(tr('Invalid item'), 422)
   const meta = await readMeta(server.id, id)
-  if (!meta || !kinds.includes(meta.kind)) throw new TrashError('Elemento non trovato nel cestino', 404)
+  if (!meta || !kinds.includes(meta.kind)) throw new TrashError(tr('Item not found in the trash'), 404)
   return { meta, itemPath: join(serverTrash(server.id), id, 'item') }
 }
 

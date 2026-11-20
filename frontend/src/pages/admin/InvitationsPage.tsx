@@ -3,9 +3,10 @@ import { type FormEvent, useState } from 'react'
 import { api, errorMessage } from '../../lib/api'
 import { formatDate } from '../../lib/format'
 import type { Invitation } from '../../lib/types'
+import { t } from '../../i18n'
 
 const KEY = ['admin', 'invitations']
-const STATUS_LABEL: Record<Invitation['status'], string> = { active: 'Attivo', used: 'Usato', expired: 'Scaduto' }
+const statusLabel = (status: Invitation['status']): string => ({ active: t('Active'), used: t('Used'), expired: t('Expired') })[status]
 
 export default function InvitationsPage() {
   const queryClient = useQueryClient()
@@ -54,20 +55,20 @@ export default function InvitationsPage() {
   return (
     <section>
       <div className="page-header">
-        <h1>Inviti</h1>
+        <h1>{t('Invitations')}</h1>
       </div>
 
       <form className="card form-inline" onSubmit={submit}>
         <label className="field">
-          <span>Email (facoltativa)</span>
-          <input type="email" placeholder="Solo per questo indirizzo" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <span>{t('Email (optional)')}</span>
+          <input type="email" placeholder={t('Only for this address')} value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label className="field field-narrow">
-          <span>Validità (giorni)</span>
+          <span>{t('Valid for (days)')}</span>
           <input type="number" min={1} max={30} value={days} onChange={(e) => setDays(Number(e.target.value))} />
         </label>
         <button type="submit" className="btn btn-primary" disabled={create.isPending}>
-          Crea invito
+          {t('Create invitation')}
         </button>
       </form>
       {create.isError && <div className="alert alert-error">{errorMessage(create.error)}</div>}
@@ -75,12 +76,12 @@ export default function InvitationsPage() {
       {link && (
         <div className="card invite-link">
           <p>
-            <strong>Link di invito</strong> — copialo ora: non sarà più visibile.
+            <strong>{t('Invitation link')}</strong> — {t('copy it now: it will not be shown again.')}
           </p>
           <div className="copy-row">
             <input readOnly value={link} onFocus={(e) => e.target.select()} />
             <button type="button" className="btn" onClick={copy}>
-              {copied ? 'Copiato ✓' : 'Copia'}
+              {copied ? t('Copied ✓') : t('Copy')}
             </button>
           </div>
         </div>
@@ -91,11 +92,11 @@ export default function InvitationsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Stato</th>
+              <th>{t('Status')}</th>
               <th>Email</th>
-              <th>Creato da</th>
-              <th>Scadenza</th>
-              <th>Usato da</th>
+              <th>{t('Created by')}</th>
+              <th>{t('Expires')}</th>
+              <th>{t('Used by')}</th>
               <th />
             </tr>
           </thead>
@@ -103,16 +104,16 @@ export default function InvitationsPage() {
             {invitations?.map((inv) => (
               <tr key={inv.id}>
                 <td>
-                  <span className={`tag tag-${inv.status}`}>{STATUS_LABEL[inv.status]}</span>
+                  <span className={`tag tag-${inv.status}`}>{statusLabel(inv.status)}</span>
                 </td>
-                <td>{inv.email ?? <span className="muted">qualsiasi</span>}</td>
+                <td>{inv.email ?? <span className="muted">{t('any')}</span>}</td>
                 <td>{inv.createdBy ?? '—'}</td>
                 <td>{formatDate(inv.expiresAt)}</td>
                 <td>{inv.usedBy ? `${inv.usedBy} (${formatDate(inv.usedAt)})` : '—'}</td>
                 <td>
                   {inv.status === 'active' && (
                     <button type="button" className="btn btn-danger-outline btn-sm" onClick={() => revoke.mutate(inv.id)}>
-                      Revoca
+                      {t('Revoke')}
                     </button>
                   )}
                 </td>
@@ -121,7 +122,7 @@ export default function InvitationsPage() {
             {invitations?.length === 0 && (
               <tr>
                 <td colSpan={6} className="muted">
-                  Nessun invito.
+                  {t('No invitations.')}
                 </td>
               </tr>
             )}

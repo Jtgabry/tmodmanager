@@ -134,7 +134,7 @@ public sealed class WorldEditor : IDisposable
             Result result;
             try
             {
-                var command = JsonSerializer.Deserialize<Command>(File.ReadAllText(file), Json) ?? throw new InvalidDataException("comando vuoto");
+                var command = JsonSerializer.Deserialize<Command>(File.ReadAllText(file), Json) ?? throw new InvalidDataException("empty command");
                 TryDelete(file);
                 var age = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - command.CreatedAt;
                 if (age > MaxAgeMs) continue; // l'agent non aspetta più: non si applica
@@ -172,7 +172,7 @@ public sealed class WorldEditor : IDisposable
             };
         }
         var ops = command.Ops ?? [];
-        if (ops.Count > MaxOps) throw new InvalidDataException($"troppe operazioni ({ops.Count}, massimo {MaxOps})");
+        if (ops.Count > MaxOps) throw new InvalidDataException($"too many operations ({ops.Count}, max {MaxOps})");
 
         var result = new Result();
         int x0 = int.MaxValue, y0 = int.MaxValue, x1 = int.MinValue, y1 = int.MinValue;
@@ -186,7 +186,7 @@ public sealed class WorldEditor : IDisposable
             }
             catch (Exception ex)
             {
-                failure = $"errore: {ex.Message}";
+                failure = $"error: {ex.Message}";
             }
             if (failure == null)
             {
@@ -210,39 +210,39 @@ public sealed class WorldEditor : IDisposable
     private static string? Apply(EditOp op)
     {
         // Bordi: il gioco non lascia toccare le ultime tile del mondo
-        if (op.X < 10 || op.Y < 10 || op.X >= Main.maxTilesX - 10 || op.Y >= Main.maxTilesY - 10) return "fuori dal mondo";
+        if (op.X < 10 || op.Y < 10 || op.X >= Main.maxTilesX - 10 || op.Y >= Main.maxTilesY - 10) return "outside the world";
         var tile = Main.tile[op.X, op.Y];
         switch (op.Op)
         {
             case "place-tile":
             {
-                if (op.Type is not { } type || type < 0 || type >= TileLoader.TileCount) return "tipo di blocco non valido";
+                if (op.Type is not { } type || type < 0 || type >= TileLoader.TileCount) return "invalid block type";
                 if (tile.HasTile)
                 {
                     if (tile.TileType == type) return null;
                     // Un blocco al posto di un altro (come il cambio di blocco col piccone): solo tra blocchi normali
-                    if (Main.tileFrameImportant[tile.TileType] || Main.tileFrameImportant[type]) return "occupata";
-                    return WorldGen.ReplaceTile(op.X, op.Y, (ushort)type, op.Style) ? null : "non sostituibile";
+                    if (Main.tileFrameImportant[tile.TileType] || Main.tileFrameImportant[type]) return "occupied";
+                    return WorldGen.ReplaceTile(op.X, op.Y, (ushort)type, op.Style) ? null : "cannot be replaced";
                 }
                 WorldGen.PlaceTile(op.X, op.Y, type, mute: true, forced: true, plr: -1, style: op.Style);
                 var placed = Main.tile[op.X, op.Y];
                 // Mobili: l'ancora può non essere la tile indicata, basta che l'oggetto ci sia
-                return placed.HasTile && placed.TileType == type ? null : "non piazzabile qui";
+                return placed.HasTile && placed.TileType == type ? null : "cannot be placed here";
             }
             case "kill-tile":
             {
                 if (!tile.HasTile) return null;
                 WorldGen.KillTile(op.X, op.Y, fail: false, effectOnly: false, noItem: true);
                 // Le casse con degli oggetti dentro non si rompono (come nel gioco)
-                return Main.tile[op.X, op.Y].HasTile ? "non rimovibile (cassa piena?)" : null;
+                return Main.tile[op.X, op.Y].HasTile ? "cannot be removed (full chest?)" : null;
             }
             case "place-wall":
             {
-                if (op.Type is not { } type || type <= 0 || type >= WallLoader.WallCount) return "tipo di muro non valido";
+                if (op.Type is not { } type || type <= 0 || type >= WallLoader.WallCount) return "invalid wall type";
                 if (tile.WallType == type) return null;
-                if (tile.WallType != 0) return WorldGen.ReplaceWall(op.X, op.Y, (ushort)type) ? null : "non sostituibile";
+                if (tile.WallType != 0) return WorldGen.ReplaceWall(op.X, op.Y, (ushort)type) ? null : "cannot be replaced";
                 WorldGen.PlaceWall(op.X, op.Y, type, mute: true);
-                return Main.tile[op.X, op.Y].WallType == type ? null : "non piazzabile qui";
+                return Main.tile[op.X, op.Y].WallType == type ? null : "cannot be placed here";
             }
             case "kill-wall":
             {
@@ -256,7 +256,7 @@ public sealed class WorldEditor : IDisposable
                 return null;
             }
             default:
-                return $"operazione sconosciuta: {op.Op}";
+                return $"unknown operation: {op.Op}";
         }
     }
 

@@ -25,6 +25,7 @@ import {
 } from './tml.js'
 import { type Game, GAMES, gameLabel, tshockDataDir, tshockPluginsDir } from './games.js'
 import { moveToTrash } from './trash.js'
+import { tr } from './i18n.js'
 
 /** Creazione, impostazioni e rimozione dei server (solo admin, lato Laravel). */
 
@@ -41,7 +42,7 @@ export class ServerAdminError extends Error {
 const SERVER_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
 const WORLD_NAME = /^[A-Za-z0-9 _'-]{1,40}$/
 /** Valori di serverconfig: una riga sola, niente caratteri di controllo. */
-const configValue = (max: number) => z.string().max(max).regex(/^[^\r\n\0]*$/, 'non può contenere a capo')
+const configValue = (max: number) => z.string().max(max).regex(/^[^\r\n\0]*$/, 'cannot contain line breaks')
 
 const Settings = z.object({
   name: z.string().trim().min(1).max(64),
@@ -53,13 +54,13 @@ const Settings = z.object({
 })
 
 export const CreateServerInput = Settings.extend({
-  id: z.string().regex(SERVER_ID, 'solo minuscole, numeri e trattini (max 32)'),
+  id: z.string().regex(SERVER_ID, 'only lowercase letters, numbers and dashes (max 32)'),
   /** Installazione esistente (o principale da installare)… */
   installDir: z.string().min(1).optional(),
   /** …oppure una versione fissa di un gioco, installata dopo la creazione se manca. */
   version: z.object({ game: z.enum(GAMES), version: z.string().regex(VERSION_NAME) }).optional(),
   world: z.object({
-    name: z.string().trim().regex(WORLD_NAME, 'lettere, numeri, spazi, _ - \' (max 40)'),
+    name: z.string().trim().regex(WORLD_NAME, "letters, numbers, spaces, _ - ' (max 40)"),
     /** 1 piccolo, 2 medio, 3 grande. */
     size: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     /** 0 classic, 1 expert, 2 master, 3 journey. */
@@ -110,7 +111,7 @@ export async function knownInstallations(): Promise<InstallationChoice[]> {
 async function findChoice(installDir: string, allowMissing = false): Promise<InstallationChoice> {
   const found = (await knownInstallations()).find((i) => i.path === installDir)
   if (!found || (!found.installed && !(allowMissing && found.managed))) {
-    throw new ServerAdminError('Installazione sconosciuta o non ancora installata', 422, 'installDir')
+    throw new ServerAdminError(tr('Unknown installation or not installed yet'), 422, 'installDir')
   }
   return found
 }
@@ -123,7 +124,7 @@ async function installLatest(choice: InstallationChoice, manager: ServerManager)
   if (choice.installing) return { job: null, error: null }
   try {
     const release = (await listReleases(choice.kind)).find((r) => !r.prerelease)
-    if (!release) throw new Error(`nessuna versione stabile di ${gameLabel(choice.kind)} trovata`)
+    if (!release) throw new Error(tr('no stable version of {game} found', { game: gameLabel(choice.kind) }))
     const job = await startJob(await findInstallation(installationId(choice.path)), { version: release.version }, false, manager)
     return { job, error: null }
   } catch (err) {
@@ -151,16 +152,16 @@ async function installVersion(game: Game, version: string, manager: ServerManage
 async function assertPortFree(port: number, exceptId: string | null) {
   const range = config.gamePorts
   if (range && (port < range.min || port > range.max)) {
-    throw new ServerAdminError(`La porta deve essere tra ${range.min} e ${range.max} (porte pubblicate per i server)`, 422, 'port')
+    throw new ServerAdminError(tr('The port must be between {min} and {max} (ports published for the servers)', { min: range.min, max: range.max }), 422, 'port')
   }
   for (const s of await loadServers()) {
     if (s.id === exceptId) continue
     if ((await readServerConfig(s.configPath)).port === port) {
-      throw new ServerAdminError(`La porta ${port} è già usata dal server "${s.name}"`, 409, 'port')
+      throw new ServerAdminError(tr('Port {port} is already used by the server "{server}"', { port, server: s.name }), 409, 'port')
     }
   }
   if (exceptId === null && (await socketsOnPort(port)).listening) {
-    throw new ServerAdminError(`La porta ${port} è già in uso da un altro programma`, 409, 'port')
+    throw new ServerAdminError(tr('Port {port} is already in use by another program', { port }), 409, 'port')
   }
 }
 
@@ -188,8 +189,8 @@ export async function suggestPort(): Promise<number> {
  */
 export async function createServer(input: CreateServerInput, manager?: ServerManager) {
   const servers = await loadServers()
-  if (servers.some((s) => s.id === input.id)) throw new ServerAdminError(`Esiste già un server con id "${input.id}"`, 409, 'id')
-  if (!input.installDir === !input.version) throw new ServerAdminError('Scegli un\'installazione oppure una versione', 422, 'installDir')
+  if (servers.some((s) => s.id === input.id)) throw new ServerAdminError(tr('A server with id "{id}" already exists', { id: input.id }), 409, 'id')
+  if (!input.installDir === !input.version) throw new ServerAdminError(tr('Choose an installation or a version'), 422, 'installDir')
   const installDir = input.installDir ?? paths.gameVersion(input.version!.game, input.version!.version)
   const installation: InstallationChoice = input.version
     ? {
@@ -206,12 +207,12 @@ export async function createServer(input: CreateServerInput, manager?: ServerMan
     : await findChoice(installDir, manager !== undefined)
   await assertPortFree(input.port, null)
   const source = input.copyModsFrom ? servers.find((s) => s.id === input.copyModsFrom) : null
-  if (input.copyModsFrom && !source) throw new ServerAdminError('Server da cui copiare le mod non trovato', 422, 'copyModsFrom')
+  if (input.copyModsFrom && !source) throw new ServerAdminError(tr('Server to copy the mods from not found'), 422, 'copyModsFrom')
 
   const serverDir = paths.server(input.id)
   const saveDir = paths.serverSave(input.id)
   if (await exists(serverDir)) {
-    throw new ServerAdminError(`La cartella ${serverDir} esiste già: scegli un altro id o spostala`, 409, 'id')
+    throw new ServerAdminError(tr('The folder {path} already exists: choose another id or move it', { path: serverDir }), 409, 'id')
   }
 
   await mkdir(join(saveDir, 'Worlds'), { recursive: true })
@@ -231,9 +232,9 @@ export async function createServer(input: CreateServerInput, manager?: ServerMan
 
     const configPath = paths.serverConfig(input.id)
     const header = [
-      `# Creato da tModManager il ${new Date().toISOString()}`,
-      '# Le chiavi sono quelle di serverconfig.txt di Terraria. Al primo avvio il mondo viene generato',
-      '# (autocreate): la generazione può richiedere qualche minuto.',
+      `# Created by tModManager on ${new Date().toISOString()}`,
+      '# The keys are those of the Terraria serverconfig.txt. The world is generated on the first start',
+      '# (autocreate): generating it may take a few minutes.',
       '',
     ].join('\n')
     const text = applyServerConfig(header, {
@@ -260,7 +261,7 @@ export async function createServer(input: CreateServerInput, manager?: ServerMan
     }
     ServerDefinition.parse(raw)
     await updateRegistry(async (list) => {
-      if (list.some((s) => s.id === input.id)) throw new ServerAdminError(`Esiste già un server con id "${input.id}"`, 409, 'id')
+      if (list.some((s) => s.id === input.id)) throw new ServerAdminError(tr('A server with id "{id}" already exists', { id: input.id }), 409, 'id')
       return { servers: [...list, raw], result: undefined }
     })
     const install = installation.installed || !manager ? null : input.version ? await installVersion(input.version.game, input.version.version, manager) : await installLatest(installation, manager)
@@ -280,7 +281,7 @@ export async function createServer(input: CreateServerInput, manager?: ServerMan
 
 export async function serverSettings(id: string) {
   const server = (await loadServers()).find((s) => s.id === id)
-  if (!server) throw new ServerAdminError('Server non trovato', 404)
+  if (!server) throw new ServerAdminError(tr('Server not found'), 404)
   const text = await readFile(server.configPath, 'utf8').catch(() => '')
   const settings = await readServerConfig(server.configPath)
   return {
@@ -311,7 +312,7 @@ export async function serverSettings(id: string) {
 /** Modifica nome/argomenti (registry) e porta/giocatori/password/motd (serverconfig.txt). Valgono al prossimo avvio. */
 export async function updateServer(id: string, input: z.infer<typeof UpdateServerInput>, manager: ServerManager) {
   const server = (await loadServers()).find((s) => s.id === id)
-  if (!server) throw new ServerAdminError('Server non trovato', 404)
+  if (!server) throw new ServerAdminError(tr('Server not found'), 404)
   if (input.port !== undefined) await assertPortFree(input.port, id)
 
   // Cambio di versione (anche Terraria ↔ tModLoader): stesso mondo, nella stessa cartella Worlds/
@@ -320,7 +321,7 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
     switchTo = await findChoice(input.installDir, true)
     const status = await manager.status(server)
     if (status.state !== 'stopped' || status.operation) {
-      throw new ServerAdminError('Spegni il server prima di cambiare versione', 409, 'installDir')
+      throw new ServerAdminError(tr('Stop the server before changing version'), 409, 'installDir')
     }
     if (switchTo.kind === 'tmodloader') await mkdir(join(server.saveDir, 'Mods'), { recursive: true })
     if (switchTo.kind === 'tshock') await createTshockDirs(server.saveDir)
@@ -371,7 +372,7 @@ export async function updateServer(id: string, input: z.infer<typeof UpdateServe
 /** Il server resta su Terraria vanilla: non si propone più di riportarlo su TShock. */
 export async function stayOnVanilla(id: string) {
   const server = (await loadServers()).find((s) => s.id === id)
-  if (!server) throw new ServerAdminError('Server non trovato', 404)
+  if (!server) throw new ServerAdminError(tr('Server not found'), 404)
   await updateRegistry(async (list) => ({
     servers: list.map((s) => (s.id === id ? { ...s, awaitingTshock: undefined } : s)),
     result: undefined,
@@ -411,12 +412,12 @@ export async function trashWorld(server: ServerDefinition, world: string, reason
  */
 export async function recreateWorld(id: string, manager: ServerManager) {
   const server = (await loadServers()).find((s) => s.id === id)
-  if (!server) throw new ServerAdminError('Server non trovato', 404)
+  if (!server) throw new ServerAdminError(tr('Server not found'), 404)
   const status = await manager.status(server)
-  if (status.state !== 'stopped' || status.operation) throw new ServerAdminError('Spegni il server prima di ricreare il mondo', 409)
+  if (status.state !== 'stopped' || status.operation) throw new ServerAdminError(tr('Stop the server before recreating the world'), 409)
 
   const { world } = await readServerConfig(server.configPath)
-  if (!world) throw new ServerAdminError('Nel serverconfig non c\'è nessun mondo (chiave world)', 422)
+  if (!world) throw new ServerAdminError(tr('There is no world in the serverconfig (world key)'), 422)
   const trashed = await trashWorld(server, world)
 
   // Senza autocreate il server non genererebbe il mondo mancante
@@ -436,9 +437,9 @@ export async function recreateWorld(id: string, manager: ServerManager) {
  */
 export async function removeServer(id: string, manager: ServerManager) {
   const server = (await loadServers()).find((s) => s.id === id)
-  if (!server) throw new ServerAdminError('Server non trovato', 404)
+  if (!server) throw new ServerAdminError(tr('Server not found'), 404)
   const status = await manager.status(server)
-  if (status.state !== 'stopped' || status.operation) throw new ServerAdminError('Spegni il server prima di rimuoverlo', 409)
+  if (status.state !== 'stopped' || status.operation) throw new ServerAdminError(tr('Stop the server before removing it'), 409)
 
   await updateRegistry(async (list) => ({ servers: list.filter((s) => s.id !== id), result: undefined }))
   await Promise.all([paths.serverLogs(id), paths.modsState(id)].map((p) => rm(p, { recursive: true, force: true })))

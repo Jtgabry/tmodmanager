@@ -29,7 +29,7 @@ class UpdateUserRequest extends FormRequest
             function (Validator $validator): void {
                 if ($this->route('user')->is($this->user())
                     && ($this->input('isAdmin') === false || $this->input('isApproved') === false)) {
-                    $validator->errors()->add('isAdmin', 'Non puoi rimuovere i tuoi privilegi o la tua approvazione.');
+                    $validator->errors()->add('isAdmin', __('You cannot remove your own privileges or approval.'));
                 }
             },
         ];

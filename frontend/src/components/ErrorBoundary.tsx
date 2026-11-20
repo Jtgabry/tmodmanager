@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { t } from '../i18n'
 
 type Props = { children: ReactNode; resetKey?: string }
 type State = { error: Error | null; resetKey?: string }
@@ -28,9 +29,9 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children
     return (
       <div className="alert alert-error">
-        <p>Questa pagina ha avuto un errore: {this.state.error.message}</p>
+        <p>{t('This page ran into an error: {message}', { message: this.state.error.message })}</p>
         <button type="button" className="btn btn-sm" onClick={() => location.reload()}>
-          Ricarica
+          {t('Reload')}
         </button>
       </div>
     )

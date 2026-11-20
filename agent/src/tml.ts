@@ -28,6 +28,7 @@ import { paths } from './paths.js'
 import type { ServerManager } from './manager.js'
 import { loadServers, type ServerDefinition } from './registry.js'
 import { parseTmlVersion, readServerConfig } from './serverConfig.js'
+import { tr } from './i18n.js'
 
 export { compareVersions }
 
@@ -213,9 +214,9 @@ async function fetchJson(url: string, source: string): Promise<unknown> {
       signal: AbortSignal.timeout(15_000),
     })
   } catch (err) {
-    throw new TmlError(`${source} non raggiungibile: ${(err as Error).message}`, 502)
+    throw new TmlError(tr('{source} unreachable: {error}', { source, error: (err as Error).message }), 502)
   }
-  if (!response.ok) throw new TmlError(`${source} ha risposto ${response.status}`, 502)
+  if (!response.ok) throw new TmlError(tr('{source} responded {status}', { source, status: response.status }), 502)
   return response.json()
 }
 
@@ -305,7 +306,7 @@ async function fetchTerrariaReleases(): Promise<Release[]> {
       if (version) versions.add(version)
     }
   }
-  if (!versions.size) throw new TmlError('terraria.org non ha indicato nessuna versione del server', 502)
+  if (!versions.size) throw new TmlError(tr('terraria.org did not list any server version'), 502)
   for (const version of Object.keys(WORLD_RELEASES)) versions.add(version)
   return [...versions]
     .sort((a, b) => compareVersions(b, a))
@@ -436,7 +437,7 @@ export async function serverWorldRelease(server: ServerDefinition): Promise<numb
 
 export async function findInstallation(id: string): Promise<Installation> {
   const found = (await listInstallations()).find((i) => i.id === id)
-  if (!found) throw new TmlError('Installazione non trovata', 404)
+  if (!found) throw new TmlError(tr('Installation not found'), 404)
   return found
 }
 
@@ -450,9 +451,9 @@ export async function startJob(
 ) {
   const dir = installation.path
   const label = gameLabel(installation.kind)
-  if (busy(jobs.get(dir))) throw new TmlError('C\'è già un aggiornamento in corso per questa installazione', 409)
+  if (busy(jobs.get(dir))) throw new TmlError(tr('There is already an update in progress for this installation'), 409)
   if (installation.pinned && installation.installed) {
-    throw new TmlError('Le versioni fisse non si aggiornano: per un\'altra versione aggiungila a parte e passaci i server', 409)
+    throw new TmlError(tr('Pinned versions are not updated: for another version add it separately and switch the servers to it'), 409)
   }
 
   let release: Release | null = null
@@ -461,12 +462,12 @@ export async function startJob(
     release = (await listReleases(installation.kind).catch(() => [] as Release[])).find((r) => r.version === target.version) ?? null
     // Terraria: anche versioni non in elenco, purché esistano su terraria.org (si vede al download)
     if (!release && installation.kind === 'terraria') release = terrariaRelease(target.version)
-    if (!release) throw new TmlError(`Versione ${target.version} non trovata tra le release di ${label}`, 404)
-    if (installation.installed && installation.version === release.version) throw new TmlError(`La versione ${release.version} è già installata`, 409)
+    if (!release) throw new TmlError(tr('Version {version} not found among the {game} releases', { version: target.version, game: label }), 404)
+    if (installation.installed && installation.version === release.version) throw new TmlError(tr('Version {version} is already installed', { version: release.version }), 409)
   } else {
-    if (!installation.installed) throw new TmlError(`${label} non è installato: scegli una versione da installare`, 409)
+    if (!installation.installed) throw new TmlError(tr('{game} is not installed: choose a version to install', { game: label }), 409)
     backup = installation.backups.find((b) => b.path === target.backup) ?? null
-    if (!backup) throw new TmlError('Backup non trovato', 404)
+    if (!backup) throw new TmlError(tr('Backup not found'), 404)
   }
 
   // I server devono girare nella sessione gestita, altrimenti non si possono spegnere in modo pulito
@@ -474,10 +475,10 @@ export async function startJob(
   const statuses = await Promise.all(servers.map((s) => manager.status(s)))
   const unmanaged = statuses.filter((s) => s.state !== 'stopped' && !s.managed)
   if (unmanaged.length) {
-    throw new TmlError(`Server accesi fuori dal pannello: ${unmanaged.map((s) => s.name).join(', ')}. Spegnili prima.`, 409)
+    throw new TmlError(tr('Servers running outside the panel: {servers}. Stop them first.', { servers: unmanaged.map((s) => s.name).join(', ') }), 409)
   }
   const busyServer = statuses.find((s) => s.operation)
-  if (busyServer) throw new TmlError(`Operazione in corso su ${busyServer.name}: riprova tra poco`, 409)
+  if (busyServer) throw new TmlError(tr('Operation in progress on {server}: try again shortly', { server: busyServer.name }), 409)
 
   const job: Job = {
     installDir: dir,
@@ -486,7 +487,7 @@ export async function startJob(
     toVersion: release?.version ?? backup?.version ?? null,
     phase: release ? 'download' : 'prepare',
     progress: null,
-    message: release ? `Download di ${label} ${release.version}…` : 'Preparazione del backup…',
+    message: release ? tr('Downloading {game} {version}…', { game: label, version: release.version }) : tr('Preparing the backup…'),
     startedAt: new Date().toISOString(),
     finishedAt: null,
     error: null,
@@ -494,12 +495,17 @@ export async function startJob(
   }
   jobs.set(dir, job)
   // Per tutta la durata, niente avvii/spegnimenti dal pannello dei server di questa installazione
-  manager.blockInstall(dir, `${job.kind === 'install' ? 'Installazione' : 'Aggiornamento'} di ${label} in corso: riprova quando è finito`)
+  manager.blockInstall(
+    dir,
+    job.kind === 'install'
+      ? tr('Installation of {game} in progress: try again when it is finished', { game: label })
+      : tr('Update of {game} in progress: try again when it is finished', { game: label }),
+  )
   runJob(job, installation.kind, servers, release, backup, restartServers, manager)
     .catch((err: Error) => {
       job.phase = 'error'
       job.error = err.message
-      job.message = 'Aggiornamento non riuscito'
+      job.message = tr('Update failed')
       job.finishedAt = new Date().toISOString()
     })
     .finally(() => manager.unblockInstall(dir))
@@ -512,13 +518,13 @@ export async function startJob(
  */
 export async function addVersion(game: Game, version: string, manager: ServerManager) {
   const label = gameLabel(game)
-  if (!VERSION_NAME.test(version)) throw new TmlError(`Versione di ${label} non valida: ${version}`, 422)
+  if (!VERSION_NAME.test(version)) throw new TmlError(tr('Invalid {game} version: {version}', { game: label, version }), 422)
   const listed = (await listReleases(game).catch(() => [] as Release[])).find((r) => r.version === version)
   const release = listed ?? (game === 'terraria' ? terrariaRelease(version) : null)
-  if (!release) throw new TmlError(`Versione ${version} non trovata tra le release di ${label}`, 404)
+  if (!release) throw new TmlError(tr('Version {version} not found among the {game} releases', { version, game: label }), 404)
   const dir = paths.gameVersion(game, version)
-  if (busy(jobs.get(dir))) throw new TmlError(`${label} ${version} si sta già installando`, 409)
-  if (await isInstalled(dir)) throw new TmlError(`${label} ${version} è già tra le versioni fisse`, 409)
+  if (busy(jobs.get(dir))) throw new TmlError(tr('{game} {version} is already being installed', { game: label, version }), 409)
+  if (await isInstalled(dir)) throw new TmlError(tr('{game} {version} is already among the pinned versions', { game: label, version }), 409)
   // Un tentativo fallito in precedenza: si riparte da zero
   await rm(dir, { recursive: true, force: true })
   const installation: Installation = {
@@ -540,10 +546,10 @@ export async function addVersion(game: Game, version: string, manager: ServerMan
 
 /** Rimuove una versione fissa (nessun server deve usarla). */
 export async function removeInstallation(installation: Installation) {
-  if (!installation.pinned) throw new TmlError('Si possono rimuovere solo le versioni fisse', 409)
-  if (busy(jobs.get(installation.path))) throw new TmlError('Installazione in corso: riprova quando è finita', 409)
+  if (!installation.pinned) throw new TmlError(tr('Only pinned versions can be removed'), 409)
+  if (busy(jobs.get(installation.path))) throw new TmlError(tr('Installation in progress: try again when it is finished'), 409)
   if (installation.servers.length) {
-    throw new TmlError(`La usano ancora: ${installation.servers.map((s) => s.name).join(', ')}. Passali a un'altra versione prima.`, 409)
+    throw new TmlError(tr('Still used by: {servers}. Switch them to another version first.', { servers: installation.servers.map((s) => s.name).join(', ') }), 409)
   }
   await rm(installation.path, { recursive: true, force: true })
   jobs.delete(installation.path)
@@ -555,14 +561,14 @@ const download = (release: Release, file: string, job: Job) =>
   downloadFile(release.downloadUrl, file, job, {
     size: release.size,
     hash: release.sha256 ? { algorithm: 'sha256', value: release.sha256 } : null,
-    notFound: `La versione ${release.version} non è scaricabile (non esiste?)`,
+    notFound: tr('Version {version} cannot be downloaded (does it exist?)', { version: release.version }),
   })
 
 /** Scarica `url` in `file` aggiornando job.progress; se l'hash atteso è noto, lo verifica. */
 async function downloadFile(url: string, file: string, job: Job, expected: Expected) {
   const response = await fetch(url, { headers: { 'User-Agent': 'tmodmanager-agent' }, redirect: 'follow' })
   if (!response.ok || !response.body) {
-    throw new Error(response.status === 404 ? expected.notFound : `Download non riuscito (HTTP ${response.status})`)
+    throw new Error(response.status === 404 ? expected.notFound : tr('Download failed (HTTP {status})', { status: response.status }))
   }
   const total = Number(response.headers.get('content-length')) || expected.size || 0
   let received = 0
@@ -577,7 +583,7 @@ async function downloadFile(url: string, file: string, job: Job, expected: Expec
   })
   await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), counter, createWriteStream(file))
   if (expected.hash && hash.digest('hex') !== expected.hash.value.toLowerCase()) {
-    throw new Error(`Il file scaricato non corrisponde (${expected.hash.algorithm} diverso)`)
+    throw new Error(tr('The downloaded file does not match ({algorithm} differs)', { algorithm: expected.hash.algorithm }))
   }
 }
 
@@ -588,7 +594,7 @@ async function extractRelease(kind: Game, zip: string, staging: string, work: st
     await mkdir(staging, { recursive: true })
     await run('unzip', ['-q', zip, '-d', staging], { maxBuffer: 16 * 1024 * 1024 })
     if (!(await exists(join(staging, TML_ASSEMBLY))) || !(await exists(join(staging, TML_START_SCRIPT)))) {
-      throw new Error('Lo zip scaricato non sembra un\'installazione di tModLoader')
+      throw new Error(tr('The downloaded zip does not look like a tModLoader installation'))
     }
     return
   }
@@ -601,7 +607,7 @@ async function extractRelease(kind: Game, zip: string, staging: string, work: st
     for (const top of await readdir(out)) {
       if (await exists(join(out, top, 'Linux', TERRARIA_BINARY))) linux = join(out, top, 'Linux')
     }
-    if (!linux) throw new Error('Lo zip scaricato non contiene il server Linux di Terraria')
+    if (!linux) throw new Error(tr('The downloaded zip does not contain the Terraria Linux server'))
     await mkdir(dirname(staging), { recursive: true })
     await rename(linux, staging)
     for (const name of [TERRARIA_BINARY, 'TerrariaServer']) await chmod(join(staging, name), 0o755).catch(() => undefined)
@@ -625,7 +631,7 @@ async function extractTshock(zip: string, staging: string, work: string) {
       for (const name of await readdir(out)) await rename(join(out, name), join(staging, name))
     }
     if (!(await exists(join(staging, TSHOCK_BINARY))) || !(await exists(join(staging, TSHOCK_ASSEMBLY)))) {
-      throw new Error('Lo zip scaricato non sembra un\'installazione di TShock')
+      throw new Error(tr('The downloaded zip does not look like a TShock installation'))
     }
     for (const name of [TSHOCK_BINARY, 'TShock.Installer']) await chmod(join(staging, name), 0o755).catch(() => undefined)
   } finally {
@@ -663,31 +669,31 @@ async function ensureDotnet(dir: string, job: Job, work: string) {
   for (const other of [paths.tshockInstall(), ...(await pinnedDirs('tshock'))]) {
     if (other === dir || other === dirname(dir) || `${other}.new` === dir || !(await hasDotnet(other, channel))) continue
     job.phase = 'prepare'
-    job.message = `Copia del runtime .NET ${channel}…`
+    job.message = tr('Copying the .NET {version} runtime…', { version: channel })
     await rm(join(dir, 'dotnet'), { recursive: true, force: true })
     await run('cp', ['-a', '--', join(other, 'dotnet'), join(dir, 'dotnet')])
     return
   }
   job.phase = 'prepare'
   job.progress = null
-  job.message = `Download del runtime .NET ${channel}…`
+  job.message = tr('Downloading the .NET {version} runtime…', { version: channel })
   const meta = (await fetchJson(`${config.dotnetReleases}/${channel}/releases.json`, 'Microsoft (.NET)')) as DotnetReleases
   const version = meta['latest-runtime']
   const rid = linuxRid()
   const file = meta.releases
     .find((r) => r.runtime?.version === version)
     ?.runtime?.files.find((f) => f.rid === rid && f.name.endsWith('.tar.gz'))
-  if (!file) throw new Error(`Runtime .NET ${version} per ${rid} non trovato`)
+  if (!file) throw new Error(tr('.NET {version} runtime for {rid} not found', { version, rid }))
   const archive = join(work, `dotnet-${version}-${randomBytes(4).toString('hex')}.tar.gz`)
   const target = join(dir, 'dotnet.new')
   try {
     await downloadFile(file.url, archive, job, {
       size: null,
       hash: file.hash ? { algorithm: 'sha512', value: file.hash } : null,
-      notFound: `Runtime .NET ${version} non scaricabile`,
+      notFound: tr('.NET {version} runtime cannot be downloaded', { version }),
     })
     job.progress = null
-    job.message = `Estrazione del runtime .NET ${version}…`
+    job.message = tr('Extracting the .NET {version} runtime…', { version })
     await rm(target, { recursive: true, force: true })
     await mkdir(target, { recursive: true })
     await run('tar', ['-xzf', archive, '-C', target], { maxBuffer: 16 * 1024 * 1024 })
@@ -742,7 +748,7 @@ async function runJob(
 
       job.phase = 'extract'
       job.progress = null
-      job.message = 'Estrazione…'
+      job.message = tr('Extracting…')
       await extractRelease(kind, zip, staging, work)
       const files = await readdir(staging)
       if (kind === 'tmodloader') for (const name of files) if (name.endsWith('.sh')) await chmod(join(staging, name), 0o755)
@@ -759,13 +765,15 @@ async function runJob(
       // Prima installazione: niente da copiare, niente server da spegnere
       if (kind === 'tshock') await ensureDotnet(staging, job, work)
       job.phase = 'swap'
-      job.message = 'Installazione…'
+      job.message = tr('Installing…')
       await mkdir(dirname(dir), { recursive: true })
       await rename(staging, dir)
     } else {
       job.phase = 'prepare'
       job.message =
-        kind === 'terraria' ? 'Copia delle configurazioni dall\'installazione attuale…' : 'Copia di configurazioni, runtime .NET e dati dall\'installazione attuale…'
+        kind === 'terraria'
+          ? tr('Copying the configurations from the current installation…')
+          : tr('Copying configurations, .NET runtime and data from the current installation…')
       await carryOver(dir, staging)
       if (kind === 'tshock') await ensureDotnet(staging, job, work)
 
@@ -773,13 +781,13 @@ async function runJob(
       for (const server of servers) {
         const status = await manager.status(server)
         if (status.state === 'stopped') continue
-        job.message = `Spegnimento di ${server.name} (salvataggio del mondo)…`
+        job.message = tr('Stopping {server} (saving the world)…', { server: server.name })
         await manager.runBlocking(server, 'stop')
         stopped.push(server)
       }
 
       job.phase = 'swap'
-      job.message = 'Sostituzione dei file…'
+      job.message = tr('Replacing the files…')
       let backupPath = `${dir}-v${job.fromVersion ?? 'precedente'}`
       for (let i = 2; await exists(backupPath); i++) backupPath = `${dir}-v${job.fromVersion ?? 'precedente'}-${i}`
       await rename(dir, backupPath)
@@ -795,7 +803,7 @@ async function runJob(
     if (restartServers) {
       job.phase = 'starting'
       for (const server of stopped) {
-        job.message = `Avvio di ${server.name}…`
+        job.message = tr('Starting {server}…', { server: server.name })
         await manager.runBlocking(server, 'start')
         job.restarted.push(server.id)
       }
@@ -808,8 +816,8 @@ async function runJob(
     job.progress = null
     job.message =
       stopped.length && !restartServers
-        ? `Installata la versione ${job.toVersion}. I server spenti per l'aggiornamento vanno riaccesi a mano.`
-        : `Installata la versione ${job.toVersion}.`
+        ? tr('Installed version {version}. The servers stopped for the update must be started again by hand.', { version: job.toVersion ?? '?' })
+        : tr('Installed version {version}.', { version: job.toVersion ?? '?' })
     job.finishedAt = new Date().toISOString()
   } catch (err) {
     await rm(staging, { recursive: true, force: true })

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { errorMessage, statusOf } from '../../lib/api'
 import { readTextFile, saveTextFile } from '../../lib/files'
+import { t } from '../../i18n'
 
 /** Editor dei file di testo, con protezione dalle modifiche concorrenti (409 se il file è cambiato nel frattempo). */
 export default function TextEditor(props: { serverId: string; root: string; path: string; onClose: () => void }) {
@@ -57,20 +58,20 @@ export default function TextEditor(props: { serverId: string; root: string; path
         <h2 className="mono">{path}</h2>
         <div className="btn-row">
           <button type="button" className="btn btn-primary btn-sm" disabled={!dirty || saving} onClick={save}>
-            {saving ? 'Salvataggio…' : 'Salva'}
+            {saving ? t('Saving…') : t('Save')}
           </button>
           {conflict && (
             <button type="button" className="btn btn-sm" onClick={() => setReloadKey((k) => k + 1)}>
-              Ricarica (perdi le modifiche)
+              {t('Reload (lose your changes)')}
             </button>
           )}
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            {dirty ? 'Chiudi senza salvare' : 'Chiudi'}
+            {dirty ? t('Close without saving') : t('Close')}
           </button>
         </div>
       </div>
       {error && <div className="alert alert-error">{error}</div>}
-      {saved && !dirty && <div className="alert alert-success">Salvato. Se è una configurazione del server, vale dal prossimo riavvio.</div>}
+      {saved && !dirty && <div className="alert alert-success">{t('Saved. If it is a server configuration, it applies from the next restart.')}</div>}
       {content === null && !error && <div className="spinner" />}
       {content !== null && (
         <textarea

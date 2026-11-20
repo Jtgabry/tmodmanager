@@ -51,7 +51,7 @@ test('.xnb: texture non compressa e compressa LZX, alfa riportato come nei PNG',
     assert.deepEqual([texture.width, texture.height], [2, 1])
     assert.deepEqual([...texture.rgba], [255, 0, 0, 255, 128, 0, 0, 128])
   }
-  assert.throws(() => readXnbTexture(Buffer.from('non un xnb')), /Non è un file .xnb/)
+  assert.throws(() => readXnbTexture(Buffer.from('non un xnb')), /Not a .xnb file/)
 })
 
 test('sprite di Terraria: dalle texture del gioco in terraria-assets, anche per le mod che le usano', async () => {

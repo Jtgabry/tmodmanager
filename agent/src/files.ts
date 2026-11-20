@@ -9,6 +9,7 @@ import { gameLabel } from './games.js'
 import type { ServerDefinition } from './registry.js'
 import { readServerConfig } from './serverConfig.js'
 import { move, moveToTrash, type TrashMeta } from './trash.js'
+import { tr } from './i18n.js'
 
 export class FileError extends Error {
   constructor(
@@ -34,13 +35,13 @@ export async function fileRoots(server: ServerDefinition): Promise<FileRoot[]> {
   const { world } = await readServerConfig(server.configPath)
   if (world) {
     const worlds = dirname(world)
-    if (!isInside(server.saveDir, worlds)) roots.push({ id: 'worlds', label: 'Mondi', path: worlds, limited: false })
+    if (!isInside(server.saveDir, worlds)) roots.push({ id: 'worlds', label: tr('Worlds'), path: worlds, limited: false })
   }
-  roots.push({ id: 'tml', label: `${gameLabel(server.game)} (config e log)`, path: server.installDir, limited: true })
+  roots.push({ id: 'tml', label: tr('{game} (config and logs)', { game: gameLabel(server.game) }), path: server.installDir, limited: true })
   // serverconfig.txt nella cartella del server (server creati dal pannello)
   const configDir = dirname(server.configPath)
   if (!isInside(server.saveDir, configDir) && !isInside(server.installDir, configDir)) {
-    roots.push({ id: 'config', label: 'Configurazione', path: configDir, limited: true })
+    roots.push({ id: 'config', label: tr('Configuration'), path: configDir, limited: true })
   }
   return roots
 }
@@ -49,10 +50,10 @@ const isInside = (root: string, target: string) => target === root || target.sta
 
 /** Nome di file/cartella valido (un solo segmento, niente separatori o nomi speciali). */
 export function validName(name: unknown): string {
-  if (typeof name !== 'string') throw new FileError('Nome mancante')
+  if (typeof name !== 'string') throw new FileError(tr('Missing name'))
   const trimmed = name.trim()
   if (!trimmed || trimmed === '.' || trimmed === '..' || /[/\\\0]/.test(trimmed) || trimmed.length > 255) {
-    throw new FileError(`Nome non valido: "${name}"`)
+    throw new FileError(tr('Invalid name: "{name}"', { name }))
   }
   return trimmed
 }
@@ -86,15 +87,15 @@ export async function resolvePath(
   mustExist = true,
 ): Promise<Resolved> {
   const root = (await fileRoots(server)).find((r) => r.id === rootId)
-  if (!root) throw new FileError('Cartella radice sconosciuta', 404)
+  if (!root) throw new FileError(tr('Unknown root folder'), 404)
   const rel = typeof path === 'string' ? path : ''
-  if (rel.includes('\0')) throw new FileError('Percorso non valido')
+  if (rel.includes('\0')) throw new FileError(tr('Invalid path'))
 
   const rootReal = await realpath(root.path).catch(() => {
-    throw new FileError(`La cartella ${root.path} non esiste`, 404)
+    throw new FileError(tr('The folder {path} does not exist', { path: root.path }), 404)
   })
   const absolute = resolve(rootReal, `.${sep}${rel}`)
-  if (!isInside(rootReal, absolute)) throw new FileError('Percorso fuori dalla cartella consentita')
+  if (!isInside(rootReal, absolute)) throw new FileError(tr('Path outside the allowed folder'))
 
   // Anche seguendo i link simbolici si deve restare dentro la radice
   const existing = mustExist ? absolute : dirname(absolute)
@@ -102,16 +103,16 @@ export async function resolvePath(
   try {
     real = await realpath(existing)
   } catch {
-    throw new FileError('File o cartella non trovati', 404)
+    throw new FileError(tr('File or folder not found'), 404)
   }
-  if (!isInside(rootReal, real)) throw new FileError('Il percorso porta fuori dalla cartella consentita (link simbolico)')
+  if (!isInside(rootReal, real)) throw new FileError(tr('The path leads outside the allowed folder (symbolic link)'))
 
   const rel2 = relative(rootReal, absolute).split(sep).join('/')
   if (root.limited && !limitedAllows(rel2, access)) {
     throw new FileError(
       access === 'list' || access === 'read'
-        ? 'File non accessibile: della cartella di tModLoader si vedono solo i file .txt e i log'
-        : 'Operazione non consentita nella cartella di tModLoader (solo modifica dei file .txt)',
+        ? tr('File not accessible: only the .txt files and the logs of the tModLoader folder are shown')
+        : tr('Operation not allowed in the tModLoader folder (only editing .txt files)'),
       access === 'list' || access === 'read' ? 404 : 422,
     )
   }
@@ -128,7 +129,7 @@ export type FileEntry = {
 export async function listDirectory(server: ServerDefinition, rootId: unknown, path: unknown) {
   const target = await resolvePath(server, rootId, path, 'list')
   const info = await stat(target.absolute)
-  if (!info.isDirectory()) throw new FileError('Non è una cartella')
+  if (!info.isDirectory()) throw new FileError(tr('Not a folder'))
 
   const names = await readdir(target.absolute)
   const entries = await Promise.all(
@@ -180,7 +181,7 @@ export async function openDownload(server: ServerDefinition, rootId: unknown, pa
   if (info.isFile()) {
     return { filename: name, size: info.size, stream: createReadStream(target.absolute) as Readable }
   }
-  if (!info.isDirectory()) throw new FileError('Non è un file scaricabile')
+  if (!info.isDirectory()) throw new FileError(tr('Not a downloadable file'))
 
   // -y: i link simbolici restano link (non si segue niente fuori dalla cartella); "-" = output su stdout
   const zip = spawn('zip', ['-q', '-r', '-y', '-', '--', basename(target.absolute)], {
@@ -201,23 +202,23 @@ export async function uploadFile(
 ) {
   const fileName = validName(name)
   const dir = await resolvePath(server, rootId, dirPath, 'list')
-  if (!(await stat(dir.absolute)).isDirectory()) throw new FileError('La destinazione non è una cartella')
+  if (!(await stat(dir.absolute)).isDirectory()) throw new FileError(tr('The destination is not a folder'))
   const destination = join(dir.absolute, fileName)
   const destinationRel = dir.relative === '' ? fileName : `${dir.relative}/${fileName}`
   if (dir.root.limited && !limitedAllows(destinationRel, 'write')) {
-    throw new FileError('Nella cartella di tModLoader si possono caricare solo file .txt (es. serverconfig.txt)')
+    throw new FileError(tr('Only .txt files (e.g. serverconfig.txt) can be uploaded to the tModLoader folder'))
   }
 
   const existing = await lstat(destination).catch(() => null)
-  if (existing?.isDirectory()) throw new FileError(`Esiste già una cartella "${fileName}"`, 409)
-  if (existing && !overwrite) throw new FileError(`Il file "${fileName}" esiste già`, 409)
+  if (existing?.isDirectory()) throw new FileError(tr('A folder "{name}" already exists', { name: fileName }), 409)
+  if (existing && !overwrite) throw new FileError(tr('The file "{name}" already exists', { name: fileName }), 409)
 
   const staging = join(dir.absolute, `.${fileName}.${randomBytes(4).toString('hex')}.uploading`)
   try {
     let received = 0
     body.on('data', (chunk: Buffer) => {
       received += chunk.length
-      if (received > MAX_UPLOAD_BYTES) body.destroy(new FileError('File troppo grande (max 2 GB)', 413))
+      if (received > MAX_UPLOAD_BYTES) body.destroy(new FileError(tr('File too large (max {size})', { size: '2 GB' }), 413))
     })
     await pipeline(body, createWriteStream(staging, { flags: 'wx' }))
     if (existing) await moveToTrash(server, destination, fileTrashInfo(dir.root.id, destinationRel, 'replaced'), { copy: true })
@@ -233,7 +234,7 @@ export async function makeDirectory(server: ServerDefinition, rootId: unknown, d
   const folder = validName(name)
   const dir = await resolvePath(server, rootId, dirPath, 'modify')
   const target = join(dir.absolute, folder)
-  if (await lstat(target).catch(() => null)) throw new FileError(`"${folder}" esiste già`, 409)
+  if (await lstat(target).catch(() => null)) throw new FileError(tr('"{name}" already exists', { name: folder }), 409)
   await mkdir(target)
   return { name: folder }
 }
@@ -241,13 +242,13 @@ export async function makeDirectory(server: ServerDefinition, rootId: unknown, d
 export async function renameEntry(server: ServerDefinition, rootId: unknown, path: unknown, newName: unknown) {
   const name = validName(newName)
   const source = await resolvePath(server, rootId, path, 'modify')
-  if (source.relative === '') throw new FileError('Non si può rinominare la cartella radice')
+  if (source.relative === '') throw new FileError(tr('The root folder cannot be renamed'))
   const destination = join(dirname(source.absolute), name)
   const destinationRel = [...source.relative.split('/').slice(0, -1), name].join('/')
   if (source.root.limited && !limitedAllows(destinationRel, 'modify')) {
-    throw new FileError('Nella cartella di tModLoader i file devono restare .txt')
+    throw new FileError(tr('In the tModLoader folder files must stay .txt'))
   }
-  if (await lstat(destination).catch(() => null)) throw new FileError(`"${name}" esiste già`, 409)
+  if (await lstat(destination).catch(() => null)) throw new FileError(tr('"{name}" already exists', { name }), 409)
   await rename(source.absolute, destination)
   return { name }
 }
@@ -265,7 +266,7 @@ const fileTrashInfo = (root: string, rel: string, reason: TrashMeta['reason']) =
 /** Eliminazione = spostamento nel cestino dell'agent (vedi trash.ts). */
 export async function deleteEntry(server: ServerDefinition, rootId: unknown, path: unknown) {
   const target = await resolvePath(server, rootId, path, 'modify')
-  if (target.relative === '') throw new FileError('Non si può eliminare la cartella radice')
+  if (target.relative === '') throw new FileError(tr('The root folder cannot be deleted'))
   await moveToTrash(server, target.absolute, fileTrashInfo(target.root.id, target.relative, 'deleted'))
 }
 
@@ -274,17 +275,17 @@ export async function deleteEntry(server: ServerDefinition, rootId: unknown, pat
  * Se al suo posto c'è già qualcosa: 409, oppure (overwrite) quello attuale va a sua volta nel cestino.
  */
 export async function restoreEntry(server: ServerDefinition, meta: TrashMeta, itemPath: string, overwrite: boolean) {
-  if (!meta.root || meta.path === null) throw new FileError('Origine sconosciuta: impossibile ripristinare')
+  if (!meta.root || meta.path === null) throw new FileError(tr('Unknown origin: cannot restore'))
   const access: Access = meta.isDir ? 'modify' : 'write'
   const target = await resolvePath(server, meta.root, meta.path, access, false).catch((err) => {
     if (err instanceof FileError && err.status === 404) {
-      throw new FileError(`La cartella di origine di "${meta.path}" non esiste più: ricreala prima di ripristinare`, 422)
+      throw new FileError(tr('The original folder of "{path}" no longer exists: recreate it before restoring', { path: meta.path ?? '' }), 422)
     }
     throw err
   })
   const existing = await lstat(target.absolute).catch(() => null)
   if (existing && !overwrite) {
-    throw new FileError(`Esiste già "${meta.path}"`, 409)
+    throw new FileError(tr('"{name}" already exists', { name: meta.path }), 409)
   }
   if (existing) await moveToTrash(server, target.absolute, fileTrashInfo(target.root.id, target.relative, 'replaced'))
   await move(itemPath, target.absolute)
@@ -295,10 +296,10 @@ export async function restoreEntry(server: ServerDefinition, meta: TrashMeta, it
 export async function readText(server: ServerDefinition, rootId: unknown, path: unknown) {
   const target = await resolvePath(server, rootId, path, 'read')
   const info = await stat(target.absolute)
-  if (!info.isFile()) throw new FileError('Non è un file')
-  if (info.size > MAX_TEXT_BYTES) throw new FileError('File troppo grande per l\'editor (max 1 MB): scaricalo')
+  if (!info.isFile()) throw new FileError(tr('Not a file'))
+  if (info.size > MAX_TEXT_BYTES) throw new FileError(tr('File too large for the editor (max 1 MB): download it'))
   const buffer = await readFile(target.absolute)
-  if (buffer.includes(0)) throw new FileError('Il file non è di testo')
+  if (buffer.includes(0)) throw new FileError(tr('The file is not a text file'))
   return { content: buffer.toString('utf8'), modifiedAt: info.mtime.toISOString() }
 }
 
@@ -313,13 +314,13 @@ export async function writeText(
   content: unknown,
   expectedModifiedAt: unknown,
 ) {
-  if (typeof content !== 'string') throw new FileError('Contenuto mancante')
-  if (Buffer.byteLength(content) > MAX_TEXT_BYTES) throw new FileError('Contenuto troppo grande (max 1 MB)', 413)
+  if (typeof content !== 'string') throw new FileError(tr('Missing content'))
+  if (Buffer.byteLength(content) > MAX_TEXT_BYTES) throw new FileError(tr('Content too large (max 1 MB)'), 413)
   const target = await resolvePath(server, rootId, path, 'write')
   const info = await stat(target.absolute)
-  if (!info.isFile()) throw new FileError('Non è un file')
+  if (!info.isFile()) throw new FileError(tr('Not a file'))
   if (typeof expectedModifiedAt === 'string' && info.mtime.toISOString() !== expectedModifiedAt) {
-    throw new FileError('Il file è stato modificato nel frattempo: ricaricalo prima di salvare', 409)
+    throw new FileError(tr('The file was changed in the meantime: reload it before saving'), 409)
   }
   const tmp = join(dirname(target.absolute), `.${basename(target.absolute)}.${randomBytes(4).toString('hex')}.tmp`)
   await writeFile(tmp, content, { mode: info.mode })

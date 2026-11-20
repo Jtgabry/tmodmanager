@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { chunkUrl, overviewUrl } from '../../lib/worldMap'
 import type { MapPlayer, MapSource, WorldMapManifest } from '../../lib/types'
 import SpriteLayer, { SPRITE_ZOOM } from './SpriteLayer'
+import { t } from '../../i18n'
 
 /** Vista: tile in alto a sinistra e pixel dello schermo per tile. */
 type View = { x: number; y: number; zoom: number }
@@ -59,11 +60,11 @@ const TEAM_COLOR = ['#f1e6d6', '#ff5a5a', '#5adf6e', '#5a9bff', '#ffd84a', '#e46
 
 /** Strato del mondo: dove si trova la tile (x, y), per la riga delle coordinate. */
 function layerOf(world: WorldMapManifest['world'], y: number) {
-  if (y < world.surface * 0.35) return 'spazio'
-  if (y < world.surface) return 'superficie'
-  if (y < world.rock) return 'sottosuolo'
-  if (y > world.height - 200) return 'inferi'
-  return 'caverne'
+  if (y < world.surface * 0.35) return t('space')
+  if (y < world.surface) return t('surface')
+  if (y < world.rock) return t('underground')
+  if (y > world.height - 200) return t('underworld')
+  return t('caverns')
 }
 
 /**
@@ -388,7 +389,7 @@ export default function MapViewer({
                 key={p.name}
                 className={p.dead ? 'world-map-player world-map-player-dead' : 'world-map-player'}
                 style={{ ...screen(p.x, p.y), '--team': TEAM_COLOR[p.team] ?? TEAM_COLOR[0] } as React.CSSProperties}
-                title={`${p.name} · ${p.life}/${p.lifeMax} vita${p.dead ? ' · morto' : ''}`}
+                title={`${p.name} · ${t('{life}/{max} life', { life: p.life, max: p.lifeMax })}${p.dead ? ` · ${t('dead')}` : ''}`}
               >
                 <span className="world-map-player-dot" />
                 <span className="world-map-player-name">{p.name}</span>
@@ -399,19 +400,19 @@ export default function MapViewer({
       </div>
 
       <div className="world-map-controls">
-        <button type="button" className="btn btn-sm btn-icon" aria-label="Avvicina" title="Avvicina" onClick={() => zoomAt(1.6, size.w / 2, size.h / 2)}>
+        <button type="button" className="btn btn-sm btn-icon" aria-label={t('Zoom in')} title={t('Zoom in')} onClick={() => zoomAt(1.6, size.w / 2, size.h / 2)}>
           +
         </button>
-        <button type="button" className="btn btn-sm btn-icon" aria-label="Allontana" title="Allontana" onClick={() => zoomAt(1 / 1.6, size.w / 2, size.h / 2)}>
+        <button type="button" className="btn btn-sm btn-icon" aria-label={t('Zoom out')} title={t('Zoom out')} onClick={() => zoomAt(1 / 1.6, size.w / 2, size.h / 2)}>
           −
         </button>
-        <button type="button" className="btn btn-sm" title="Tutto il mondo" onClick={fit}>
-          Mondo intero
+        <button type="button" className="btn btn-sm" title={t('The whole world')} onClick={fit}>
+          {t('Whole world')}
         </button>
-        <button type="button" className="btn btn-sm" title="Centra sullo spawn" onClick={() => centerOn(world.spawnX, world.spawnY, Math.max(v?.zoom ?? 2, 2))}>
+        <button type="button" className="btn btn-sm" title={t('Center on the spawn')} onClick={() => centerOn(world.spawnX, world.spawnY, Math.max(v?.zoom ?? 2, 2))}>
           Spawn
         </button>
-        <button type="button" className="btn btn-sm btn-icon" aria-label={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'} title="Schermo intero" onClick={toggleFullscreen}>
+        <button type="button" className="btn btn-sm btn-icon" aria-label={fullscreen ? t('Exit full screen') : t('Full screen')} title={t('Full screen')} onClick={toggleFullscreen}>
           <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
             {fullscreen ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
           </svg>

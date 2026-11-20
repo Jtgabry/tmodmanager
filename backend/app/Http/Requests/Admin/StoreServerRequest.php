@@ -39,8 +39,8 @@ class StoreServerRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'id.regex' => 'Solo lettere minuscole, numeri e trattini (max 32), senza trattino iniziale.',
-            'world.name.regex' => 'Lettere, numeri, spazi, _ - \' (max 40).',
+            'id.regex' => __('Only lowercase letters, numbers and dashes (max 32), not starting with a dash.'),
+            'world.name.regex' => __('Letters, numbers, spaces, _ - \' (max 40).'),
         ];
     }
 

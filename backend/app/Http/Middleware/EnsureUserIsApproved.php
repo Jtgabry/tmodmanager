@@ -14,7 +14,7 @@ class EnsureUserIsApproved
     public function handle(Request $request, Closure $next): Response
     {
         if (! $request->user()?->isApproved()) {
-            return response()->json(['error' => 'not_approved', 'message' => 'Account in attesa di approvazione.'], 403);
+            return response()->json(['error' => 'not_approved', 'message' => __('Account waiting for approval.')], 403);
         }
 
         return $next($request);

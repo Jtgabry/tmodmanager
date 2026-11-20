@@ -5,6 +5,7 @@ import { config } from './config.js'
 import { ConsoleHub, verifyTicket } from './consoleHub.js'
 import { ServerManager } from './manager.js'
 import { handleShutdown, resumeServers } from './lifecycle.js'
+import { localeFrom, withLocale } from './i18n.js'
 import { migrateLegacyData } from './migrate.js'
 import { registryPath } from './registry.js'
 import { scheduleDailyBackups } from './backups.js'
@@ -37,6 +38,9 @@ const manager = new ServerManager()
 await migrateLegacyData((message) => app.log.info(message))
 
 const WS_CONSOLE = /^\/ws\/servers\/([a-z0-9][a-z0-9-]{0,31})\/console(\?|$)/
+
+// Lingua dei messaggi (Accept-Language, girato da Laravel): vale per tutta la richiesta e per il lavoro che avvia
+app.addHook('onRequest', (req, _reply, done) => withLocale(localeFrom(req.headers['accept-language']), done))
 
 app.addHook('onRequest', async (req, reply) => {
   // Console WebSocket (arriva dal browser tramite Apache): autenticata dal ticket firmato da Laravel
@@ -76,7 +80,7 @@ const hub = new ConsoleHub(manager)
 app.get<{ Params: { id: string } }>('/ws/servers/:id/console', { websocket: true }, (socket, req) => {
   hub.attach(req.params.id, socket).catch((err) => {
     app.log.error(err)
-    socket.close(1011, 'errore interno')
+    socket.close(1011, 'internal error')
   })
 })
 

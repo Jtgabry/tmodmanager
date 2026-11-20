@@ -24,8 +24,8 @@ class UploadPluginRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'file.extensions' => 'Il file deve essere un plugin .dll.',
-            'file.uploaded' => 'Caricamento fallito: il file supera il limite consentito dal server.',
+            'file.extensions' => __('The file must be a .dll plugin.'),
+            'file.uploaded' => __('Upload failed: the file exceeds the limit allowed by the server.'),
         ];
     }
 }

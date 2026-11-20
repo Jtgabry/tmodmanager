@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { z } from 'zod'
 import type { ServerDefinition } from './registry.js'
+import { tr, trText } from './i18n.js'
 
 /**
  * Editor del mondo a server acceso, tramite la mod LiveMap (addons/TmmLiveMap/WorldEditor.cs): il pannello scrive
@@ -58,7 +59,7 @@ export type EditResult = z.infer<typeof EditResult>
 /** Applica le modifiche e ne restituisce l'esito (quante riuscite, perché le altre no). */
 export async function editWorld(server: ServerDefinition, body: unknown): Promise<EditResult> {
   const parsed = EditRequest.safeParse(body)
-  if (!parsed.success) throw new WorldEditorError(`Modifiche non valide: ${parsed.error.issues[0]?.message ?? 'formato'}`, 'invalid')
+  if (!parsed.success) throw new WorldEditorError(tr('Invalid changes: {error}', { error: parsed.error.issues[0]?.message ?? 'format' }), 'invalid')
   return sendCommand(server, { ops: parsed.data.ops })
 }
 
@@ -102,7 +103,7 @@ const WorldSettingsChanges = z
   })
   .partial()
   .strict()
-  .refine((c) => Object.keys(c).length > 0, 'nessun settaggio da cambiare')
+  .refine((c) => Object.keys(c).length > 0, 'no setting to change')
 
 /** Settaggi del mondo come li vede la mod adesso (li riscrive ogni 2 secondi), null se l'editor non risponde. */
 export async function worldSettings(server: ServerDefinition): Promise<WorldSettingsState | null> {
@@ -119,7 +120,7 @@ export async function worldSettings(server: ServerDefinition): Promise<WorldSett
 /** Cambia i settaggi del mondo (solo quelli indicati); l'esito dice quali non si sono potuti cambiare e perché. */
 export async function changeWorldSettings(server: ServerDefinition, body: unknown): Promise<EditResult> {
   const parsed = WorldSettingsChanges.safeParse(body)
-  if (!parsed.success) throw new WorldEditorError(`Settaggi non validi: ${parsed.error.issues[0]?.message ?? 'formato'}`, 'invalid')
+  if (!parsed.success) throw new WorldEditorError(tr('Invalid settings: {error}', { error: parsed.error.issues[0]?.message ?? 'format' }), 'invalid')
   const { spawn, ...rest } = parsed.data
   return sendCommand(server, { settings: { ...rest, ...(spawn ? { spawnX: spawn.x, spawnY: spawn.y } : {}) } })
 }
@@ -128,7 +129,7 @@ export async function changeWorldSettings(server: ServerDefinition, body: unknow
 async function sendCommand(server: ServerDefinition, payload: { ops: EditOp[] } | { settings: object }): Promise<EditResult> {
   const dir = editorDir(server)
   if (!dir || !(await worldEditorAvailable(server))) {
-    throw new WorldEditorError("L'editor non è disponibile: serve il server acceso con la mod LiveMap attiva", 'unavailable')
+    throw new WorldEditorError(tr('The editor is not available: the server must be running with the LiveMap mod active'), 'unavailable')
   }
 
   const id = `${Date.now()}-${randomUUID()}`
@@ -146,13 +147,13 @@ async function sendCommand(server: ServerDefinition, payload: { ops: EditOp[] } 
     if (raw === null) continue
     await rm(output, { force: true })
     const result = EditResult.safeParse(JSON.parse(raw))
-    if (!result.success) throw new WorldEditorError('Risposta della mod non valida', 'invalid')
+    if (!result.success) throw new WorldEditorError(tr('Invalid response from the mod'), 'invalid')
     if (result.data.error) throw new WorldEditorError(result.data.error, 'invalid')
-    return result.data
+    return { ...result.data, failures: result.data.failures.map((f) => ({ ...f, reason: trText(f.reason) })) }
   }
   // Ritirato: se la mod lo prende comunque, l'esito resta in outbox finché non lo cancella al prossimo avvio
   await rm(command, { force: true })
-  throw new WorldEditorError('Il server non ha risposto in tempo: modifica annullata', 'timeout')
+  throw new WorldEditorError(tr('The server did not respond in time: change cancelled'), 'timeout')
 }
 
 const CatalogEntry = z.object({ type: z.number(), name: z.string(), mod: z.string().optional(), object: z.boolean().optional() })

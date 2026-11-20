@@ -7,6 +7,7 @@ use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -144,8 +145,10 @@ class AgentClient
 
     private function http(int $timeout = 10): PendingRequest
     {
+        // I messaggi dell'agent (errori, avanzamento dei lavori) arrivano nella lingua della richiesta
         return Http::baseUrl($this->baseUrl)
             ->withToken((string) $this->token)
+            ->withHeaders(['Accept-Language' => App::getLocale()])
             ->acceptJson()
             ->connectTimeout(2)
             ->timeout($timeout);

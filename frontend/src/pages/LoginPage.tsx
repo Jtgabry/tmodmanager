@@ -4,6 +4,8 @@ import { useAuth } from '../auth/AuthContext'
 import { errorMessage } from '../lib/api'
 import { useSetupRequired } from '../lib/setup'
 import logo from '../assets/logo.png'
+import { t } from '../i18n'
+import { LanguageSelect } from '../i18n/LocaleProvider'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -36,6 +38,7 @@ export default function LoginPage() {
   return (
     <div className="center-page">
       <form className="card auth-card" onSubmit={submit}>
+        <LanguageSelect className="auth-lang" />
         <h1 className="auth-title">
           <img className="brand-mark auth-logo" src={logo} alt="" /> tModManager
         </h1>
@@ -56,13 +59,13 @@ export default function LoginPage() {
         </label>
         <label className="checkbox">
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-          Ricordami
+          {t('Remember me')}
         </label>
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-          {submitting ? 'Accesso…' : 'Accedi'}
+          {submitting ? t('Logging in…') : t('Log in')}
         </button>
         <p className="muted small">
-          Non hai un account? <Link to="/register">Registrati</Link>
+          {t("Don't have an account?")} <Link to="/register">{t('Sign up')}</Link>
         </p>
       </form>
     </div>

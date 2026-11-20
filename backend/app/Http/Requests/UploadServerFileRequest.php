@@ -24,6 +24,6 @@ class UploadServerFileRequest extends FormRequest
      */
     public function messages(): array
     {
-        return ['file.uploaded' => 'Caricamento fallito: il file supera il limite consentito dal server.'];
+        return ['file.uploaded' => __('Upload failed: the file exceeds the limit allowed by the server.')];
     }
 }

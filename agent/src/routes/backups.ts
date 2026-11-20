@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify'
 import { BackupError, backupPath, backupSchedule, createBackup, deleteBackup, listBackups, restoreBackup } from '../backups.js'
 import { ConflictError, type ServerManager } from '../manager.js'
 import { findServer, type ServerDefinition } from '../registry.js'
+import { tr } from '../i18n.js'
 
 type Req = { Params: { id: string; name?: string } }
 
@@ -19,7 +20,7 @@ export async function backupRoutes(app: FastifyInstance, { manager }: { manager:
 
   const server = async (id: string, reply: FastifyReply): Promise<ServerDefinition | null> => {
     const found = await findServer(id)
-    if (!found) reply.code(404).send({ error: 'not_found', message: `Server "${id}" non trovato` })
+    if (!found) reply.code(404).send({ error: 'not_found', message: tr('Server "{id}" not found', { id }) })
     return found ?? null
   }
 

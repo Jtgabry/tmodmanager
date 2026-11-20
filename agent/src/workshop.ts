@@ -14,6 +14,7 @@ import { installModAddon, isModAddonInstalled, type ShippedModAddon, shippedModA
 import type { ServerDefinition } from './registry.js'
 import { compareVersions, installedVersion } from './tml.js'
 import { type ModInfo, readModInfo } from './tmod.js'
+import { tr } from './i18n.js'
 
 const runFile = promisify(execFile)
 
@@ -152,12 +153,12 @@ async function request(url: string, init?: RequestInit): Promise<unknown> {
     response = await fetch(url, { ...init, signal: AbortSignal.timeout(20_000) })
   } catch {
     // Il messaggio originale potrebbe contenere l'URL, e quindi la chiave: non si riporta
-    throw new WorkshopError('Steam non raggiungibile, riprova tra poco', 502)
+    throw new WorkshopError(tr('Steam unreachable, try again shortly'), 502)
   }
   if (response.status === 401 || response.status === 403) {
-    throw new WorkshopError('Steam ha rifiutato la chiave Web API: controlla STEAM_API_KEY nel file .env dell\'agent', 502)
+    throw new WorkshopError(tr("Steam rejected the Web API key: check STEAM_API_KEY in the agent's .env file"), 502)
   }
-  if (!response.ok) throw new WorkshopError(`Steam ha risposto con errore ${response.status}`, 502)
+  if (!response.ok) throw new WorkshopError(tr('Steam responded with error {status}', { status: response.status }), 502)
   return response.json()
 }
 
@@ -230,9 +231,9 @@ export type SearchResult = WorkshopItem
 
 /** Ricerca testuale nel Workshop di tModLoader (serve la chiave). */
 export async function searchWorkshop(text: string): Promise<SearchResult[]> {
-  if (!config.steamApiKey) throw new WorkshopError('La ricerca nel Workshop richiede la chiave Steam Web API', 503)
+  if (!config.steamApiKey) throw new WorkshopError(tr('Searching the Workshop requires the Steam Web API key'), 503)
   const query = text.trim()
-  if (query.length < 2 || query.length > 100) throw new WorkshopError('Scrivi da 2 a 100 caratteri', 422)
+  if (query.length < 2 || query.length > 100) throw new WorkshopError(tr('Type 2 to 100 characters'), 422)
   const res = await steamService('QueryFiles', {
     appid: TML_APP_ID,
     query_type: 12,
@@ -358,7 +359,7 @@ async function matchingAddons(tml: string | null, q: string, tag: string | undef
 }
 
 const needKey = () => {
-  if (!config.steamApiKey) throw new WorkshopError('Sfogliare il Workshop richiede la chiave Steam Web API (STEAM_API_KEY nel file .env dell\'agent)', 503)
+  if (!config.steamApiKey) throw new WorkshopError(tr("Browsing the Workshop requires the Steam Web API key (STEAM_API_KEY in the agent's .env file)"), 503)
 }
 
 /**
@@ -370,12 +371,12 @@ export async function browseWorkshop(
   opts: { q?: string; sort?: BrowseSort; tag?: string; cursor?: string },
 ): Promise<BrowsePage> {
   const q = (opts.q ?? '').trim()
-  if (q.length > 100) throw new WorkshopError('Ricerca troppo lunga (massimo 100 caratteri)', 422)
+  if (q.length > 100) throw new WorkshopError(tr('Search too long (max 100 characters)'), 422)
   const tml = await installedVersion(server.installDir)
   const addons = opts.cursor ? [] : await matchingAddons(tml, q, opts.tag)
   const onlyAddons = (steamError: string): BrowsePage => ({ tmlVersion: tml, total: addons.length, nextCursor: null, items: addons, steamError })
   if (!config.steamApiKey) {
-    return onlyAddons("Per vedere le mod dello Steam Workshop serve la chiave Steam Web API (STEAM_API_KEY nel file .env dell'agent)")
+    return onlyAddons(tr("To see the Steam Workshop mods the Steam Web API key is needed (STEAM_API_KEY in the agent's .env file)"))
   }
   try {
     const page = await browseSteam(tml, q, opts)
@@ -417,7 +418,7 @@ export async function workshopItemDetails(server: ServerDefinition, id: string):
   const addon = modAddonByItemId(id)
   if (addon) {
     const shipped = await shippedModAddon(addon.name)
-    if (!shipped) throw new WorkshopError('Add-on non disponibile in questa installazione del pannello', 404)
+    if (!shipped) throw new WorkshopError(tr('Add-on not available in this panel installation'), 404)
     return { ...addonBrowseItem(shipped, await installedVersion(server.installDir)), images: [], dependencyItems: [] }
   }
   needKey()
@@ -433,7 +434,7 @@ export async function workshopItemDetails(server: ServerDefinition, id: string):
   ])
   const raw = res.publishedfiledetails?.[0]
   const item = raw ? browseItem(raw, tml, raw.file_description) : null
-  if (!raw || !item?.found) throw new WorkshopError('Elemento del Workshop non trovato, non pubblico o non di tModLoader', 404)
+  if (!raw || !item?.found) throw new WorkshopError(tr('Workshop item not found, not public or not for tModLoader'), 404)
   detailsCache.set(id, { at: Date.now(), item: withoutBrowseFields(item) })
   const deps = item.dependencies.length ? await fetchDetails(item.dependencies) : new Map<string, WorkshopItem>()
   return {
@@ -541,18 +542,18 @@ async function autoLink(server: ServerDefinition, allNames: string[], force: boo
 
 /** Collega a mano una mod a un elemento del Workshop (`input` = link o ID), o la segna come "non nel Workshop" (null). */
 export async function setLink(server: ServerDefinition, modName: string, input: string | null): Promise<WorkshopItem | null> {
-  if (isModAddon(modName)) throw new WorkshopError('È un add-on di tModManager: non è nello Steam Workshop e si aggiorna con il pannello', 422)
+  if (isModAddon(modName)) throw new WorkshopError(tr('It is a tModManager add-on: it is not on the Steam Workshop and is updated with the panel'), 422)
   const mod = (await listMods(server)).mods.find((m) => m.name === modName)
-  if (!mod) throw new WorkshopError(`Mod "${modName}" non trovata`, 404)
+  if (!mod) throw new WorkshopError(tr('Mod "{mod}" not found', { mod: modName }), 404)
   let id: string | null = null
   let item: WorkshopItem | undefined
   if (input !== null) {
     id = parseWorkshopId(input)
-    if (!id) throw new WorkshopError('Incolla il link della pagina del Workshop oppure il suo ID numerico', 422)
+    if (!id) throw new WorkshopError(tr('Paste the link of the Workshop page or its numeric ID'), 422)
     item = (await fetchDetails([id], true)).get(id)
-    if (!item?.found) throw new WorkshopError('Elemento del Workshop non trovato, non pubblico o non di tModLoader', 404)
+    if (!item?.found) throw new WorkshopError(tr('Workshop item not found, not public or not for tModLoader'), 404)
     if (item.modName && item.modName !== modName) {
-      throw new WorkshopError(`Quella pagina del Workshop è della mod "${item.modName}", non di "${modName}"`, 422)
+      throw new WorkshopError(tr('That Workshop page is for the mod "{found}", not "{mod}"', { found: item.modName ?? '?', mod: modName }), 422)
     }
   }
   await updateStore((s) => {
@@ -629,10 +630,10 @@ export async function steamcmdProblem(): Promise<string | null> {
     )
   // Senza steamcmd personalizzato, se manca viene scaricato al primo download
   if (config.steamcmdOverride && !(await can(config.steamcmdOverride, constants.X_OK))) {
-    return `steamcmd non è installato (${config.steamcmdOverride})`
+    return tr('steamcmd is not installed ({path})', { path: config.steamcmdOverride })
   }
   if (!(await can('/lib/ld-linux.so.2', constants.R_OK))) {
-    return 'steamcmd non può partire: mancano le librerie a 32 bit (sudo apt install lib32gcc-s1)'
+    return tr('steamcmd cannot start: the 32-bit libraries are missing (sudo apt install lib32gcc-s1)')
   }
   return null
 }
@@ -720,7 +721,7 @@ const STEAMCMD_URL = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd_
 async function ensureSteamcmd() {
   const exe = paths.steamcmd()
   if (await access(exe, constants.X_OK).then(() => true, () => false)) return
-  if (config.steamcmdOverride) throw new Error(`steamcmd non è installato (${exe})`)
+  if (config.steamcmdOverride) throw new Error(tr('steamcmd is not installed ({path})', { path: exe }))
 
   const dir = paths.steamcmdDir()
   const staging = `${dir}.new`
@@ -734,13 +735,13 @@ async function ensureSteamcmd() {
     await mkdir(staging, { recursive: true })
     await runFile('tar', ['-xzf', archive, '-C', staging])
     if (!(await access(join(staging, 'steamcmd.sh'), constants.X_OK).then(() => true, () => false))) {
-      throw new Error('archivio senza steamcmd.sh')
+      throw new Error('archive without steamcmd.sh')
     }
     await rm(dir, { recursive: true, force: true })
     await rename(staging, dir)
   } catch (err) {
     await rm(staging, { recursive: true, force: true })
-    throw new Error(`Download di steamcmd non riuscito: ${(err as Error).message}`)
+    throw new Error(tr('steamcmd download failed: {error}', { error: (err as Error).message }))
   } finally {
     await rm(archive, { force: true })
   }
@@ -810,7 +811,7 @@ export function steamcmdDownloadAll(ids: string[], events: DownloadEvents, signa
   return withSteam(async () => {
     // Annullato mentre aspettava il proprio turno (steamcmd occupato da un altro server)
     if (signal?.aborted) {
-      for (const id of ids) events.onError(id, 'Download annullato')
+      for (const id of ids) events.onError(id, tr('Download cancelled'))
       return
     }
     try {
@@ -893,13 +894,13 @@ export function steamcmdDownloadAll(ids: string[], events: DownloadEvents, signa
         pending.clear()
         resolve()
       }
-      child.on('error', (err) => finish(`steamcmd non avviabile: ${err.message}`))
+      child.on('error', (err) => finish(tr('steamcmd cannot be started: {error}', { error: err.message })))
       child.on('close', (code, killedBy) => {
-        if (signal?.aborted) return finish('Download annullato')
-        if (code === 127) return finish('steamcmd non può partire: mancano le librerie a 32 bit (sudo apt install lib32gcc-s1)')
-        if (killedBy) return finish('Download interrotto: steamcmd è rimasto fermo per più di 30 minuti')
+        if (signal?.aborted) return finish(tr('Download cancelled'))
+        if (code === 127) return finish(tr('steamcmd cannot start: the 32-bit libraries are missing (sudo apt install lib32gcc-s1)'))
+        if (killedBy) return finish(tr('Download interrupted: steamcmd was stuck for more than 30 minutes'))
         const failure = tail.match(/ERROR! ([^\r\n\x1b]+)/)?.[1]
-        finish(failure ? `steamcmd: ${failure.trim()}` : `steamcmd si è chiuso senza scaricare la mod (codice ${code})`)
+        finish(failure ? `steamcmd: ${failure.trim()}` : tr('steamcmd exited without downloading the mod (code {code})', { code: String(code) }))
       })
     })
   })
@@ -929,11 +930,11 @@ export async function pickBuild(dir: string, modName: string, tml: string | null
   const named = builds.filter((b) => b.info.name === modName)
   if (!named.length) {
     const other = builds[0]?.info.name
-    throw new WorkshopError(other ? `L'elemento del Workshop contiene la mod "${other}", non "${modName}"` : 'Nessun file .tmod nel download', 422)
+    throw new WorkshopError(other ? tr('The Workshop item contains the mod "{found}", not "{mod}"', { found: other, mod: modName }) : tr('No .tmod file in the download'), 422)
   }
   const compatible = tml ? named.filter((b) => compareVersions(b.info.tmlVersion, tml) <= 0) : named
   if (!compatible.length) {
-    throw new WorkshopError(`Nessuna build compatibile con tModLoader ${tml}: aggiorna prima tModLoader`, 422)
+    throw new WorkshopError(tr('No build compatible with tModLoader {version}: update tModLoader first', { version: tml ?? '?' }), 422)
   }
   compatible.sort((a, b) => compareVersions(a.info.version, b.info.version) || compareVersions(a.info.tmlVersion, b.info.tmlVersion))
   return compatible.at(-1)!
@@ -1027,8 +1028,8 @@ export function enqueue(server: ServerDefinition, requests: JobRequest[]): Updat
 export function cancelJobItem(serverId: string, name: string): UpdateJob {
   const job = jobs.get(serverId)
   const item = job?.state === 'running' ? job.items.find((i) => i.name === name) : undefined
-  if (!job || !item) throw new WorkshopError(`"${name}" non è tra i download in corso`, 404)
-  if (item.state === 'installing') throw new WorkshopError('La mod si sta già installando: non si può più annullare', 409)
+  if (!job || !item) throw new WorkshopError(tr('"{mod}" is not among the running downloads', { mod: name }), 404)
+  if (item.state === 'installing') throw new WorkshopError(tr('The mod is already being installed: it can no longer be cancelled'), 409)
   if (FINISHED.includes(item.state)) return job
   item.state = 'cancelled'
   item.message = null
@@ -1043,16 +1044,16 @@ export async function startUpdate(server: ServerDefinition, names: string[]): Pr
   const problem = await steamcmdProblem()
   if (problem) throw new WorkshopError(problem, 503)
   const unique = [...new Set(names)]
-  if (!unique.length) throw new WorkshopError('Nessuna mod indicata', 422)
+  if (!unique.length) throw new WorkshopError(tr('No mod given'), 422)
 
   const { mods } = await listMods(server)
   const store = await readStore()
   const unknown = unique.filter((n) => !mods.some((m) => m.name === n))
-  if (unknown.length) throw new WorkshopError(`Mod non installate: ${unknown.join(', ')}`, 404)
+  if (unknown.length) throw new WorkshopError(tr('Mods not installed: {mods}', { mods: unknown.join(', ') }), 404)
   const addons = unique.filter(isModAddon)
-  if (addons.length) throw new WorkshopError(`${addons.join(', ')}: add-on di tModManager, si aggiorna con il pannello`, 422)
+  if (addons.length) throw new WorkshopError(tr('{mods}: tModManager add-on, it is updated with the panel', { mods: addons.join(', ') }), 422)
   const unlinked = unique.filter((n) => !store.links[n]?.id)
-  if (unlinked.length) throw new WorkshopError(`Mod non collegate al Workshop: ${unlinked.join(', ')}`, 422)
+  if (unlinked.length) throw new WorkshopError(tr('Mods not linked to the Workshop: {mods}', { mods: unlinked.join(', ') }), 422)
 
   // Dimensioni (per le barre di avanzamento): di solito già in cache dal controllo degli aggiornamenti
   const sizes = await fetchDetails(unique.map((n) => store.links[n].id!)).catch(() => new Map<string, WorkshopItem>())
@@ -1076,7 +1077,7 @@ export async function startUpdate(server: ServerDefinition, names: string[]): Pr
  */
 export async function startInstall(server: ServerDefinition, ids: string[]): Promise<UpdateJob> {
   const unique = [...new Set(ids)]
-  if (!unique.length) throw new WorkshopError('Nessun elemento indicato', 422)
+  if (!unique.length) throw new WorkshopError(tr('No item given'), 422)
   const addonIds = unique.filter((id) => ADDON_ITEM_ID.test(id))
   const steamIds = unique.filter((id) => !ADDON_ITEM_ID.test(id))
 
@@ -1090,11 +1091,11 @@ export async function startInstall(server: ServerDefinition, ids: string[]): Pro
     const { mods } = await listMods(server)
     requests = steamIds.map((id) => {
       const item = details.get(id)
-      if (!item?.found) throw new WorkshopError(`Elemento ${id} non trovato nel Workshop di tModLoader`, 404)
+      if (!item?.found) throw new WorkshopError(tr('Item {id} not found on the tModLoader Workshop', { id }), 404)
       if (!item.modName || !MOD_NAME.test(item.modName)) {
-        throw new WorkshopError(`"${item.title ?? id}" non dichiara il nome interno della mod: scaricala da Steam e caricala a mano`, 422)
+        throw new WorkshopError(tr('"{title}" does not declare the internal mod name: download it from Steam and upload it by hand', { title: item.title ?? id }), 422)
       }
-      if (isModAddon(item.modName)) throw new WorkshopError(`"${item.title ?? id}" ha lo stesso nome di un add-on di tModManager: non si può installare`, 409)
+      if (isModAddon(item.modName)) throw new WorkshopError(tr('"{title}" has the same name as a tModManager add-on: it cannot be installed', { title: item.title ?? id }), 409)
       const installed = mods.find((m) => m.name === item.modName)
       return { name: item.modName, workshopId: id, install: !installed, from: installed?.version ?? null, totalBytes: item.fileSize }
     })
@@ -1104,9 +1105,9 @@ export async function startInstall(server: ServerDefinition, ids: string[]): Pro
     addonIds.map(async (id) => {
       const addon = modAddonByItemId(id)
       const shipped = addon ? await shippedModAddon(addon.name) : null
-      if (!shipped) throw new WorkshopError(`Elemento ${id} non disponibile in questa installazione del pannello`, 404)
+      if (!shipped) throw new WorkshopError(tr('Item {id} not available in this panel installation', { id }), 404)
       if (tml && compareVersions(tml, shipped.info.tmlVersion) < 0) {
-        throw new WorkshopError(`${shipped.info.displayName ?? shipped.addon.name} richiede tModLoader ${shipped.info.tmlVersion} o successiva: aggiorna prima tModLoader`, 422)
+        throw new WorkshopError(tr('{mod} requires tModLoader {version} or later: update tModLoader first', { mod: shipped.info.displayName ?? shipped.addon.name, version: shipped.info.tmlVersion ?? '?' }), 422)
       }
       return shipped
     }),
@@ -1145,7 +1146,7 @@ async function installAddonItem(server: ServerDefinition, shipped: ShippedModAdd
   if (await isModAddonInstalled(server, shipped.addon)) {
     item.install = false
     item.state = 'skipped'
-    item.message = 'Già installata'
+    item.message = tr('Already installed')
     return item
   }
   try {
@@ -1185,7 +1186,7 @@ function withFinishedItems(server: ServerDefinition, items: JobItem[]): UpdateJo
 /** Installa dal Workshop le mod indicate per nome interno (es. quelle di un modpack che mancano). */
 export async function startInstallByName(server: ServerDefinition, names: string[]): Promise<UpdateJob> {
   const unique = [...new Set(names)]
-  if (!unique.length) throw new WorkshopError('Nessuna mod indicata', 422)
+  if (!unique.length) throw new WorkshopError(tr('No mod given'), 422)
   const addonIds = unique.flatMap((n) => {
     const addon = findModAddon(n)
     return addon ? [addonItemId(addon)] : []
@@ -1195,7 +1196,7 @@ export async function startInstallByName(server: ServerDefinition, names: string
   needKey()
   const store = await autoLink(server, rest, true)
   const unknown = rest.filter((n) => !store.links[n]?.id)
-  if (unknown.length) throw new WorkshopError(`Non trovate nel Workshop: ${unknown.join(', ')}. Caricale a mano.`, 404)
+  if (unknown.length) throw new WorkshopError(tr('Not found on the Workshop: {mods}. Upload them by hand.', { mods: unknown.join(', ') }), 404)
   return startInstall(server, [...rest.map((n) => store.links[n].id!), ...addonIds])
 }
 
@@ -1206,7 +1207,7 @@ async function installDownloaded(server: ServerDefinition, item: JobItem, dir: s
     if (item.from && compareVersions(build.info.version, item.from) <= 0) {
       item.state = 'skipped'
       item.to = item.from
-      item.message = 'Già installata la versione più recente compatibile'
+      item.message = tr('The latest compatible version is already installed')
       return
     }
     item.state = 'installing'
@@ -1284,7 +1285,7 @@ async function queueMissingDependencies(server: ServerDefinition, job: UpdateJob
   for (const name of missing) {
     const id = store.links[name]?.id
     if (!id) {
-      job.warnings.push(`Dipendenza "${name}" non trovata nel Workshop: caricala a mano`)
+      job.warnings.push(tr('Dependency "{mod}" not found on the Workshop: upload it by hand', { mod: name }))
       continue
     }
     job.items.push(queuedItem({ name, workshopId: id, install: false, from: null, totalBytes: null }, true))
@@ -1312,9 +1313,9 @@ async function runJob(server: ServerDefinition, job: UpdateJob) {
         for (const name of reenable) reenabled.add(name)
         try {
           const added = await withServerLock(server, () => enableMods(server, reenable))
-          if (added.length) job.warnings.push(`Abilitate anche le dipendenze: ${added.join(', ')}`)
+          if (added.length) job.warnings.push(tr('Dependencies enabled too: {mods}', { mods: added.join(', ') }))
           // L'avviso "caricata ma non abilitata" di prima non vale più
-          for (const item of job.items) if (item.message?.startsWith('Caricata ma non abilitata')) item.message = null
+          for (const item of job.items) if (item.message?.startsWith(tr('Uploaded but not enabled: {error}', { error: '' }))) item.message = null
         } catch (err) {
           job.warnings.push(err instanceof Error ? err.message : String(err))
         }
@@ -1397,7 +1398,7 @@ export type ApplyResult = {
 
 /** Abilita tutte insieme le mod in attesa (con le loro dipendenze). Non si può durante un download. */
 export async function applyPending(server: ServerDefinition): Promise<ApplyResult> {
-  if (jobs.get(server.id)?.state === 'running') throw new WorkshopError('Aspetta la fine dei download prima di abilitare le mod', 409)
+  if (jobs.get(server.id)?.state === 'running') throw new WorkshopError(tr('Wait for the downloads to finish before enabling the mods'), 409)
   const waiting = await pendingMods(server)
   const result: ApplyResult = { enabled: [], failed: [] }
   await withServerLock(server, async () => {

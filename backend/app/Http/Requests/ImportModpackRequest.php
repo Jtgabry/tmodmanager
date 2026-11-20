@@ -29,8 +29,8 @@ class ImportModpackRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'file.extensions' => 'Carica il .json del modpack oppure la sua cartella compressa in .zip.',
-            'file.uploaded' => 'Caricamento fallito: il file supera il limite consentito dal server.',
+            'file.extensions' => __('Upload the modpack .json or its folder zipped as .zip.'),
+            'file.uploaded' => __('Upload failed: the file exceeds the limit allowed by the server.'),
         ];
     }
 }

@@ -2,8 +2,9 @@ import { type FormEvent, useState } from 'react'
 import { errorMessage } from '../../lib/api'
 import type { ModUpdate } from '../../lib/types'
 import { useWorkshopLink, useWorkshopSearch } from '../../lib/workshop'
+import { intlLocale, t } from '../../i18n'
 
-const SOURCE_LABEL = { auto: 'riconosciuta in automatico', manual: 'collegata a mano' }
+const sourceLabel = (source: 'auto' | 'manual') => (source === 'auto' ? t('recognized automatically') : t('linked by hand'))
 
 /** Collegamento di una mod alla sua pagina del Workshop, nei dettagli della mod. */
 export default function WorkshopLinkEditor(props: { serverId: string; modName: string; update: ModUpdate | undefined; canSearch: boolean }) {
@@ -28,16 +29,16 @@ export default function WorkshopLinkEditor(props: { serverId: string; modName: s
       {update?.workshopId ? (
         <span>
           <a href={update.url ?? undefined} target="_blank" rel="noreferrer noopener">
-            {update.title ?? `Elemento ${update.workshopId}`}
+            {update.title ?? t('Item {id}', { id: update.workshopId })}
           </a>{' '}
-          <span className="muted small">({update.link ? SOURCE_LABEL[update.link] : ''})</span>
+          <span className="muted small">({update.link ? sourceLabel(update.link) : ''})</span>
         </span>
       ) : (
-        <span className="muted">{update?.link === 'manual' ? 'Segnata come non presente nel Workshop' : 'Non collegata'}</span>
+        <span className="muted">{update?.link === 'manual' ? t('Marked as not on the Workshop') : t('Not linked')}</span>
       )}{' '}
       {!editing && (
         <button type="button" className="link-button small" onClick={() => setEditing(true)}>
-          {update?.workshopId ? 'Cambia' : 'Collega'}
+          {update?.workshopId ? t('Change') : t('Link')}
         </button>
       )}
 
@@ -45,7 +46,7 @@ export default function WorkshopLinkEditor(props: { serverId: string; modName: s
         <div className="stack workshop-link-editor">
           <form className="form-inline" onSubmit={submit}>
             <label className="field">
-              <span>Link della pagina del Workshop o ID</span>
+              <span>{t('Workshop page link or ID')}</span>
               <input
                 autoFocus
                 required
@@ -55,10 +56,10 @@ export default function WorkshopLinkEditor(props: { serverId: string; modName: s
               />
             </label>
             <button type="submit" className="btn btn-primary btn-sm" disabled={link.isPending}>
-              Collega
+              {t('Link')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </form>
 
@@ -71,28 +72,28 @@ export default function WorkshopLinkEditor(props: { serverId: string; modName: s
               }}
             >
               <label className="field">
-                <span>Oppure cerca nel Workshop</span>
+                <span>{t('Or search the Workshop')}</span>
                 <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={modName} />
               </label>
               <button type="submit" className="btn btn-sm">
-                Cerca
+                {t('Search')}
               </button>
             </form>
           )}
-          {results.isFetching && <span className="muted small">Ricerca…</span>}
+          {results.isFetching && <span className="muted small">{t('Searching…')}</span>}
           {results.error && <span className="error-text small">{errorMessage(results.error)}</span>}
           {results.data && (
             <ul className="update-list">
-              {results.data.length === 0 && <li className="muted">Nessun risultato.</li>}
+              {results.data.length === 0 && <li className="muted">{t('No results.')}</li>}
               {results.data.map((r) => (
                 <li key={r.id}>
                   <a href={r.url} target="_blank" rel="noreferrer noopener">
                     {r.title ?? r.id}
                   </a>{' '}
                   <span className="muted small mono">{r.modName}</span>{' '}
-                  {r.subscriptions !== null && <span className="muted small">· {r.subscriptions.toLocaleString('it')} iscritti</span>}{' '}
+                  {r.subscriptions !== null && <span className="muted small">· {t('{count} subscribers', { count: r.subscriptions.toLocaleString(intlLocale()) })}</span>}{' '}
                   <button type="button" className="btn btn-sm" disabled={link.isPending} onClick={() => save(r.id)}>
-                    Usa questa
+                    {t('Use this one')}
                   </button>
                 </li>
               ))}
@@ -101,7 +102,7 @@ export default function WorkshopLinkEditor(props: { serverId: string; modName: s
 
           <div className="btn-row">
             <button type="button" className="btn btn-ghost btn-sm" disabled={link.isPending} onClick={() => save(null)}>
-              Non è nel Workshop
+              {t('It is not on the Workshop')}
             </button>
             {update?.link === 'manual' && (
               <button
@@ -110,7 +111,7 @@ export default function WorkshopLinkEditor(props: { serverId: string; modName: s
                 disabled={link.isPending}
                 onClick={() => link.mutate({ name: modName, reset: true }, { onSuccess: () => setEditing(false) })}
               >
-                Torna al riconoscimento automatico
+                {t('Back to automatic recognition')}
               </button>
             )}
           </div>

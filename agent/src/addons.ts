@@ -20,7 +20,7 @@ export const ADDONS: Addon[] = [
   {
     name: 'LiveMap',
     description:
-      'Mappa del mondo in tempo reale per il pannello. Lavora solo mentre qualcuno la guarda e al massimo 1 ms per tick.',
+      'Live world map for the panel. It only works while someone is watching it, and at most 1 ms per tick.',
   },
 ]
 

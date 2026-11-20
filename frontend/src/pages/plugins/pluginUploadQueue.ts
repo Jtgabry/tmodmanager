@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { errorMessage } from '../../lib/api'
 import { pluginTitle, useUploadPlugin, versionLabel } from '../../lib/plugins'
+import { t } from '../../i18n'
 
 type Item = { file: File; progress: number; status: 'queued' | 'uploading' | 'done' | 'error'; message?: string }
 
@@ -24,7 +25,7 @@ export function usePluginUploadQueue(serverId: string) {
     const rejected = files.filter((f) => !isDll(f))
     setItems([
       ...dlls.map((file): Item => ({ file, progress: 0, status: 'queued' })),
-      ...rejected.map((file): Item => ({ file, progress: 0, status: 'error', message: 'Non è un file .dll' })),
+      ...rejected.map((file): Item => ({ file, progress: 0, status: 'error', message: t('Not a .dll file') })),
     ])
 
     for (const [index, file] of dlls.entries()) {
@@ -35,12 +36,18 @@ export function usePluginUploadQueue(serverId: string) {
         const version = r.plugin.versions.find((v) => v.id === r.versionId)
         const label = version ? versionLabel(version) : ''
         const message = r.duplicate
-          ? `${title} ${label}: questa versione era già salvata, ora è quella scelta`
+          ? t('{plugin} {version}: this version was already saved, now it is the chosen one', { plugin: title, version: label })
           : r.previousVersion
-            ? `${title}: aggiunta la ${label}, scelta al posto della ${versionLabel(r.previousVersion)} (che resta tra le versioni)`
+            ? t('{plugin}: added {version}, chosen instead of {previous} (which stays among the versions)', {
+                plugin: title,
+                version: label,
+                previous: versionLabel(r.previousVersion),
+              })
             : r.plugin.versions.length > 1
-              ? `${title}: aggiunta la ${label}`
-              : `${title} ${label} aggiunto${r.plugin.enabled ? '' : ' (disattivato)'}`
+              ? t('{plugin}: added {version}', { plugin: title, version: label })
+              : r.plugin.enabled
+                ? t('{plugin} {version} added', { plugin: title, version: label })
+                : t('{plugin} {version} added (inactive)', { plugin: title, version: label })
         update(index, { status: 'done', progress: 1, message })
       } catch (err) {
         update(index, { status: 'error', message: errorMessage(err) })

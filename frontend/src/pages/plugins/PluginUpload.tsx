@@ -1,6 +1,7 @@
 import { type DragEvent, useRef, useState } from 'react'
 import { formatBytes } from '../../lib/format'
 import type { PluginUploadQueue } from './pluginUploadQueue'
+import { t } from '../../i18n'
 
 /** Area di caricamento delle .dll, con l'avanzamento di ogni file. */
 export default function PluginUpload({ queue }: { queue: PluginUploadQueue }) {
@@ -28,18 +29,19 @@ export default function PluginUpload({ queue }: { queue: PluginUploadQueue }) {
         onDrop={onDrop}
       >
         <p>
-          <strong>Trascina qui i file .dll</strong> oppure{' '}
+          <strong>{t('Drag the .dll files here')}</strong> {t('or')}{' '}
           <button type="button" className="btn btn-sm" disabled={busy} onClick={() => input.current?.click()}>
-            Scegli file
+            {t('Choose files')}
           </button>
         </p>
         <p className="muted small">
-          Se il plugin c'è già, la nuova versione si aggiunge alle altre e diventa quella in uso: le precedenti restano salvate e
-          puoi tornarci da «Versioni». Le modifiche si applicano al riavvio del server.
+          {t(
+            'If the plugin is already there, the new version is added to the others and becomes the one in use: the previous ones stay saved and you can go back to them from «Versions». Changes apply when the server restarts.',
+          )}
         </p>
         <label className="checkbox">
           <input type="checkbox" checked={enable} onChange={(e) => setEnable(e.target.checked)} />
-          Attiva i plugin nuovi dopo il caricamento
+          {t('Activate new plugins after the upload')}
         </label>
         <input
           ref={input}
@@ -67,8 +69,8 @@ export default function PluginUpload({ queue }: { queue: PluginUploadQueue }) {
                   <div style={{ width: `${Math.round(item.progress * 100)}%` }} />
                 </div>
               )}
-              {item.status === 'uploading' && item.progress >= 1 && <span className="muted small">Verifica in corso…</span>}
-              {item.status === 'queued' && <span className="muted small">In coda</span>}
+              {item.status === 'uploading' && item.progress >= 1 && <span className="muted small">{t('Checking…')}</span>}
+              {item.status === 'queued' && <span className="muted small">{t('Queued')}</span>}
               {item.message && <span className={item.status === 'error' ? 'error-text' : 'small'}>{item.message}</span>}
             </li>
           ))}

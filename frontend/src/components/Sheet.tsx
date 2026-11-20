@@ -1,4 +1,5 @@
 import { type PointerEvent, type ReactNode, useEffect, useRef, useState } from 'react'
+import { t } from '../i18n'
 
 /** Larghezza sotto cui la finestra diventa una bottom sheet (la stessa dei layout stretti). */
 const MOBILE = '(max-width: 599px)'
@@ -110,7 +111,7 @@ export default function Sheet({
         <header className="dialog-header sheet-header" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
           <span className="sheet-handle" aria-hidden="true" />
           <h2>{shown.title}</h2>
-          <button type="button" className="icon-btn" aria-label="Chiudi" onClick={onClose}>
+          <button type="button" className="icon-btn" aria-label={t('Close')} onClick={onClose}>
             <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>

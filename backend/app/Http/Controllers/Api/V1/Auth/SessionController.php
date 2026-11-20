@@ -17,14 +17,14 @@ class SessionController extends Controller
 {
     public function store(LoginRequest $request): UserResource|JsonResponse
     {
-        abort_unless($request->hasSession(), 400, 'Il login funziona solo dalla SPA (sessione assente).');
+        abort_unless($request->hasSession(), 400, __('Login only works from the web app (no session).'));
 
         $request->authenticate();
 
         if (! $request->user()->isApproved()) {
             $this->endSession($request);
 
-            return response()->json(['error' => 'not_approved', 'message' => 'Il tuo account è in attesa di approvazione da parte di un amministratore.'], 403);
+            return response()->json(['error' => 'not_approved', 'message' => __('Your account is waiting for approval by an administrator.')], 403);
         }
 
         $request->session()->regenerate();

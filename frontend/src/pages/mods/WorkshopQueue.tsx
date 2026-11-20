@@ -6,6 +6,7 @@ import { usePowerAction } from '../../lib/servers'
 import type { ApplyPendingResult, Server, UpdateJob } from '../../lib/types'
 import { useApplyPending, useDismissPending, usePendingMods, useUpdateJob } from '../../lib/workshop'
 import { JobView } from './WorkshopUpdates'
+import { t } from '../../i18n'
 
 const FINISHED = ['done', 'skipped', 'error']
 
@@ -48,7 +49,7 @@ export default function WorkshopQueue({ server }: { server: Server }) {
     })
   }
 
-  const label = canRestart ? 'Abilita e riavvia' : 'Abilita'
+  const label = canRestart ? t('Enable and restart') : t('Enable')
 
   return (
     <div className="workshop-queue">
@@ -58,7 +59,7 @@ export default function WorkshopQueue({ server }: { server: Server }) {
         <div className="workshop-queue-row">
           <div className="workshop-queue-text">
             <strong>
-              {waiting.length === 1 ? '1 mod nuova pronta' : `${waiting.length} mod nuove pronte`} da abilitare
+              {waiting.length === 1 ? t('1 new mod ready to enable') : t('{count} new mods ready to enable', { count: waiting.length })}
             </strong>
             <ul className="pending-list">
               {waiting.map((m) => (
@@ -67,8 +68,8 @@ export default function WorkshopQueue({ server }: { server: Server }) {
                   <button
                     type="button"
                     className="pending-chip-remove"
-                    aria-label={`Non abilitare ${m.displayName ?? m.name}`}
-                    title="Non abilitarla (resta installata, disabilitata)"
+                    aria-label={t('Do not enable {mod}', { mod: m.displayName ?? m.name })}
+                    title={t('Do not enable it (it stays installed, disabled)')}
                     disabled={dismiss.isPending || apply.isPending}
                     onClick={() => dismiss.mutate(m.name)}
                   >
@@ -77,22 +78,23 @@ export default function WorkshopQueue({ server }: { server: Server }) {
                 </li>
               ))}
             </ul>
-            {running && <span className="muted small">Potrai abilitarle quando i download saranno finiti.</span>}
+            {running && <span className="muted small">{t('You can enable them when the downloads are finished.')}</span>}
             {!running && !canRestart && isOn && (
-              <span className="muted small">Dopo averle abilitate riavvia il server per caricarle.</span>
+              <span className="muted small">{t('After enabling them, restart the server to load them.')}</span>
             )}
-            {!isOn && <span className="muted small">Il server è spento: verranno caricate alla prossima accensione.</span>}
+            {!isOn && <span className="muted small">{t('The server is stopped: they will be loaded on the next start.')}</span>}
             {confirming && (
               <span className="hint">
-                {playersOnline === 1 ? 'C\'è 1 giocatore connesso' : `Ci sono ${playersOnline} giocatori connessi`}: il riavvio li
-                disconnette (il mondo viene salvato).
+                {playersOnline === 1
+                  ? t('There is 1 player connected: the restart disconnects them (the world is saved).')
+                  : t('There are {count} players connected: the restart disconnects them (the world is saved).', { count: playersOnline })}
               </span>
             )}
           </div>
           <div className="btn-row">
             {confirming && (
               <button type="button" className="btn btn-ghost" onClick={() => setConfirming(false)}>
-                Annulla
+                {t('Cancel')}
               </button>
             )}
             <button
@@ -101,7 +103,7 @@ export default function WorkshopQueue({ server }: { server: Server }) {
               disabled={running || apply.isPending || power.isPending || server.operation !== null}
               onClick={onApply}
             >
-              {apply.isPending ? 'Abilitazione…' : confirming ? 'Conferma riavvio' : `${label} (${waiting.length})`}
+              {apply.isPending ? t('Enabling…') : confirming ? t('Confirm restart') : `${label} (${waiting.length})`}
             </button>
           </div>
         </div>
@@ -112,8 +114,8 @@ export default function WorkshopQueue({ server }: { server: Server }) {
           <div className="workshop-queue-text">
             {result.enabled.length > 0 && (
               <span className="small">
-                Abilitate: {result.enabled.join(', ')}.
-                {canRestart ? (power.isPending || server.operation === 'restart' ? ' Riavvio del server…' : '') : ''}
+                {t('Enabled: {mods}.', { mods: result.enabled.join(', ') })}
+                {canRestart ? (power.isPending || server.operation === 'restart' ? ` ${t('Restarting the server…')}` : '') : ''}
               </span>
             )}
             {result.failed.map((f) => (
@@ -123,7 +125,7 @@ export default function WorkshopQueue({ server }: { server: Server }) {
             ))}
           </div>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setResult(null)}>
-            Chiudi
+            {t('Close')}
           </button>
         </div>
       )}
@@ -132,7 +134,7 @@ export default function WorkshopQueue({ server }: { server: Server }) {
       {dismiss.error ? <div className="alert alert-error">{errorMessage(dismiss.error)}</div> : null}
       {power.error ? <div className="alert alert-error">{errorMessage(power.error)}</div> : null}
 
-      <Sheet open={showJob} title="Download dal Workshop" wide onClose={() => setShowJob(false)}>
+      <Sheet open={showJob} title={t('Workshop downloads')} wide onClose={() => setShowJob(false)}>
         {job.data && <JobView job={job.data} />}
       </Sheet>
     </div>
@@ -148,17 +150,21 @@ function JobSummary({ job, onDetails }: { job: UpdateJob; onDetails: () => void 
     <div className="workshop-queue-row">
       <div className="workshop-queue-text">
         <strong>
-          Download in corso: {finished} di {job.items.length}
+          {t('Downloading: {done} of {total}', { done: finished, total: job.items.length })}
         </strong>
         <span className="muted small">
-          {current ? `${current.state === 'installing' ? 'Installazione' : 'Download'} di ${current.name}…` : 'Collegamento a Steam…'}
+          {current
+            ? current.state === 'installing'
+              ? t('Installing {mod}…', { mod: current.name })
+              : t('Downloading {mod}…', { mod: current.name })
+            : t('Connecting to Steam…')}
         </span>
-        <div className="progress" role="progressbar" aria-label="Avanzamento dei download" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
+        <div className="progress" role="progressbar" aria-label={t('Download progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
           <div style={{ width: `${Math.max(fraction * 100, 3)}%` }} />
         </div>
       </div>
       <button type="button" className="btn btn-sm" onClick={onDetails}>
-        Dettagli
+        {t('Details')}
       </button>
     </div>
   )

@@ -88,8 +88,8 @@ test('build del Workshop: si sceglie la più recente compatibile con la tModLoad
   assert.equal((await pickBuild(dir, 'Wikithis', '2026.09.3.1')).info.version, '2.5.1.5')
   assert.equal((await pickBuild(dir, 'Wikithis', '2026.11.0.0')).info.version, '2.6')
   assert.equal((await pickBuild(dir, 'Wikithis', '2023.1.0.0')).info.version, '2.0')
-  await assert.rejects(pickBuild(dir, 'Wikithis', '2021.1.0.0'), /aggiorna prima tModLoader/)
-  await assert.rejects(pickBuild(dir, 'CalamityMod', '2026.09.3.1'), /contiene la mod "Wikithis"/)
+  await assert.rejects(pickBuild(dir, 'Wikithis', '2021.1.0.0'), /update tModLoader first/)
+  await assert.rejects(pickBuild(dir, 'CalamityMod', '2026.09.3.1'), /contains the mod "Wikithis"/)
 })
 
 test('installazione di una versione nuova: la vecchia va nell\'archivio, lo stato di abilitazione resta', async () => {
@@ -123,7 +123,7 @@ test('installazione di una versione nuova: la vecchia va nell\'archivio, lo stat
     const back = (await listMods(server)).mods.find((m) => m.name === 'Wikithis')
     assert.deepEqual([back?.version, back?.enabled], ['2.5.1.4', true])
     assert.deepEqual((await listArchive(server))[0].versions.map((v) => v.version), ['2.5.1.5'])
-    await assert.rejects(useArchivedVersion(server, 'Wikithis', '9.9'), /non presente nell'archivio/)
+    await assert.rejects(useArchivedVersion(server, 'Wikithis', '9.9'), /is not in the archive/)
 
     // La stessa versione ricaricata non finisce nell'archivio (sarebbe un doppione) ma nel cestino
     const same = join(root, 'same.tmod')
@@ -134,7 +134,7 @@ test('installazione di una versione nuova: la vecchia va nell\'archivio, lo stat
 
     await deleteArchived(server, 'Wikithis', '2.5.1.5')
     assert.deepEqual(await listArchive(server), [])
-    await assert.rejects(deleteArchived(server, 'Wikithis', '2.5.1.5'), /non presente/)
+    await assert.rejects(deleteArchived(server, 'Wikithis', '2.5.1.5'), /is not in the archive/)
   } finally {
     config.dataDir = previous
   }
@@ -223,7 +223,7 @@ test('modpack con versione bloccata: l\'attivazione passa alla versione dell\'ar
     let [view] = await listModpacks(server)
     assert.deepEqual(view.toSwitch, [{ name: 'Wikithis', from: '2.1', to: '2.0' }])
     assert.deepEqual(view.missing, ['Assente'])
-    await assert.rejects(enableModpack(server, pack.id), /non installate: Assente/)
+    await assert.rejects(enableModpack(server, pack.id), /not installed: Assente/)
     // Il tentativo fallito non ha cambiato versione
     assert.equal((await listMods(server)).mods[0].version, '2.1')
 
@@ -308,7 +308,7 @@ test('esportazione del modpack: cartella di tModLoader in .zip, con versioni blo
     await zip.cleanup()
 
     const empty = await createModpack(server, { name: 'Vuoto', description: '', mods: [], versions: {} })
-    await assert.rejects(exportModpackZip(server, empty.id), /vuoto/)
+    await assert.rejects(exportModpackZip(server, empty.id), /empty/)
   } finally {
     config.dataDir = previous
   }

@@ -4,6 +4,7 @@ import { errorMessage } from '../../lib/api'
 import { activationNotice, dependencyClosure } from '../../lib/modpacks'
 import { useModpackActivation } from '../../lib/mods'
 import type { Mod, Modpack } from '../../lib/types'
+import { t, tn } from '../../i18n'
 
 export type ActivationProps = {
   serverId: string
@@ -37,7 +38,7 @@ export function usePackActivation({ serverId, pack, packs, byName, onResult }: A
     activation.mutate(
       { id: pack.id, active, exclusive },
       {
-        onSuccess: (r) => onResult(activationNotice(exclusive ? `${pack.name} (solo questo)` : pack.name, active, r, nameOf), null),
+        onSuccess: (r) => onResult(activationNotice(exclusive ? `${pack.name} ${t('(only this one)')}` : pack.name, active, r, nameOf), null),
         onError: (err) => onResult(null, errorMessage(err)),
       },
     )
@@ -46,22 +47,22 @@ export function usePackActivation({ serverId, pack, packs, byName, onResult }: A
   const dialog = (
     // I clic nella finestra non devono arrivare alla card (che si aprirebbe)
     <span onClick={(e) => e.stopPropagation()}>
-      <Sheet open={confirming} title={`Attivare solo «${pack.name}»?`} onClose={() => setConfirming(false)}>
+      <Sheet open={confirming} title={t('Activate only «{name}»?', { name: pack.name })} onClose={() => setConfirming(false)}>
         <div className="stack">
-          <p>Restano abilitate solo le mod di questo pack e le loro dipendenze.</p>
+          <p>{t('Only the mods of this pack and their dependencies stay enabled.')}</p>
           {toDisable.length > 0 && (
             <p>
-              Verranno disabilitate <strong>{toDisable.length}</strong> mod: {toDisable.map(nameOf).join(', ')}.
+              {tn('{count} mods will be disabled: {mods}.', { count: <strong>{toDisable.length}</strong>, mods: toDisable.map(nameOf).join(', ') })}
             </p>
           )}
-          {otherActive.length > 0 && <p>Risulteranno disattivati anche: {otherActive.join(', ')}.</p>}
-          <p className="muted small">Le mod non vengono eliminate: puoi riabilitarle quando vuoi. Poi riavvia il server.</p>
+          {otherActive.length > 0 && <p>{t('These will be deactivated too: {packs}.', { packs: otherActive.join(', ') })}</p>}
+          <p className="muted small">{t('Mods are not deleted: you can enable them again whenever you want. Then restart the server.')}</p>
           <div className="btn-row">
             <button type="button" className="btn btn-warning" onClick={() => run(true, true)}>
-              Attiva solo questo
+              {t('Activate only this one')}
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => setConfirming(false)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </div>
         </div>

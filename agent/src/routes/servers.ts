@@ -1,13 +1,14 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { ConflictError, ConsoleError, type ServerManager } from '../manager.js'
 import { findServer, loadServers, type ServerDefinition } from '../registry.js'
+import { tr } from '../i18n.js'
 
 type IdParams = { Params: { id: string } }
 
 export async function serverRoutes(app: FastifyInstance, { manager }: { manager: ServerManager }) {
   const withServer = async (id: string, reply: FastifyReply): Promise<ServerDefinition | null> => {
     const server = await findServer(id)
-    if (!server) reply.code(404).send({ error: 'not_found', message: `Server "${id}" non trovato` })
+    if (!server) reply.code(404).send({ error: 'not_found', message: tr('Server "{id}" not found', { id }) })
     return server ?? null
   }
 
@@ -39,7 +40,7 @@ export async function serverRoutes(app: FastifyInstance, { manager }: { manager:
     const raw = req.query.offset
     const offset = raw === undefined || raw === '' ? undefined : Number(raw)
     if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0)) {
-      return reply.code(422).send({ error: 'invalid', message: 'offset non valido' })
+      return reply.code(422).send({ error: 'invalid', message: tr('invalid offset') })
     }
     return { data: await manager.console(server, offset) }
   })

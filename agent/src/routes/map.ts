@@ -5,6 +5,7 @@ import { findServer, type ServerDefinition } from '../registry.js'
 import { readTileTypes, SPRITE_KINDS, type SpriteKind, spritePng } from '../mapSprites.js'
 import { changeWorldSettings, editWorld, WorldEditorError, worldEditorCatalog, worldSettings } from '../worldEditor.js'
 import { mapChunkPath, mapOverviewPath, mapTilesPath, mapTypesPath, worldMap } from '../worldMap.js'
+import { tr } from '../i18n.js'
 
 type Params = { Params: { id: string; source?: string; cx?: string; cy?: string; kind?: string; type?: string }; Querystring: { watching?: string } }
 
@@ -12,12 +13,12 @@ type Params = { Params: { id: string; source?: string; cx?: string; cy?: string;
 export async function mapRoutes(app: FastifyInstance) {
   const server = async (id: string, reply: FastifyReply): Promise<ServerDefinition | null> => {
     const found = await findServer(id)
-    if (!found) reply.code(404).send({ error: 'not_found', message: `Server "${id}" non trovato` })
+    if (!found) reply.code(404).send({ error: 'not_found', message: tr('Server "{id}" not found', { id }) })
     return found ?? null
   }
 
   const png = async (reply: FastifyReply, path: string | null) => {
-    if (!path) return reply.code(404).send({ error: 'not_found', message: 'Immagine non ancora disponibile' })
+    if (!path) return reply.code(404).send({ error: 'not_found', message: tr('Image not available yet') })
     const { size } = await stat(path)
     return reply.header('Content-Type', 'image/png').header('Content-Length', size).send(createReadStream(path))
   }
@@ -43,7 +44,7 @@ export async function mapRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const path = await mapTilesPath(s, String(req.params.source), String(req.params.cx), String(req.params.cy))
-    if (!path) return reply.code(404).send({ error: 'not_found', message: 'Dati del riquadro non ancora disponibili' })
+    if (!path) return reply.code(404).send({ error: 'not_found', message: tr('Chunk data not available yet') })
     const { size } = await stat(path)
     return reply.header('Content-Type', 'application/octet-stream').header('Content-Length', size).send(createReadStream(path))
   })
@@ -53,7 +54,7 @@ export async function mapRoutes(app: FastifyInstance) {
     if (!s) return
     const path = mapTypesPath(s, String(req.params.source))
     const entry = path ? await readTileTypes(path) : null
-    if (!entry) return reply.code(404).send({ error: 'not_found', message: 'Tipi dei blocchi non ancora disponibili' })
+    if (!entry) return reply.code(404).send({ error: 'not_found', message: tr('Block types not available yet') })
     return { data: entry.types }
   })
 
@@ -65,7 +66,7 @@ export async function mapRoutes(app: FastifyInstance) {
     const type = Number(req.params.type)
     const types = mapTypesPath(s, String(req.params.source))
     if (!SPRITE_KINDS.includes(kind as SpriteKind) || !Number.isInteger(type) || type < 0 || type > 65535 || !types) {
-      return reply.code(404).send({ error: 'not_found', message: 'Sprite non trovato' })
+      return reply.code(404).send({ error: 'not_found', message: tr('Sprite not found') })
     }
     return png(reply, await spritePng(s, types, kind as SpriteKind, type))
   })
@@ -75,7 +76,7 @@ export async function mapRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const catalog = await worldEditorCatalog(s)
-    if (!catalog) return reply.code(404).send({ error: 'not_found', message: 'Catalogo dei blocchi non disponibile (server spento o LiveMap non attivo)' })
+    if (!catalog) return reply.code(404).send({ error: 'not_found', message: tr('Block catalog not available (server stopped or LiveMap not active)') })
     return { data: catalog }
   })
 
@@ -84,7 +85,7 @@ export async function mapRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const settings = await worldSettings(s)
-    if (!settings) return reply.code(404).send({ error: 'not_found', message: 'Settaggi del mondo non disponibili (server spento o LiveMap non attivo)' })
+    if (!settings) return reply.code(404).send({ error: 'not_found', message: tr('World settings not available (server stopped or LiveMap not active)') })
     return { data: settings }
   })
 

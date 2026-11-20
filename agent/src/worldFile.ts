@@ -61,7 +61,7 @@ class Reader {
   ) {}
 
   need(n: number) {
-    if (this.pos + n > this.buf.length) throw new WorldFileError('File del mondo troncato')
+    if (this.pos + n > this.buf.length) throw new WorldFileError('Truncated world file')
   }
   byte() {
     this.need(1)
@@ -90,7 +90,7 @@ class Reader {
       const b = this.byte()
       length |= (b & 0x7f) << shift
       if (b < 0x80) break
-      if (shift > 28) throw new WorldFileError('Stringa non valida nel file del mondo')
+      if (shift > 28) throw new WorldFileError('Invalid string in the world file')
     }
     this.need(length)
     const s = this.buf.toString('utf8', this.pos, this.pos + length)
@@ -102,12 +102,12 @@ class Reader {
 export function readWorldHeader(buf: Buffer): WorldHeader {
   const r = new Reader(buf)
   const version = r.int32()
-  if (version < MIN_VERSION || version > 10_000) throw new WorldFileError(`Versione del mondo non supportata (${version})`)
-  if (buf.toString('latin1', 4, 11) !== 'relogic' || buf[11] !== 2) throw new WorldFileError('Non è un file del mondo di Terraria')
+  if (version < MIN_VERSION || version > 10_000) throw new WorldFileError(`Unsupported world version (${version})`)
+  if (buf.toString('latin1', 4, 11) !== 'relogic' || buf[11] !== 2) throw new WorldFileError('Not a Terraria world file')
   r.skip(8 + 4 + 8)
 
   const sections = r.int16()
-  if (sections < 2 || sections > 64) throw new WorldFileError('Sezioni del file del mondo non valide')
+  if (sections < 2 || sections > 64) throw new WorldFileError('Invalid world file sections')
   const positions = Array.from({ length: sections }, () => r.int32())
 
   const types = r.int16()
@@ -132,7 +132,7 @@ export function readWorldHeader(buf: Buffer): WorldHeader {
   r.skip(16) // rettangolo del mondo in pixel
   const height = r.int32()
   const width = r.int32()
-  if (width < 100 || height < 100 || width > 20_000 || height > 10_000) throw new WorldFileError('Dimensioni del mondo non valide')
+  if (width < 100 || height < 100 || width > 20_000 || height > 10_000) throw new WorldFileError('Invalid world size')
 
   const levels = findLevels(buf, r.pos, width, height)
   return { version, name, id, width, height, ...levels, frameImportant, tilesOffset: positions[1] }

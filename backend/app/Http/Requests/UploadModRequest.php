@@ -24,8 +24,8 @@ class UploadModRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'file.extensions' => 'Il file deve essere una mod .tmod.',
-            'file.uploaded' => 'Caricamento fallito: il file supera il limite consentito dal server.',
+            'file.extensions' => __('The file must be a .tmod mod.'),
+            'file.uploaded' => __('Upload failed: the file exceeds the limit allowed by the server.'),
         ];
     }
 }

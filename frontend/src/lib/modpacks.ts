@@ -1,10 +1,12 @@
 import type { Mod, Modpack } from './types'
+import { t } from '../i18n'
 
-export const PACK_STATE: Record<Modpack['state'], { text: string; className: string }> = {
-  enabled: { text: 'Attivo', className: 'pill pill-on' },
-  partial: { text: 'Attivo in parte', className: 'pill pill-update' },
-  disabled: { text: 'Disattivo', className: 'pill pill-off' },
-}
+export const packState = (state: Modpack['state']): { text: string; className: string } =>
+  ({
+    enabled: { text: t('Active'), className: 'pill pill-on' },
+    partial: { text: t('Partly active'), className: 'pill pill-update' },
+    disabled: { text: t('Inactive'), className: 'pill pill-off' },
+  })[state]
 
 /** Mod del pack nell'ordine del pack (undefined per quelle non installate). */
 export const packModsOf = (pack: Modpack, byName: Map<string, Mod>) => pack.mods.map((name) => byName.get(name))
@@ -71,10 +73,11 @@ export function activationNotice(
   nameOf: (name: string) => string,
 ) {
   const parts: string[] = []
-  if (r.switched?.length) parts.push(`versioni cambiate: ${r.switched.map((s) => `${nameOf(s.name)} ${s.from ? `v${s.from} → ` : ''}v${s.to}`).join(', ')}`)
-  if (r.enabled?.length) parts.push(`abilitate: ${r.enabled.map(nameOf).join(', ')}`)
-  if (r.disabled?.length) parts.push(`disabilitate: ${r.disabled.map(nameOf).join(', ')}`)
-  if (r.deactivated?.length) parts.push(`pack disattivati: ${r.deactivated.join(', ')}`)
-  if (r.kept?.length) parts.push(`rimaste attive (servono ad altri pack o mod): ${r.kept.map(nameOf).join(', ')}`)
-  return `${packName} ${active ? 'attivato' : 'disattivato'}${parts.length ? ` — ${parts.join('; ')}` : ' (nessuna modifica alle mod)'}. Riavvia il server per applicare.`
+  if (r.switched?.length) parts.push(`${t('versions changed')}: ${r.switched.map((s) => `${nameOf(s.name)} ${s.from ? `v${s.from} → ` : ''}v${s.to}`).join(', ')}`)
+  if (r.enabled?.length) parts.push(`${t('enabled')}: ${r.enabled.map(nameOf).join(', ')}`)
+  if (r.disabled?.length) parts.push(`${t('disabled')}: ${r.disabled.map(nameOf).join(', ')}`)
+  if (r.deactivated?.length) parts.push(`${t('packs deactivated')}: ${r.deactivated.join(', ')}`)
+  if (r.kept?.length) parts.push(`${t('still enabled (needed by other packs or mods)')}: ${r.kept.map(nameOf).join(', ')}`)
+  const details = parts.length ? ` — ${parts.join('; ')}` : ` ${t('(no change to the mods)')}`
+  return `${active ? t('{pack} activated', { pack: packName }) : t('{pack} deactivated', { pack: packName })}${details}. ${t('Restart the server to apply.')}`
 }

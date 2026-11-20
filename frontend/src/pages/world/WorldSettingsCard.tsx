@@ -2,37 +2,47 @@ import { type ReactNode, useState } from 'react'
 import { errorMessage } from '../../lib/api'
 import type { WorldBoss, WorldSettingsChange, WorldSettingsState } from '../../lib/types'
 import { useChangeWorldSettings, useWorldSettings } from '../../lib/worldEditor'
+import { t } from '../../i18n'
 
-const TIMES = [
-  { label: 'Alba', clock: 270 },
-  { label: 'Mezzogiorno', clock: 720 },
-  { label: 'Tramonto', clock: 1170 },
-  { label: 'Mezzanotte', clock: 0 },
+const times = () => [
+  { label: t('Dawn'), clock: 270 },
+  { label: t('Noon'), clock: 720 },
+  { label: t('Dusk'), clock: 1170 },
+  { label: t('Midnight'), clock: 0 },
 ]
 
-const MOON_PHASES = ['Luna piena', 'Gibbosa calante', 'Ultimo quarto', 'Falce calante', 'Luna nuova', 'Falce crescente', 'Primo quarto', 'Gibbosa crescente']
+const moonPhases = () => [
+  t('Full moon'),
+  t('Waning gibbous'),
+  t('Third quarter'),
+  t('Waning crescent'),
+  t('New moon'),
+  t('Waxing crescent'),
+  t('First quarter'),
+  t('Waxing gibbous'),
+]
 
-const GAME_MODES = ['Classica', 'Esperto', 'Maestro']
+const gameModes = () => [t('Classic'), t('Expert'), t('Master')]
 
 /** In ordine di progressione. wallOfFlesh segue l'hardmode (non si cambia da qui). */
-const BOSSES: { key: WorldBoss; label: string }[] = [
-  { key: 'slimeKing', label: 'Re Slime' },
-  { key: 'eyeOfCthulhu', label: 'Occhio di Cthulhu' },
-  { key: 'evilBoss', label: 'Mangiatore di mondi / Cervello di Cthulhu' },
-  { key: 'queenBee', label: 'Ape regina' },
+const bosses = (): { key: WorldBoss; label: string }[] => [
+  { key: 'slimeKing', label: t('King Slime') },
+  { key: 'eyeOfCthulhu', label: t('Eye of Cthulhu') },
+  { key: 'evilBoss', label: t('Eater of Worlds / Brain of Cthulhu') },
+  { key: 'queenBee', label: t('Queen Bee') },
   { key: 'skeletron', label: 'Skeletron' },
   { key: 'deerclops', label: 'Deerclops' },
-  { key: 'wallOfFlesh', label: 'Muro di carne' },
-  { key: 'queenSlime', label: 'Regina Slime' },
-  { key: 'destroyer', label: 'Il Distruttore' },
-  { key: 'twins', label: 'I Gemelli' },
-  { key: 'skeletronPrime', label: 'Skeletron Primo' },
+  { key: 'wallOfFlesh', label: t('Wall of Flesh') },
+  { key: 'queenSlime', label: t('Queen Slime') },
+  { key: 'destroyer', label: t('The Destroyer') },
+  { key: 'twins', label: t('The Twins') },
+  { key: 'skeletronPrime', label: t('Skeletron Prime') },
   { key: 'plantera', label: 'Plantera' },
   { key: 'golem', label: 'Golem' },
-  { key: 'dukeFishron', label: 'Duca Pescedrago' },
-  { key: 'empressOfLight', label: 'Imperatrice della luce' },
-  { key: 'lunaticCultist', label: 'Cultista lunatico' },
-  { key: 'moonLord', label: 'Signore della luna' },
+  { key: 'dukeFishron', label: t('Duke Fishron') },
+  { key: 'empressOfLight', label: t('Empress of Light') },
+  { key: 'lunaticCultist', label: t('Lunatic Cultist') },
+  { key: 'moonLord', label: t('Moon Lord') },
 ]
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -59,19 +69,19 @@ export default function WorldSettingsCard({ serverId, onPickSpawn }: { serverId:
   return (
     <div className="card stack">
       <div className="section-header">
-        <h2>Impostazioni del mondo</h2>
-        <span className="small muted">Valgono subito per chi è connesso, e restano col salvataggio del mondo.</span>
+        <h2>{t('World settings')}</h2>
+        <span className="small muted">{t('They apply right away for whoever is connected, and stay with the world save.')}</span>
       </div>
 
       <div className="world-settings">
-        <Row label="Ora">
+        <Row label={t('Time')}>
           <span className="mono world-settings-value">
-            {formatClock(s.clock)} · {s.day ? 'giorno' : 'notte'}
+            {formatClock(s.clock)} · {s.day ? t('day') : t('night')}
           </span>
           <div className="btn-row">
-            {TIMES.map((t) => (
-              <button key={t.label} type="button" className="btn btn-sm" disabled={busy} onClick={() => set({ clock: t.clock })}>
-                {t.label}
+            {times().map((time) => (
+              <button key={time.label} type="button" className="btn btn-sm" disabled={busy} onClick={() => set({ clock: time.clock })}>
+                {time.label}
               </button>
             ))}
           </div>
@@ -83,34 +93,34 @@ export default function WorldSettingsCard({ serverId, onPickSpawn }: { serverId:
               if (Number.isInteger(h) && Number.isInteger(m)) set({ clock: h * 60 + m })
             }}
           >
-            <input type="time" value={clockText} onChange={(e) => setClockText(e.target.value)} aria-label="Ora precisa" />
+            <input type="time" value={clockText} onChange={(e) => setClockText(e.target.value)} aria-label={t('Exact time')} />
             <button type="submit" className="btn btn-sm" disabled={busy || !clockText}>
-              Imposta
+              {t('Set')}
             </button>
           </form>
         </Row>
 
-        <Row label="Meteo">
+        <Row label={t('Weather')}>
           <Toggle on={s.rain} disabled={busy} onClick={() => set({ rain: !s.rain })}>
-            Pioggia
+            {t('Rain')}
           </Toggle>
           <Toggle on={s.sandstorm} disabled={busy} onClick={() => set({ sandstorm: !s.sandstorm })}>
-            Tempesta di sabbia
+            {t('Sandstorm')}
           </Toggle>
         </Row>
 
-        <Row label="Eventi">
-          <Toggle on={s.bloodMoon} disabled={busy || (s.day && !s.bloodMoon)} title={s.day ? 'Solo di notte' : undefined} onClick={() => set({ bloodMoon: !s.bloodMoon })}>
-            Luna di sangue
+        <Row label={t('Events')}>
+          <Toggle on={s.bloodMoon} disabled={busy || (s.day && !s.bloodMoon)} title={s.day ? t('Only at night') : undefined} onClick={() => set({ bloodMoon: !s.bloodMoon })}>
+            {t('Blood Moon')}
           </Toggle>
-          <Toggle on={s.eclipse} disabled={busy || (!s.day && !s.eclipse)} title={s.day ? undefined : 'Solo di giorno'} onClick={() => set({ eclipse: !s.eclipse })}>
-            Eclissi solare
+          <Toggle on={s.eclipse} disabled={busy || (!s.day && !s.eclipse)} title={s.day ? undefined : t('Only during the day')} onClick={() => set({ eclipse: !s.eclipse })}>
+            {t('Solar Eclipse')}
           </Toggle>
         </Row>
 
-        <Row label="Luna">
-          <select value={s.moonPhase} disabled={busy} onChange={(e) => set({ moonPhase: Number(e.target.value) })} aria-label="Fase lunare">
-            {MOON_PHASES.map((name, i) => (
+        <Row label={t('Moon')}>
+          <select value={s.moonPhase} disabled={busy} onChange={(e) => set({ moonPhase: Number(e.target.value) })} aria-label={t('Moon phase')}>
+            {moonPhases().map((name, i) => (
               <option key={name} value={i}>
                 {name}
               </option>
@@ -118,12 +128,12 @@ export default function WorldSettingsCard({ serverId, onPickSpawn }: { serverId:
           </select>
         </Row>
 
-        <Row label="Difficoltà">
+        <Row label={t('Difficulty')}>
           {journey ? (
-            <span className="small muted">Viaggio: un mondo Viaggio non si può cambiare.</span>
+            <span className="small muted">{t('Journey: a Journey world cannot be changed.')}</span>
           ) : (
-            <div className="segmented" role="group" aria-label="Difficoltà">
-              {GAME_MODES.map((name, i) => (
+            <div className="segmented" role="group" aria-label={t('Difficulty')}>
+              {gameModes().map((name, i) => (
                 <button key={name} type="button" className={s.gameMode === i ? 'active' : ''} disabled={busy} onClick={() => s.gameMode !== i && set({ gameMode: i })}>
                   {name}
                 </button>
@@ -133,20 +143,20 @@ export default function WorldSettingsCard({ serverId, onPickSpawn }: { serverId:
         </Row>
 
         <Row label="Hardmode">
-          <span className="world-settings-value">{s.generatingHardMode ? 'In generazione…' : s.hardMode ? 'Attivo' : 'Non attivo'}</span>
+          <span className="world-settings-value">{s.generatingHardMode ? t('Generating…') : s.hardMode ? t('Active') : t('Not active')}</span>
           {s.hardMode ? (
             <button
               type="button"
               className="btn btn-sm"
               disabled={busy}
-              title="Toglie solo lo stato: consacrato, corruzione/cremisi e minerali già generati restano"
+              title={t('Only removes the state: hallow, corruption/crimson and ores already generated stay')}
               onClick={() => set({ hardMode: false })}
             >
-              Disattiva
+              {t('Deactivate')}
             </button>
           ) : confirmHardMode ? (
             <>
-              <span className="small">Come sconfiggere il Muro di carne: genera consacrato e corruzione/cremisi nel mondo, non si torna indietro.</span>
+              <span className="small">{t('Like defeating the Wall of Flesh: it generates hallow and corruption/crimson in the world, there is no going back.')}</span>
               <button
                 type="button"
                 className="btn btn-danger btn-sm"
@@ -156,15 +166,15 @@ export default function WorldSettingsCard({ serverId, onPickSpawn }: { serverId:
                   set({ hardMode: true })
                 }}
               >
-                Attiva comunque
+                {t('Activate anyway')}
               </button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmHardMode(false)}>
-                Annulla
+                {t('Cancel')}
               </button>
             </>
           ) : (
             <button type="button" className="btn btn-sm" disabled={busy} onClick={() => setConfirmHardMode(true)}>
-              Attiva…
+              {t('Activate…')}
             </button>
           )}
         </Row>
@@ -174,20 +184,20 @@ export default function WorldSettingsCard({ serverId, onPickSpawn }: { serverId:
             {s.spawnX}, {s.spawnY}
           </span>
           <button type="button" className="btn btn-sm" disabled={busy} onClick={onPickSpawn}>
-            Scegli sulla mappa
+            {t('Pick on the map')}
           </button>
         </Row>
 
-        <Row label="Boss sconfitti">
+        <Row label={t('Defeated bosses')}>
           <div className="tag-filters">
-            {BOSSES.map((b) => {
+            {bosses().map((b) => {
               const down = b.key === 'wallOfFlesh' ? s.hardMode : Boolean(s.bosses[b.key])
               return (
                 <Toggle
                   key={b.key}
                   on={down}
                   disabled={busy || b.key === 'wallOfFlesh'}
-                  title={b.key === 'wallOfFlesh' ? "Segue l'hardmode" : undefined}
+                  title={b.key === 'wallOfFlesh' ? t('Follows hardmode') : undefined}
                   onClick={() => b.key !== 'wallOfFlesh' && set({ bosses: { [b.key]: !down } })}
                 >
                   {b.label}
@@ -201,7 +211,7 @@ export default function WorldSettingsCard({ serverId, onPickSpawn }: { serverId:
       {change.error ? <div className="alert alert-error">{errorMessage(change.error)}</div> : null}
       {lastFailures.length > 0 && (
         <div className="alert alert-warning">
-          Non cambiato: {lastFailures.map((f) => f.reason).join(', ')}.
+          {t('Not changed: {reasons}.', { reasons: lastFailures.map((f) => f.reason).join(', ') })}
         </div>
       )}
     </div>

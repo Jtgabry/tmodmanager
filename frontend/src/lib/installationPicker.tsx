@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useReleases, versionLabel } from './admin'
 import { type Game, GAME_LABEL, type InstallationChoice, type SwitchRequest, type TmlRelease } from './types'
+import { t } from '../i18n'
 
 /**
  * Scelta di gioco e versione per un server (creazione e cambio di versione). Per ogni gioco si propongono:
@@ -71,7 +72,7 @@ export function useInstallationPicker(choices: InstallationChoice[], current: { 
   const fields = (
     <>
       <label className="field field-narrow">
-        <span>Gioco</span>
+        <span>{t('Game')}</span>
         <select
           value={game}
           onChange={(e) => {
@@ -88,34 +89,34 @@ export function useInstallationPicker(choices: InstallationChoice[], current: { 
         </select>
       </label>
       <label className="field">
-        <span>Versione</span>
+        <span>{t('Version')}</span>
         <select value={selected} onChange={(e) => setValue(e.target.value)}>
-          {currentElsewhere && current.game === game && <option value={dirValue(current.installDir)}>{current.installDir} — attuale</option>}
+          {currentElsewhere && current.game === game && <option value={dirValue(current.installDir)}>{current.installDir} — {t('current')}</option>}
           {installed.length > 0 && (
-            <optgroup label="Nel pannello">
+            <optgroup label={t('In the panel')}>
               {installed.map((c) => (
                 <option key={c.path} value={dirValue(c.path)}>
                   {versionLabel(c)}
-                  {current?.installDir === c.path ? ' · attuale' : ''}
+                  {current?.installDir === c.path ? ` · ${t('current')}` : ''}
                 </option>
               ))}
             </optgroup>
           )}
           {available.length > 0 && (
-            <optgroup label="Da installare come versione fissa">
+            <optgroup label={t('To install as a pinned version')}>
               {available.map((r, index) => (
                 <option key={r.version} value={releaseValue(r.version)}>
                   {r.version}
                   {r.prerelease ? ' (beta)' : ''}
                   {game === 'tshock' && r.gameVersion ? ` (Terraria ${r.gameVersion})` : ''}
-                  {index === 0 && !r.prerelease ? ' — ultima' : ''}
+                  {index === 0 && !r.prerelease ? ` — ${t('latest')}` : ''}
                 </option>
               ))}
             </optgroup>
           )}
         </select>
-        {releases.isLoading && <span className="muted small">Caricamento delle versioni…</span>}
-        {releases.error && <span className="error-text">Versioni pubblicate non disponibili</span>}
+        {releases.isLoading && <span className="muted small">{t('Loading versions…')}</span>}
+        {releases.error && <span className="error-text">{t('Published versions not available')}</span>}
       </label>
     </>
   )

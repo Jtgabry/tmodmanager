@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { errorMessage } from '../../lib/api'
 import { useUploadMod } from '../../lib/mods'
+import { t } from '../../i18n'
 
 export type UploadItem = { file: File; progress: number; status: 'queued' | 'uploading' | 'done' | 'error'; message?: string }
 
@@ -25,7 +26,7 @@ export function useUploadQueue(serverId: string) {
     const rejected = files.filter((f) => !isTmod(f))
     setItems([
       ...tmods.map((file): UploadItem => ({ file, progress: 0, status: 'queued' })),
-      ...rejected.map((file): UploadItem => ({ file, progress: 0, status: 'error', message: 'Non è un file .tmod' })),
+      ...rejected.map((file): UploadItem => ({ file, progress: 0, status: 'error', message: t('Not a .tmod file') })),
     ])
 
     for (const [index, file] of tmods.entries()) {
@@ -34,10 +35,10 @@ export function useUploadQueue(serverId: string) {
         const result = await upload.mutateAsync({ file, enable, onProgress: (p) => update(index, { progress: p }) })
         const label = result.mod.displayName ?? result.mod.name
         const message = result.replacedVersion
-          ? `${label}: aggiornata da v${result.replacedVersion} a v${result.mod.version}`
-          : `${label} v${result.mod.version} aggiunta`
+          ? t('{mod}: updated from v{from} to v{to}', { mod: label, from: result.replacedVersion, to: result.mod.version ?? '?' })
+          : t('{mod} v{version} added', { mod: label, version: result.mod.version ?? '?' })
         const others = result.enabled.filter((m) => m !== result.mod.name)
-        const extra = others.length ? ` (abilitate anche: ${others.join(', ')})` : ''
+        const extra = others.length ? ` ${t('(also enabled: {mods})', { mods: others.join(', ') })}` : ''
         update(index, { status: 'done', progress: 1, message: (result.warning ?? message) + extra })
       } catch (err) {
         update(index, { status: 'error', message: errorMessage(err) })

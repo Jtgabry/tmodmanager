@@ -146,14 +146,14 @@ function runWorker(job: RenderJob): Promise<void> {
     worker.once('message', (m: { ok: boolean; message?: string }) => {
       settled = true
       if (m.ok) resolve()
-      else reject(new Error(m.message ?? 'Lettura del mondo non riuscita'))
+      else reject(new Error(m.message ?? 'Reading the world failed'))
     })
     worker.once('error', (err) => {
       settled = true
       reject(err)
     })
     worker.once('exit', (code) => {
-      if (!settled) reject(new Error(`Lettura del mondo interrotta (codice ${code})`))
+      if (!settled) reject(new Error(`Reading the world interrupted (code ${code})`))
     })
   })
 }

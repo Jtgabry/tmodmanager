@@ -10,6 +10,7 @@ import type { ServerDefinition } from './registry.js'
 import { type ModInfo, readModInfo, sideName, TmodError } from './tmod.js'
 import { moveToArchive } from './archive.js'
 import { moveToTrash } from './trash.js'
+import { tr } from './i18n.js'
 
 /** Errore di input (422) o conflitto (409), con dettagli strutturati per il client. */
 export class ModError extends Error {
@@ -210,12 +211,12 @@ export async function enableMods(server: ServerDefinition, names: string[]): Pro
   const { mods } = await listMods(server)
   const graph = graphOf(mods)
   const unknown = names.filter((n) => !graph.has(n))
-  if (unknown.length) throw new ModError(`Mod non presenti: ${unknown.join(', ')}`, 404, { missing: unknown })
+  if (unknown.length) throw new ModError(tr('Mods not present: {mods}', { mods: unknown.join(', ') }), 404, { missing: unknown })
 
   const wanted = dependencyClosure(graph, names)
   const missing = [...wanted].filter((n) => !graph.has(n))
   if (missing.length) {
-    throw new ModError(`Dipendenze mancanti: ${missing.join(', ')}. Caricale prima di abilitare.`, 422, { missing })
+    throw new ModError(tr('Missing dependencies: {mods}. Upload them before enabling.', { mods: missing.join(', ') }), 422, { missing })
   }
 
   const enabled = await readEnabled(server)
@@ -238,7 +239,7 @@ export async function disableMods(server: ServerDefinition, names: string[], cas
     ...new Set(names.flatMap((n) => enabledDependents(graph, enabled, n)).filter((d) => !removing.has(d))),
   ].sort()
   if (dependents.length && !cascade) {
-    throw new ModError(`Altre mod abilitate dipendono da questa: ${dependents.join(', ')}`, 409, { dependents })
+    throw new ModError(tr('Other enabled mods depend on this one: {mods}', { mods: dependents.join(', ') }), 409, { dependents })
   }
   dependents.forEach((d) => removing.add(d))
 
@@ -248,10 +249,10 @@ export async function disableMods(server: ServerDefinition, names: string[], cas
 }
 
 export async function modPath(server: ServerDefinition, name: string): Promise<string> {
-  if (!MOD_NAME.test(name)) throw new ModError('Nome mod non valido', 422)
+  if (!MOD_NAME.test(name)) throw new ModError(tr('Invalid mod name'), 422)
   const { mods } = await listMods(server)
   const mod = mods.find((m) => m.name === name)
-  if (!mod) throw new ModError(`Mod "${name}" non trovata`, 404)
+  if (!mod) throw new ModError(tr('Mod "{mod}" not found', { mod: name }), 404)
   return join(modsDir(server), mod.file)
 }
 
@@ -279,10 +280,10 @@ export async function deleteMod(server: ServerDefinition, name: string, cascade:
  * Se è installata un'altra versione: 409, oppure (overwrite) quella attuale va nel cestino.
  */
 export async function restoreMod(server: ServerDefinition, modName: string, from: string, overwrite: boolean) {
-  if (!MOD_NAME.test(modName)) throw new ModError('Nome mod non valido', 422)
+  if (!MOD_NAME.test(modName)) throw new ModError(tr('Invalid mod name'), 422)
   const current = (await listMods(server)).mods.find((m) => m.name === modName)
   if (current && !overwrite) {
-    throw new ModError(`La mod "${modName}" è già installata (versione ${current.version ?? '?'})`, 409)
+    throw new ModError(tr('The mod "{mod}" is already installed (version {version})', { mod: modName, version: current.version ?? '?' }), 409)
   }
   await mkdir(modsDir(server), { recursive: true })
   const staging = join(modsDir(server), `.${modName}.tmod.restoring`)
@@ -312,7 +313,7 @@ export async function uploadMod(server: ServerDefinition, body: Readable, enable
     let received = 0
     body.on('data', (chunk: Buffer) => {
       received += chunk.length
-      if (received > MAX_UPLOAD_BYTES) body.destroy(new ModError('File troppo grande (max 1 GB)', 413))
+      if (received > MAX_UPLOAD_BYTES) body.destroy(new ModError(tr('File too large (max {size})', { size: '1 GB' }), 413))
     })
     await pipeline(body, createWriteStream(tmp))
 
@@ -320,7 +321,7 @@ export async function uploadMod(server: ServerDefinition, body: Readable, enable
     try {
       info = await readModInfo(tmp)
     } catch (err) {
-      throw new ModError(err instanceof TmodError ? err.message : 'File .tmod non leggibile', 422)
+      throw new ModError(err instanceof TmodError ? err.message : tr('Unreadable .tmod file'), 422)
     }
 
     return await withServerLock(server, () => installModFile(server, tmp, info, enable))
@@ -354,12 +355,12 @@ export async function installModFile(server: ServerDefinition, file: string, inf
       enabled = await enableMods(server, [info.name])
     } catch (err) {
       if (!(err instanceof ModError)) throw err
-      warning = `Caricata ma non abilitata: ${err.message}`
+      warning = tr('Uploaded but not enabled: {error}', { error: err.message })
     }
   }
 
   const mod = (await listMods(server)).mods.find((m) => m.name === info.name)
-  if (!mod) throw new Error('Mod caricata ma non trovata nella cartella')
+  if (!mod) throw new Error(tr('Mod uploaded but not found in the folder'))
   return { mod, replacedVersion: existing?.version ?? null, enabled, warning }
 }
 

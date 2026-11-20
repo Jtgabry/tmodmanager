@@ -13,6 +13,7 @@ import {
   writeText,
 } from '../files.js'
 import { findServer, type ServerDefinition } from '../registry.js'
+import { tr } from '../i18n.js'
 
 type Req = {
   Params: { id: string }
@@ -33,15 +34,15 @@ export async function fileRoutes(app: FastifyInstance) {
       return reply.code(err.status).send({ error, message: err.message })
     }
     const code = (err as NodeJS.ErrnoException).code
-    if (code === 'EACCES' || code === 'EPERM') return reply.code(422).send({ error: 'invalid', message: 'Permesso negato dal sistema' })
-    if (code === 'ENOENT') return reply.code(404).send({ error: 'not_found', message: 'File o cartella non trovati' })
-    if (code === 'ENOTEMPTY' || code === 'EEXIST') return reply.code(409).send({ error: 'conflict', message: 'Esiste già' })
+    if (code === 'EACCES' || code === 'EPERM') return reply.code(422).send({ error: 'invalid', message: tr('Permission denied by the system') })
+    if (code === 'ENOENT') return reply.code(404).send({ error: 'not_found', message: tr('File or folder not found') })
+    if (code === 'ENOTEMPTY' || code === 'EEXIST') return reply.code(409).send({ error: 'conflict', message: tr('It already exists') })
     throw err
   })
 
   const server = async (id: string, reply: FastifyReply): Promise<ServerDefinition | null> => {
     const found = await findServer(id)
-    if (!found) reply.code(404).send({ error: 'not_found', message: `Server "${id}" non trovato` })
+    if (!found) reply.code(404).send({ error: 'not_found', message: tr('Server "{id}" not found', { id }) })
     return found ?? null
   }
 
@@ -67,7 +68,7 @@ export async function fileRoutes(app: FastifyInstance) {
   app.put<Req>('/servers/:id/files/upload', async (req, reply) => {
     const s = await server(req.params.id, reply)
     if (!s) return
-    if (req.headers['content-type'] !== 'application/octet-stream') throw new FileError('Invia il file come application/octet-stream')
+    if (req.headers['content-type'] !== 'application/octet-stream') throw new FileError(tr('Send the file as application/octet-stream'))
     const q = req.query
     const result = await uploadFile(s, q.root, q.path, q.name, req.body as unknown as Readable, q.overwrite === '1')
     return reply.code(result.replaced ? 200 : 201).send({ data: result })

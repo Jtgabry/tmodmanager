@@ -26,7 +26,7 @@ class AgentException extends Exception
 
     public static function unreachable(): self
     {
-        return new self('Agent non raggiungibile: controlla che il servizio tmodmanager-agent sia attivo.');
+        return new self(__('Agent unreachable: check that the tmodmanager-agent service is running.'));
     }
 
     /**
@@ -36,10 +36,10 @@ class AgentException extends Exception
     {
         // Un 401 dall'agent significa token sbagliato in .env: per il client è un errore del server, non suo.
         if ($status === 401 || $status >= 500) {
-            return new self($body['message'] ?? 'Errore interno dell\'agent.', 502, 'agent_error');
+            return new self($body['message'] ?? __('Internal agent error.'), 502, 'agent_error');
         }
 
-        return new self($body['message'] ?? 'Richiesta rifiutata dall\'agent.', $status, $body['error'] ?? 'agent_error', $body['details'] ?? []);
+        return new self($body['message'] ?? __('Request rejected by the agent.'), $status, $body['error'] ?? 'agent_error', $body['details'] ?? []);
     }
 
     /**

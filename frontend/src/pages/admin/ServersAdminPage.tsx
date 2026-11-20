@@ -18,6 +18,7 @@ import { errorMessage, fieldErrors } from '../../lib/api'
 import { formatBytes, formatDate } from '../../lib/format'
 import { useServers } from '../../lib/servers'
 import { type Game, GAME_LABEL, type Installation, type Server } from '../../lib/types'
+import { t, tn } from '../../i18n'
 
 export default function ServersAdminPage() {
   const [creating, setCreating] = useState(false)
@@ -26,11 +27,11 @@ export default function ServersAdminPage() {
   return (
     <section>
       <div className="page-header">
-        <h1>Gestione server</h1>
+        <h1>{t('Server management')}</h1>
         {!creating && (
           <div className="btn-row">
             <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-              + Nuovo server
+              + {t('New server')}
             </button>
           </div>
         )}
@@ -39,7 +40,7 @@ export default function ServersAdminPage() {
       {creating && <NewServerForm servers={servers.data ?? []} onDone={() => setCreating(false)} />}
 
       <div className="card">
-        <h2>Server</h2>
+        <h2>{t('Servers')}</h2>
         {servers.isLoading && <div className="spinner" />}
         {servers.error && <div className="alert alert-error">{errorMessage(servers.error)}</div>}
         <div className="stack">
@@ -62,7 +63,7 @@ function ServerRow({ server }: { server: Server }) {
   if (removedDir) {
     return (
       <div className="alert alert-success">
-        {server.name} è stato tolto dal pannello. I suoi file sono ancora in <span className="mono">{removedDir}</span>.
+        {tn('{server} was removed from the panel. Its files are still in {dir}.', { server: server.name, dir: <span className="mono">{removedDir}</span> })}
       </div>
     )
   }
@@ -76,14 +77,15 @@ function ServerRow({ server }: { server: Server }) {
           </Link>{' '}
           <StateBadge state={server.state} />
           <div className="muted small">
-            id <span className="mono">{server.id}</span> · porta {server.port} · max {server.players.max} giocatori ·{' '}
-            {server.hasPassword ? 'con password' : <span className="error-text">senza password</span>}
+            id <span className="mono">{server.id}</span> · {t('port {port}', { port: server.port })} ·{' '}
+            {t('max {count} players', { count: server.players.max })} ·{' '}
+            {server.hasPassword ? t('with password') : <span className="error-text">{t('without password')}</span>}
             {` · ${GAME_LABEL[server.game]} ${server.version ?? ''}`}
           </div>
         </div>
         <div className="btn-row">
           <Link className="btn btn-sm" to={`/servers/${server.id}/settings`}>
-            Impostazioni
+            {t('Settings')}
           </Link>
           {confirmRemove ? (
             <>
@@ -93,10 +95,10 @@ function ServerRow({ server }: { server: Server }) {
                 disabled={remove.isPending}
                 onClick={() => remove.mutate(server.id, { onSuccess: (r) => setRemovedDir(r.saveDir), onSettled: () => setConfirmRemove(false) })}
               >
-                Conferma rimozione
+                {t('Confirm removal')}
               </button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmRemove(false)}>
-                Annulla
+                {t('Cancel')}
               </button>
             </>
           ) : (
@@ -104,18 +106,19 @@ function ServerRow({ server }: { server: Server }) {
               type="button"
               className="btn btn-danger-outline btn-sm"
               disabled={server.state !== 'stopped'}
-              title={server.state !== 'stopped' ? 'Spegni il server prima di rimuoverlo' : 'Toglie il server dal pannello; i file restano su disco'}
+              title={server.state !== 'stopped' ? t('Stop the server before removing it') : t('Removes the server from the panel; the files stay on disk')}
               onClick={() => setConfirmRemove(true)}
             >
-              Rimuovi
+              {t('Remove')}
             </button>
           )}
         </div>
       </header>
       {confirmRemove && (
         <p className="hint">
-          Il server viene tolto dal pannello (insieme ai suoi modpack e ai permessi degli utenti). Mondo, mod e
-          configurazione restano su disco.
+          {t(
+            'The server is removed from the panel (together with its modpacks and the user permissions). World, mods and configuration stay on disk.',
+          )}
         </p>
       )}
       {remove.isError && <div className="alert alert-error">{errorMessage(remove.error)}</div>}
@@ -177,27 +180,38 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
     return (
       <div className="card">
         <div className="alert alert-success">
-          Server creato in <span className="mono">{created.saveDir}</span>. Al primo avvio il mondo viene generato: può
-          richiedere qualche minuto. Ricordati di dare i permessi agli utenti dalla pagina Utenti.
+          {tn(
+            'Server created in {dir}. The world is generated on the first start: it may take a few minutes. Remember to give users their permissions from the Users page.',
+            { dir: <span className="mono">{created.saveDir}</span> },
+          )}
         </div>
         {created.install && !created.install.error && (
           <div className="alert alert-info">
-            Installazione di {GAME_LABEL[created.install.game]} {created.install.version ?? ''} in corso: il server si può
-            accendere quando è finita. L'avanzamento è nella sezione <strong>Installazioni</strong> qui sotto.
+            {tn(
+              'Installing {game} {version}: the server can be started when it is done. Progress is in the {section} section below.',
+              {
+                game: GAME_LABEL[created.install.game],
+                version: created.install.version ?? '',
+                section: <strong>{t('Installations')}</strong>,
+              },
+            )}
           </div>
         )}
         {created.install?.error && (
           <div className="alert alert-warning">
-            {GAME_LABEL[created.install.game]} non è stato installato: {created.install.error}. Installalo dalla sezione{' '}
-            <strong>Installazioni</strong> qui sotto prima di accendere il server.
+            {tn('{game} was not installed: {error}. Install it from the {section} section below before starting the server.', {
+              game: GAME_LABEL[created.install.game],
+              error: created.install.error,
+              section: <strong>{t('Installations')}</strong>,
+            })}
           </div>
         )}
         <div className="btn-row">
           <Link className="btn btn-primary btn-sm" to={`/servers/${created.id}`}>
-            Apri il server
+            {t('Open the server')}
           </Link>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
-            Chiudi
+            {t('Close')}
           </button>
         </div>
       </div>
@@ -208,10 +222,10 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
 
   return (
     <form className="card pack-form" onSubmit={submit}>
-      <h2>Nuovo server</h2>
+      <h2>{t('New server')}</h2>
       <div className="form-inline">
         <label className="field">
-          <span>Nome</span>
+          <span>{t('Name')}</span>
           <input
             required
             autoFocus
@@ -225,7 +239,7 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
           {fieldError('name') && <span className="error-text">{fieldError('name')}</span>}
         </label>
         <label className="field">
-          <span>Id (negli URL e nel nome della cartella)</span>
+          <span>{t('Id (in URLs and in the folder name)')}</span>
           <input
             required
             pattern="[a-z0-9][a-z0-9\-]{0,31}"
@@ -242,7 +256,7 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
 
       <div className="form-inline">
         <label className="field">
-          <span>Porta</span>
+          <span>{t('Port')}</span>
           <input
             type="number"
             min={defaults.data?.ports?.min ?? 1024}
@@ -256,70 +270,70 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
           ) : (
             defaults.data?.ports && (
               <span className="muted small">
-                Porte disponibili: {defaults.data.ports.min}–{defaults.data.ports.max}
+                {t('Available ports: {min}–{max}', { min: defaults.data.ports.min, max: defaults.data.ports.max })}
               </span>
             )
           )}
         </label>
         <label className="field">
-          <span>Giocatori max</span>
+          <span>{t('Max players')}</span>
           <input type="number" required min={1} max={255} value={maxPlayers} onChange={(e) => setMaxPlayers(Number(e.target.value))} />
         </label>
         <label className="field">
-          <span>Password (consigliata)</span>
+          <span>{t('Password (recommended)')}</span>
           <input maxLength={64} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
           {fieldError('password') && <span className="error-text">{fieldError('password')}</span>}
         </label>
         <label className="field">
-          <span>Messaggio di benvenuto</span>
+          <span>{t('Welcome message')}</span>
           <input maxLength={200} value={motd} onChange={(e) => setMotd(e.target.value)} />
         </label>
       </div>
 
-      <h3>Mondo</h3>
+      <h3>{t('World')}</h3>
       <div className="form-inline">
         <label className="field">
-          <span>Nome del mondo</span>
+          <span>{t('World name')}</span>
           <input
             maxLength={40}
             pattern="[A-Za-z0-9 _'\-]{1,40}"
-            placeholder={name || 'Come il server'}
+            placeholder={name || t('Same as the server')}
             value={world.name}
             onChange={(e) => setWorld({ ...world, name: e.target.value })}
           />
           {fieldError('world.name') && <span className="error-text">{fieldError('world.name')}</span>}
         </label>
         <label className="field">
-          <span>Dimensione</span>
+          <span>{t('Size')}</span>
           <select value={world.size} onChange={(e) => setWorld({ ...world, size: Number(e.target.value) as 1 | 2 | 3 })}>
-            <option value={1}>Piccolo</option>
-            <option value={2}>Medio</option>
-            <option value={3}>Grande</option>
+            <option value={1}>{t('Small')}</option>
+            <option value={2}>{t('Medium')}</option>
+            <option value={3}>{t('Large')}</option>
           </select>
         </label>
         <label className="field">
-          <span>Difficoltà</span>
+          <span>{t('Difficulty')}</span>
           <select value={world.difficulty} onChange={(e) => setWorld({ ...world, difficulty: Number(e.target.value) as 0 | 1 | 2 | 3 })}>
-            <option value={0}>Classica</option>
-            <option value={1}>Esperto</option>
-            <option value={2}>Maestro</option>
-            <option value={3}>Viaggio</option>
+            <option value={0}>{t('Classic')}</option>
+            <option value={1}>{t('Expert')}</option>
+            <option value={2}>{t('Master')}</option>
+            <option value={3}>{t('Journey')}</option>
           </select>
         </label>
         <label className="field">
-          <span>Seed (facoltativo)</span>
+          <span>{t('Seed (optional)')}</span>
           <input maxLength={64} value={world.seed} onChange={(e) => setWorld({ ...world, seed: e.target.value })} />
         </label>
       </div>
 
-      <h3>Gioco e versione</h3>
+      <h3>{t('Game and version')}</h3>
       <div className="form-inline">
         {versionFields}
         {picked?.game === 'tmodloader' && (
           <label className="field">
-            <span>Copia mod e loro configurazioni da</span>
+            <span>{t('Copy mods and their configs from')}</span>
             <select value={copyModsFrom} onChange={(e) => setCopyModsFrom(e.target.value)}>
-              <option value="">Nessuno (server senza mod)</option>
+              <option value="">{t('None (server without mods)')}</option>
               {servers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -331,27 +345,31 @@ function NewServerForm({ servers, onDone }: { servers: Server[]; onDone: () => v
       </div>
       {picked?.toInstall && (
         <div className="alert alert-info">
-          {GAME_LABEL[picked.game]} va installato: creando il server l'installazione parte in automatico (qualche minuto), e il
-          server si può accendere quando è finita.
+          {t(
+            '{game} needs to be installed: creating the server starts the installation automatically (a few minutes), and the server can be started when it is done.',
+            { game: GAME_LABEL[picked.game] },
+          )}
         </div>
       )}
       <p className="muted small">
         <PickedHint picked={picked} />{' '}
         {picked?.game === 'tmodloader'
-          ? 'Server tModLoader: avrà le sezioni Mod, Workshop e Modpack.'
+          ? t('tModLoader server: it will have the Mods, Workshop and Modpack sections.')
           : picked?.game === 'tshock'
-            ? 'Server TShock: Terraria vanilla con plugin, i giocatori entrano con Terraria normale. Configurazione e plugin di TShock stanno nella cartella SaveData del server (sezione File: tshock/ e ServerPlugins/); al primo avvio la console mostra il codice per /setup.'
-            : 'Server Terraria vanilla: potrai passare a TShock o tModLoader dalle impostazioni del server, con lo stesso mondo.'}{' '}
-        Il mondo viene generato al primo avvio.
+            ? t(
+                'TShock server: vanilla Terraria with plugins, players join with regular Terraria. TShock configuration and plugins are in the SaveData folder of the server (Files section: tshock/ and ServerPlugins/); on the first start the console shows the code for /setup.',
+              )
+            : t('Vanilla Terraria server: you can switch to TShock or tModLoader from the server settings, with the same world.')}{' '}
+        {t('The world is generated on the first start.')}
       </p>
 
       {create.isError && !Object.keys(errors).length && !conflictField && <div className="alert alert-error">{errorMessage(create.error)}</div>}
       <div className="btn-row">
         <button type="submit" className="btn btn-primary" disabled={create.isPending || !picked}>
-          {create.isPending ? 'Creazione…' : 'Crea server'}
+          {create.isPending ? t('Creating…') : t('Create server')}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onDone}>
-          Annulla
+          {t('Cancel')}
         </button>
       </div>
     </form>
@@ -365,12 +383,11 @@ function InstallationsSection({ servers }: { servers: Server[] }) {
 
   return (
     <div className="card">
-      <h2>Installazioni</h2>
+      <h2>{t('Installations')}</h2>
       <p className="muted small">
-        Terraria vanilla, TShock e tModLoader. Per ogni gioco c'è un'installazione principale, condivisa (aggiornandola si
-        aggiornano tutti i server che la usano), e le versioni fisse, che non si aggiornano: un server su una versione fissa
-        si aggiorna da solo, passando a un'altra versione. Ogni server sceglie la sua dalla Panoramica. Una volta al giorno
-        si controlla se ci sono versioni nuove: gli avvisi compaiono in cima alle pagine.
+        {t(
+          'Vanilla Terraria, TShock and tModLoader. Each game has a main, shared installation (updating it updates all the servers that use it), and pinned versions, which are never updated: a server on a pinned version is updated on its own, by switching to another version. Each server picks its own from the Overview. Once a day new versions are checked: the notices show up at the top of the pages.',
+        )}
       </p>
       {installations.isLoading && <div className="spinner" />}
       {installations.error && <div className="alert alert-error">{errorMessage(installations.error)}</div>}
@@ -406,17 +423,17 @@ function AddVersion({ installations }: { installations: Installation[] }) {
     <article className="pack">
       <header>
         <div>
-          <strong>Aggiungi una versione fissa</strong>
+          <strong>{t('Add a pinned version')}</strong>
           <div className="muted small">
-            Una versione fissa non si aggiorna: i server che la usano restano su quella finché non li passi a un'altra (dalla
-            Panoramica del server, dove si possono anche installare versioni nuove al volo). Si rimuove quando nessun server
-            la usa.
+            {t(
+              'A pinned version is never updated: the servers that use it stay on it until you switch them to another one (from the server Overview, where new versions can also be installed on the fly). It can be removed when no server uses it.',
+            )}
           </div>
         </div>
       </header>
       <div className="form-inline">
         <label className="field field-narrow">
-          <span>Gioco</span>
+          <span>{t('Game')}</span>
           <select
             value={game}
             onChange={(e) => {
@@ -432,7 +449,7 @@ function AddVersion({ installations }: { installations: Installation[] }) {
           </select>
         </label>
         <label className="field">
-          <span>Versione</span>
+          <span>{t('Version')}</span>
           <select value={version || selected} onChange={(e) => setVersion(e.target.value)}>
             {available.map((r) => (
               <option key={r.version} value={r.version}>
@@ -442,12 +459,12 @@ function AddVersion({ installations }: { installations: Installation[] }) {
                 {r.publishedAt ? ` · ${formatDate(r.publishedAt)}` : ''}
               </option>
             ))}
-            {isTerraria && <option value={OTHER_VERSION}>Altra versione…</option>}
+            {isTerraria && <option value={OTHER_VERSION}>{t('Other version…')}</option>}
           </select>
         </label>
         {isTerraria && (version === OTHER_VERSION || (!available.length && !releases.isLoading)) && (
           <label className="field">
-            <span>Versione (es. 1.4.3.6)</span>
+            <span>{t('Version (e.g. {example})', { example: '1.4.3.6' })}</span>
             <input
               pattern="1(\.\d){3,5}"
               placeholder="1.4.3.6"
@@ -465,24 +482,25 @@ function AddVersion({ installations }: { installations: Installation[] }) {
           disabled={!valid || addVersion.isPending}
           onClick={() => addVersion.mutate({ game, version: selected }, { onSuccess: () => setVersion('') })}
         >
-          Aggiungi
+          {t('Add')}
         </button>
       </div>
-      {isTerraria && <p className="muted small">Su terraria.org si trovano le versioni dalla 1.4.1.2 in poi.</p>}
-      {releases.error && <p className="error-text">Versioni non disponibili: {errorMessage(releases.error)}</p>}
+      {isTerraria && <p className="muted small">{t('terraria.org has the versions from 1.4.1.2 onwards.')}</p>}
+      {releases.error && <p className="error-text">{t('Versions not available: {error}', { error: errorMessage(releases.error) })}</p>}
       {addVersion.isError && <div className="alert alert-error">{errorMessage(addVersion.error)}</div>}
     </article>
   )
 }
 
-const PHASES: Record<string, string> = {
-  download: 'Download',
-  extract: 'Estrazione',
-  prepare: 'Preparazione',
-  stopping: 'Spegnimento dei server',
-  swap: 'Sostituzione',
-  starting: 'Riavvio dei server',
-}
+const phaseLabel = (phase: string): string | undefined =>
+  ({
+    download: t('Download'),
+    extract: t('Extraction'),
+    prepare: t('Preparation'),
+    stopping: t('Stopping the servers'),
+    swap: t('Replacement'),
+    starting: t('Restarting the servers'),
+  })[phase]
 
 const OTHER_VERSION = '__other'
 
@@ -526,27 +544,31 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
             {installation.pinned && ` ${installation.version ?? installation.job?.toVersion ?? ''}`}
           </strong>{' '}
           {installation.pinned ? (
-            <span className="muted small">versione fissa</span>
+            <span className="muted small">{t('pinned version')}</span>
           ) : (
-            hasPinned && installation.managed && <span className="muted small">principale, condivisa</span>
+            hasPinned && installation.managed && <span className="muted small">{t('main, shared')}</span>
           )}{' '}
           <span className="muted small mono">{installation.path}</span>
           <div className="muted small">
             {installation.pinned && !installation.installed ? (
-              installation.job?.phase === 'error' ? 'Installazione non riuscita.' : 'Installazione in corso…'
+              installation.job?.phase === 'error' ? t('Installation failed.') : t('Installing…')
             ) : installation.installed ? (
               <>
-                Versione installata: <strong>{installation.version ?? 'sconosciuta'}</strong>
-                {installation.kind === 'tmodloader' && installation.gameVersion && ` (basata su Terraria ${installation.gameVersion})`}
-                {installation.kind === 'tshock' && installation.gameVersion && ` (per Terraria ${installation.gameVersion})`}
-                {installation.servers.length > 0 ? ` · usata da ${installation.servers.map((s) => s.name).join(', ')}` : ' · nessun server la usa'}
+                {t('Installed version:')} <strong>{installation.version ?? t('unknown')}</strong>
+                {installation.kind === 'tmodloader' && installation.gameVersion && ` ${t('(based on Terraria {version})', { version: installation.gameVersion })}`}
+                {installation.kind === 'tshock' && installation.gameVersion && ` ${t('(for Terraria {version})', { version: installation.gameVersion })}`}
+                {installation.servers.length > 0
+                  ? ` · ${t('used by {servers}', { servers: installation.servers.map((s) => s.name).join(', ') })}`
+                  : ` · ${t('no server uses it')}`}
               </>
             ) : isTerraria ? (
-              'Terraria non è ancora installato: scegli una versione e installala per creare server vanilla.'
+              t('Terraria is not installed yet: pick a version and install it to create vanilla servers.')
             ) : installation.kind === 'tshock' ? (
-              'TShock non è ancora installato: installalo per creare server con i plugin (o farci passare quelli vanilla). Il runtime .NET che gli serve viene scaricato insieme.'
+              t(
+                'TShock is not installed yet: install it to create servers with plugins (or to switch the vanilla ones to it). The .NET runtime it needs is downloaded along with it.',
+              )
             ) : (
-              'tModLoader non è ancora installato: installalo per creare server con le mod (o farci passare quelli vanilla).'
+              t('tModLoader is not installed yet: install it to create servers with mods (or to switch the vanilla ones to it).')
             )}
           </div>
         </div>
@@ -556,10 +578,10 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
               type="button"
               className="btn btn-danger-outline btn-sm"
               disabled={installation.servers.length > 0 || removeInstallation.isPending}
-              title={installation.servers.length > 0 ? 'Passa prima i server che la usano a un\'altra versione' : 'Cancella questa versione dal disco'}
+              title={installation.servers.length > 0 ? t('First switch the servers that use it to another version') : t('Deletes this version from disk')}
               onClick={() => removeInstallation.mutate(installation.id)}
             >
-              Rimuovi
+              {t('Remove')}
             </button>
           </div>
         )}
@@ -569,7 +591,7 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
       {job && (
         <div className={`alert ${job.phase === 'error' ? 'alert-error' : job.phase === 'done' ? 'alert-success' : 'alert-warning'}`}>
           <div>
-            {running && <strong>{PHASES[job.phase] ?? job.phase}: </strong>}
+            {running && <strong>{phaseLabel(job.phase) ?? job.phase}: </strong>}
             {job.message}
             {job.error && <> — {job.error}</>}
           </div>
@@ -586,31 +608,31 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
         <>
           <div className="form-inline">
             <label className="field">
-              <span>Versione da installare</span>
+              <span>{t('Version to install')}</span>
               <select value={version || selected} onChange={(e) => setVersion(e.target.value)} disabled={!releases.data && !isTerraria}>
                 {releases.data?.map((r, index) => (
                   <option key={r.version} value={r.version}>
                     {r.version}
                     {r.prerelease ? ' (beta)' : ''}
-                    {isTerraria && index === 0 ? ' (ultima)' : ''}
+                    {isTerraria && index === 0 ? ` (${t('latest')})` : ''}
                     {installation.kind === 'tshock' && r.gameVersion ? ` · Terraria ${r.gameVersion}` : ''}
-                    {installation.installed && r.version === installation.version ? ' — installata' : ''}
+                    {installation.installed && r.version === installation.version ? ` — ${t('installed')}` : ''}
                     {r.publishedAt ? ` · ${formatDate(r.publishedAt)}` : ''}
                   </option>
                 ))}
-                {isTerraria && <option value={OTHER_VERSION}>Altra versione…</option>}
+                {isTerraria && <option value={OTHER_VERSION}>{t('Other version…')}</option>}
               </select>
             </label>
             {version === OTHER_VERSION && (
               <label className="field">
-                <span>Versione (es. 1.4.4.9)</span>
+                <span>{t('Version (e.g. {example})', { example: '1.4.4.9' })}</span>
                 <input pattern="1(\.\d){3,5}" placeholder="1.4.4.9" value={customVersion} onChange={(e) => setCustomVersion(e.target.value)} />
               </label>
             )}
             {installation.servers.length > 0 && (
               <label className="checkbox">
                 <input type="checkbox" checked={restartServers} onChange={(e) => setRestartServers(e.target.checked)} />
-                <span>Riaccendi i server dopo l'aggiornamento</span>
+                <span>{t('Start the servers again after the update')}</span>
               </label>
             )}
             <button
@@ -624,28 +646,29 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
               }
               onClick={() => setConfirm({ version: selected })}
             >
-              {installation.installed ? 'Aggiorna' : 'Installa'}
+              {installation.installed ? t('Update') : t('Install')}
             </button>
           </div>
-          {releases.error && <p className="error-text">Versioni non disponibili: {errorMessage(releases.error)}</p>}
+          {releases.error && <p className="error-text">{t('Versions not available: {error}', { error: errorMessage(releases.error) })}</p>}
           {updateAvailable && (
             <p className="small">
-              È disponibile la versione {isTerraria ? '' : 'stabile '}
-              <strong>{latestStable.version}</strong>.{' '}
+              {tn(isTerraria ? 'Version {version} is available.' : 'Stable version {version} is available.', {
+                version: <strong>{latestStable.version}</strong>,
+              })}{' '}
               <a href={latestStable.url} target="_blank" rel="noreferrer">
-                Note di rilascio
+                {t('Release notes')}
               </a>
-              {isTerraria && ' I giocatori devono aggiornare Terraria alla stessa versione per entrare.'}
+              {isTerraria && ` ${t('Players need to update Terraria to the same version to join.')}`}
               {installation.kind === 'tshock' &&
                 latestStable.gameVersion &&
                 latestStable.gameVersion !== installation.gameVersion &&
-                ` Supporta Terraria ${latestStable.gameVersion}: i giocatori devono avere quella versione per entrare.`}
+                ` ${t('It supports Terraria {version}: players need that version to join.', { version: latestStable.gameVersion })}`}
             </p>
           )}
 
           {installation.backups.length > 0 && (
             <>
-              <h4>Versioni precedenti (backup)</h4>
+              <h4>{t('Previous versions (backups)')}</h4>
               <ul className="upload-list">
                 {installation.backups.map((b) => (
                   <li key={b.path} className="upload-row">
@@ -659,12 +682,12 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
                       disabled={updateTml.isPending}
                       onClick={() => setConfirm({ backup: b.path, label: b.version ?? b.path })}
                     >
-                      Torna a questa versione
+                      {t('Go back to this version')}
                     </button>
                   </li>
                 ))}
               </ul>
-              <p className="muted small">Dopo ogni aggiornamento si tengono le ultime 2 versioni precedenti.</p>
+              <p className="muted small">{t('After each update the last 2 previous versions are kept.')}</p>
             </>
           )}
         </>
@@ -675,25 +698,27 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
           <p>
             {'version' in confirm
               ? installation.installed
-                ? `Aggiornare ${label} alla versione ${confirm.version}?`
-                : `Installare ${label} ${confirm.version}?`
-              : `Tornare alla versione ${confirm.label}?`}{' '}
+                ? t('Update {game} to version {version}?', { game: label, version: confirm.version })
+                : t('Install {game} {version}?', { game: label, version: confirm.version })
+              : t('Go back to version {version}?', { version: confirm.label })}{' '}
             {!installation.installed ? null : affected.length > 0 ? (
               <>
-                Verranno spenti (salvando il mondo) {affected.map((s) => s.name).join(', ')}
-                {players > 0 && <strong> — ci sono {players} giocatori connessi</strong>}
-                {restartServers ? ', poi riaccesi.' : ' e resteranno spenti.'}
+                {t('These will be stopped (saving the world): {servers}', { servers: affected.map((s) => s.name).join(', ') })}
+                {players > 0 && <strong> — {t('{count} players connected', { count: players })}</strong>}
+                {restartServers ? t(', then started again.') : t(', and will stay stopped.')}
               </>
             ) : (
-              'Nessun server acceso.'
+              t('No server running.')
             )}
           </p>
           {newerWorlds.length > 0 && confirmRelease?.worldRelease && (
             <div className="small">
               <p>
-                <strong>Attenzione:</strong> questi mondi sono stati salvati con una versione più recente di{' '}
-                {worldVersionLabel(confirmRelease.worldRelease)} e potrebbero non aprirsi o far andare in crash il server.
-                Puoi ricrearli da capo (il mondo attuale va nel cestino) oppure installare comunque.
+                <strong>{t('Warning:')}</strong>{' '}
+                {t(
+                  'these worlds were saved with a newer version than {version} and might not open or might crash the server. You can recreate them from scratch (the current world goes to the trash) or install anyway.',
+                  { version: worldVersionLabel(confirmRelease.worldRelease) },
+                )}
               </p>
               <ul className="upload-list">
                 {newerWorlds.map((w) => {
@@ -707,10 +732,10 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
                         type="button"
                         className="btn btn-danger-outline btn-sm"
                         disabled={on || recreateWorld.isPending}
-                        title={on ? 'Spegni il server prima di ricreare il mondo' : 'Il mondo attuale va nel cestino del server'}
+                        title={on ? t('Stop the server before recreating the world') : t('The current world goes to the server trash')}
                         onClick={() => recreateWorld.mutate(w.id)}
                       >
-                        Ricrea il mondo da capo
+                        {t('Recreate the world from scratch')}
                       </button>
                     </li>
                   )
@@ -722,18 +747,18 @@ function InstallationCard({ installation, servers, hasPinned }: { installation: 
           <p className="small">
             {installation.installed &&
               (isTerraria
-                ? 'I mondi non vengono toccati. I giocatori devono usare la stessa versione di Terraria del server.'
+                ? t('Worlds are not touched. Players need the same Terraria version as the server.')
                 : installation.kind === 'tshock'
-                  ? 'Mondi, dati di TShock e plugin non vengono toccati; i plugin potrebbero richiedere una versione aggiornata.'
-                  : 'Mondi e mod non vengono toccati; le mod potrebbero richiedere un aggiornamento per la nuova versione.')}
-            {'version' in confirm && confirmRelease?.size ? ` Download di circa ${formatBytes(confirmRelease.size)}.` : ''}
+                  ? t('Worlds, TShock data and plugins are not touched; plugins might need an updated version.')
+                  : t('Worlds and mods are not touched; mods might need an update for the new version.'))}
+            {'version' in confirm && confirmRelease?.size ? ` ${t('Download of about {size}.', { size: formatBytes(confirmRelease.size) })}` : ''}
           </p>
           <div className="btn-row">
             <button type="button" className="btn btn-warning btn-sm" disabled={updateTml.isPending} onClick={start}>
-              {newerWorlds.length > 0 ? 'Installa comunque' : 'Conferma'}
+              {newerWorlds.length > 0 ? t('Install anyway') : t('Confirm')}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </div>
         </div>

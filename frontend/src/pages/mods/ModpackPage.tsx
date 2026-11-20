@@ -6,7 +6,7 @@ import { errorMessage } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
 import { formatBytes, formatDate } from '../../lib/format'
 import { activeJobItem } from '../../lib/jobs'
-import { dependencyClosure, freeName, PACK_STATE, packModsOf, packSize } from '../../lib/modpacks'
+import { dependencyClosure, freeName, packState, packModsOf, packSize } from '../../lib/modpacks'
 import { useArchive, useDeleteModpack, useModpacks, useMods, useSaveModpack } from '../../lib/mods'
 import type { ArchiveEntry, Mod, Modpack } from '../../lib/types'
 import { useCancelJobItem, useInstallByName, useUpdateJob } from '../../lib/workshop'
@@ -16,6 +16,7 @@ import ModIcon, { ModInitials } from './ModIcon'
 import PackCover from './PackCover'
 import { usePackActivation } from './usePackActivation'
 import VersionArchive from './VersionArchive'
+import { intlLocale, t, tn } from '../../i18n'
 
 type PackFilter = 'all' | 'pinned' | 'fix'
 
@@ -42,7 +43,7 @@ export default function ModpackPage() {
     return (
       <div className="stack">
         <BackLink />
-        <div className="empty">Modpack non trovato: forse è stato eliminato.</div>
+        <div className="empty">{t('Modpack not found: maybe it was deleted.')}</div>
       </div>
     )
   }
@@ -74,12 +75,12 @@ export default function ModpackPage() {
       />
       {save.error ? <div className="alert alert-error">{errorMessage(save.error)}</div> : null}
 
-      <nav className="tabs pack-tabs" aria-label="Sezioni del modpack">
+      <nav className="tabs pack-tabs" aria-label={t('Modpack sections')}>
         <Link to="?" replace className={tab === 'mods' ? 'active' : ''} aria-current={tab === 'mods' ? 'page' : undefined}>
-          Nel pack <span className="count-badge">{pack.mods.length}</span>
+          {t('In the pack')} <span className="count-badge">{pack.mods.length}</span>
         </Link>
         <Link to="?tab=add" replace className={tab === 'add' ? 'active' : ''} aria-current={tab === 'add' ? 'page' : undefined}>
-          Aggiungi mod
+          {t('Add mods')}
         </Link>
       </nav>
 
@@ -108,7 +109,7 @@ export default function ModpackPage() {
         />
       )}
 
-      <Sheet open={versionsOf !== null} title={versionsOf ? `Versioni di ${nameOf(versionsOf)}` : ''} wide onClose={() => setVersionsOf(null)}>
+      <Sheet open={versionsOf !== null} title={versionsOf ? t('Versions of {name}', { name: nameOf(versionsOf) }) : ''} wide onClose={() => setVersionsOf(null)}>
         {versionsOf && <VersionArchive serverId={server.id} focus={versionsOf} />}
       </Sheet>
     </div>
@@ -151,7 +152,7 @@ function PackHero(props: {
   const [notice, setNotice] = useState<string | null>(null)
   const [activationError, setActivationError] = useState<string | null>(null)
 
-  const state = PACK_STATE[pack.state]
+  const state = packState(pack.state)
   const missing = pack.missing.length
   const blocked = missing > 0 || pack.unavailable.length > 0 || pack.mods.length === 0
 
@@ -166,7 +167,7 @@ function PackHero(props: {
 
   const onDuplicate = () =>
     duplicate.mutate(
-      { name: freeName(`${pack.name} (copia)`, props.packs), description: pack.description, mods: pack.mods, versions: pack.versions },
+      { name: freeName(`${pack.name} ${t('(copy)')}`, props.packs), description: pack.description, mods: pack.mods, versions: pack.versions },
       { onSuccess: (copy) => props.onDuplicated(copy.id) },
     )
 
@@ -181,7 +182,7 @@ function PackHero(props: {
       setActivationError(e)
     },
   })
-  const toggleLabel = activation.busy ? 'Un momento…' : pack.active ? 'Disattiva il modpack' : 'Attiva il modpack'
+  const toggleLabel = activation.busy ? t('One moment…') : pack.active ? t('Deactivate the modpack') : t('Activate the modpack')
   const toggleDisabled = activation.busy || (!pack.active && blocked)
   const exclusiveDisabled = activation.busy || blocked
   const duplicateIcon = (
@@ -219,7 +220,7 @@ function PackHero(props: {
           type="button"
           className={pack.active ? 'btn btn-sm btn-toggle-on' : 'btn btn-sm btn-primary'}
           disabled={toggleDisabled}
-          title={pack.active ? undefined : 'Abilita le mod del pack; le altre mod restano come sono'}
+          title={pack.active ? undefined : t('Enables the mods of the pack; the other mods stay as they are')}
           onClick={activation.toggle}
         >
           {toggleLabel}
@@ -231,7 +232,7 @@ function PackHero(props: {
           {
             key: 'exclusive',
             priority: 9,
-            label: 'Attiva solo questo',
+            label: t('Activate only this one'),
             disabled: exclusiveDisabled,
             onSelect: activation.exclusive,
             inline: (
@@ -239,10 +240,10 @@ function PackHero(props: {
                 type="button"
                 className="btn btn-sm"
                 disabled={exclusiveDisabled}
-                title="Abilita solo le mod di questo pack e disabilita tutte le altre"
+                title={t('Enables only the mods of this pack and disables all the others')}
                 onClick={activation.exclusive}
               >
-                Attiva solo questo
+                {t('Activate only this one')}
               </button>
             ),
           },
@@ -253,13 +254,13 @@ function PackHero(props: {
       priority: 1,
       end: true,
       group: 'copy',
-      label: 'Duplica',
+      label: t('Duplicate'),
       icon: duplicateIcon,
       disabled: duplicate.isPending,
       onSelect: onDuplicate,
       inline: (
         <button type="button" className="btn btn-sm" disabled={duplicate.isPending} onClick={onDuplicate}>
-          Duplica
+          {t('Duplicate')}
         </button>
       ),
     },
@@ -268,13 +269,13 @@ function PackHero(props: {
       priority: 1,
       end: true,
       group: 'copy',
-      label: 'Esporta',
+      label: t('Export'),
       icon: exportIcon,
       disabled: pack.mods.length === 0,
       onSelect: () => setExporting(true),
       inline: (
-        <button type="button" className="btn btn-sm" disabled={pack.mods.length === 0} title="Cartella del modpack (.zip) o elenco delle mod (.json)" onClick={() => setExporting(true)}>
-          Esporta
+        <button type="button" className="btn btn-sm" disabled={pack.mods.length === 0} title={t('Modpack folder (.zip) or list of mods (.json)')} onClick={() => setExporting(true)}>
+          {t('Export')}
         </button>
       ),
     },
@@ -284,11 +285,11 @@ function PackHero(props: {
       end: true,
       afterMenu: true,
       danger: true,
-      label: 'Elimina',
+      label: t('Delete'),
       icon: deleteIcon,
       onSelect: () => setConfirmDelete(true),
       inline: (
-        <button type="button" className="btn btn-sm btn-icon btn-danger-outline" aria-label="Elimina il modpack" title="Elimina" onClick={() => setConfirmDelete(true)}>
+        <button type="button" className="btn btn-sm btn-icon btn-danger-outline" aria-label={t('Delete the modpack')} title={t('Delete')} onClick={() => setConfirmDelete(true)}>
           {deleteIcon}
         </button>
       ),
@@ -309,7 +310,7 @@ function PackHero(props: {
                 saveName()
               }}
             >
-              <input autoFocus required maxLength={64} aria-label="Nome del modpack" value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} />
+              <input autoFocus required maxLength={64} aria-label={t('Modpack name')} value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} />
             </form>
           ) : (
             <>
@@ -317,8 +318,8 @@ function PackHero(props: {
               <button
                 type="button"
                 className="icon-btn"
-                aria-label="Rinomina"
-                title="Rinomina"
+                aria-label={t('Rename')}
+                title={t('Rename')}
                 onClick={() => {
                   setName(pack.name)
                   setRenaming(true)
@@ -334,11 +335,11 @@ function PackHero(props: {
         </div>
 
         <label className="field">
-          <span>Descrizione</span>
+          <span>{t('Description')}</span>
           <textarea
             rows={2}
             maxLength={500}
-            placeholder="A cosa serve questo modpack? (facoltativa)"
+            placeholder={t('What is this modpack for? (optional)')}
             value={draft ?? pack.description}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => {
@@ -349,19 +350,19 @@ function PackHero(props: {
         </label>
 
         <div className="muted small">
-          {pack.mods.length} mod
-          {missing > 0 ? ` · ${missing} da installare` : ''} · {formatBytes(packSize(pack, byName))}
-          {pack.createdAt ? ` · creato il ${formatDate(pack.createdAt)}` : ''}
-          {props.saving ? ' · salvataggio…' : ''}
+          {t('{count} mods', { count: pack.mods.length })}
+          {missing > 0 ? ` · ${t('{count} to install', { count: missing })}` : ''} · {formatBytes(packSize(pack, byName))}
+          {pack.createdAt ? ` · ${t('created on {date}', { date: formatDate(pack.createdAt) })}` : ''}
+          {props.saving ? ` · ${t('saving…')}` : ''}
         </div>
       </div>
 
       {blocked && pack.mods.length > 0 && (
-        <p className="muted small pack-hero-blocked">Per attivarlo, prima installa le mod mancanti (o scegli di nuovo le versioni non più disponibili).</p>
+        <p className="muted small pack-hero-blocked">{t('To activate it, first install the missing mods (or choose again the versions that are no longer available).')}</p>
       )}
 
       <div className="pack-hero-bar">
-        <OverflowActions actions={actions} menuLabel="Altre azioni per il modpack" />
+        <OverflowActions actions={actions} menuLabel={t('More actions for the modpack')} />
         {activation.dialog}
       </div>
       <ExportPackSheet serverId={props.serverId} pack={exporting ? pack : null} onClose={() => setExporting(false)} />
@@ -374,18 +375,18 @@ function PackHero(props: {
         </div>
       )}
 
-      <Sheet open={confirmDelete} title="Eliminare il modpack?" onClose={() => setConfirmDelete(false)}>
+      <Sheet open={confirmDelete} title={t('Delete the modpack?')} onClose={() => setConfirmDelete(false)}>
         <div className="stack">
           <p>
-            <strong>{pack.name}</strong> verrà eliminato. Le mod restano installate così come sono.
+            {tn('{pack} will be deleted. The mods stay installed as they are.', { pack: <strong>{pack.name}</strong> })}
           </p>
           {remove.error ? <div className="alert alert-error">{errorMessage(remove.error)}</div> : null}
           <div className="btn-row">
             <button type="button" className="btn btn-danger" disabled={remove.isPending} onClick={() => remove.mutate(pack.id, { onSuccess: props.onDeleted })}>
-              Elimina
+              {t('Delete')}
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>
-              Annulla
+              {t('Cancel')}
             </button>
           </div>
         </div>
@@ -419,14 +420,18 @@ function VersionSelect(props: {
       disabled={props.disabled}
       onChange={(e) => props.onChange(e.target.value || null)}
     >
-      <option value="">Segue gli aggiornamenti{props.installed ? ` (ora v${props.installed})` : ''}</option>
+      <option value="">
+        {props.installed ? t('Follows updates (now v{version})', { version: props.installed }) : t('Follows updates')}
+      </option>
       {props.installed && (
-        <optgroup label="Sul server">
-          <option value={props.installed}>v{props.installed} · installata</option>
+        <optgroup label={t('On the server')}>
+          <option value={props.installed}>
+            v{props.installed} · {t('installed')}
+          </option>
         </optgroup>
       )}
       {archived.length > 0 && (
-        <optgroup label="Archivio">
+        <optgroup label={t('Archive')}>
           {archived.map((v) => (
             <option key={v.version} value={v.version}>
               v{v.version} · tModLoader {v.tmlVersion}
@@ -434,7 +439,11 @@ function VersionSelect(props: {
           ))}
         </optgroup>
       )}
-      {lost && <option value={lost}>v{lost} · non più disponibile</option>}
+      {lost && (
+        <option value={lost}>
+          v{lost} · {t('no longer available')}
+        </option>
+      )}
     </select>
   )
 }
@@ -490,11 +499,11 @@ function PackModsTab(props: {
   if (pack.mods.length === 0) {
     return (
       <div className="empty pack-empty">
-        <span>Il modpack è vuoto.</span>
+        <span>{t('The modpack is empty.')}</span>
         <span className="btn-row">
           <AddEnabledButton pack={pack} byName={byName} saving={props.saving} primary onAdd={(names) => props.onSave({ mods: [...pack.mods, ...names] })} />
           <button type="button" className="btn" onClick={props.onAdd}>
-            Scegli le mod
+            {t('Choose the mods')}
           </button>
         </span>
       </div>
@@ -506,18 +515,18 @@ function PackModsTab(props: {
       {(pack.missing.length > 0 || depsOutside.length > 0) && (
         <div className="alert alert-warning pack-alert">
           <span>
-            {pack.missing.length > 0 && <>Non installate: {pack.missing.map(nameOf).join(', ')}. </>}
-            {depsOutside.length > 0 && <>Dipendenze che non sono nel pack: {depsOutside.map(nameOf).join(', ')}.</>}
+            {pack.missing.length > 0 && <>{t('Not installed: {mods}.', { mods: pack.missing.map(nameOf).join(', ') })} </>}
+            {depsOutside.length > 0 && <>{t('Dependencies that are not in the pack: {mods}.', { mods: depsOutside.map(nameOf).join(', ') })}</>}
           </span>
           <span className="btn-row">
             {missingToInstall.length > 0 && (
               <button type="button" className="btn btn-sm" disabled={install.isPending} onClick={() => install.mutate(missingToInstall)}>
-                Installa dal Workshop ({missingToInstall.length})
+                {t('Install from the Workshop ({count})', { count: missingToInstall.length })}
               </button>
             )}
             {depsOutside.length > 0 && (
               <button type="button" className="btn btn-sm" disabled={props.saving} onClick={() => props.onSave({ mods: [...pack.mods, ...depsOutside] })}>
-                Aggiungi le dipendenze ({depsOutside.length})
+                {t('Add the dependencies ({count})', { count: depsOutside.length })}
               </button>
             )}
           </span>
@@ -525,13 +534,15 @@ function PackModsTab(props: {
       )}
       {pack.unavailable.length > 0 && (
         <div className="alert alert-error">
-          Versioni bloccate non più disponibili: {pack.unavailable.map((n) => `${nameOf(n)} v${pack.versions[n]}`).join(', ')}. Scegline un'altra.
+          {t('Locked versions no longer available: {mods}. Choose another one.', {
+            mods: pack.unavailable.map((n) => `${nameOf(n)} v${pack.versions[n]}`).join(', '),
+          })}
         </div>
       )}
       {pack.toSwitch.length > 0 && (
         <p className="hint">
-          Attivando il pack verranno installate dall'archivio:{' '}
-          {pack.toSwitch.map((s) => `${nameOf(s.name)} v${s.to}${s.from ? ` (al posto della v${s.from})` : ''}`).join(', ')}.
+          {t('Activating the pack will install from the archive:')}{' '}
+          {pack.toSwitch.map((s) => `${nameOf(s.name)} v${s.to}${s.from ? ` ${t('(instead of v{version})', { version: s.from })}` : ''}`).join(', ')}.
         </p>
       )}
       {install.error ? <div className="alert alert-error">{errorMessage(install.error)}</div> : null}
@@ -543,14 +554,14 @@ function PackModsTab(props: {
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" />
           </svg>
-          <input type="search" placeholder="Cerca nel modpack…" aria-label="Cerca nel modpack" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input type="search" placeholder={t('Search the modpack…')} aria-label={t('Search the modpack')} value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
-        <div className="segmented" role="group" aria-label="Filtro">
+        <div className="segmented" role="group" aria-label={t('Filter')}>
           {(
             [
-              ['all', 'Tutte'],
-              ['pinned', 'Versione bloccata'],
-              ['fix', 'Da sistemare'],
+              ['all', t('All')],
+              ['pinned', t('Locked version')],
+              ['fix', t('To fix')],
             ] as const
           ).map(([value, label]) => (
             <button key={value} type="button" className={filter === value ? 'active' : ''} aria-pressed={filter === value} onClick={() => setFilter(value)}>
@@ -561,7 +572,7 @@ function PackModsTab(props: {
       </div>
 
       {visible.length === 0 ? (
-        <div className="empty">Nessuna mod corrisponde ai filtri.</div>
+        <div className="empty">{t('No mod matches the filters.')}</div>
       ) : (
         <div className="mod-grid">
           {visible.map((name) => {
@@ -580,28 +591,30 @@ function PackModsTab(props: {
                 missing={missing}
                 note={
                   pack.unavailable.includes(name)
-                    ? `La v${pack.versions[name]} non è più disponibile: scegli un'altra versione.`
+                    ? t('v{version} is no longer available: choose another version.', { version: pack.versions[name] })
                     : deps.length
-                      ? `Richiede ${deps.map(nameOf).join(', ')}, che non è nel pack.`
+                      ? t('It requires {mods}, which is not in the pack.', { mods: deps.map(nameOf).join(', ') })
                       : null
                 }
                 pills={
                   <>
                     {missing ? (
-                      <span className="pill pill-warning">Non installata</span>
+                      <span className="pill pill-warning">{t('Not installed')}</span>
                     ) : mod?.enabled ? (
-                      <span className="pill pill-on">Abilitata sul server</span>
+                      <span className="pill pill-on">{t('Enabled on the server')}</span>
                     ) : (
-                      <span className="pill pill-off">Disabilitata</span>
+                      <span className="pill pill-off">{t('Disabled|mod')}</span>
                     )}
-                    {sw && sw.from && <span className="pill pill-plain" title="Versione installata ora">ora v{sw.from}</span>}
+                    {sw && sw.from && <span className="pill pill-plain" title={t('Version installed now')}>
+                        {t('now v{version}', { version: sw.from })}
+                      </span>}
                   </>
                 }
                 version={
                   <div className="pack-version">
-                    <span className="pack-version-label">Versione nel pack</span>
+                    <span className="pack-version-label">{t('Version in the pack')}</span>
                     <VersionSelect
-                      label={`Versione di ${nameOf(name)} nel pack`}
+                      label={t('Version of {mod} in the pack', { mod: nameOf(name) })}
                       installed={mod?.version ?? null}
                       archived={archiveOf.get(name)}
                       value={pack.versions[name] ?? null}
@@ -609,7 +622,7 @@ function PackModsTab(props: {
                       onChange={(v) => setVersion(name, v)}
                     />
                     <button type="button" className="link-button small" onClick={() => props.onVersions(name)}>
-                      Gestisci le versioni
+                      {t('Manage the versions')}
                     </button>
                   </div>
                 }
@@ -620,12 +633,12 @@ function PackModsTab(props: {
                     <div className="mod-card-actions">
                       {missing && (
                         <button type="button" className="btn btn-sm btn-primary" disabled={install.isPending} onClick={() => install.mutate([name])}>
-                          Installa dal Workshop
+                          {t('Install from the Workshop')}
                         </button>
                       )}
                       <span className="spacer" />
                       <button type="button" className="btn btn-sm btn-danger-outline" disabled={props.saving} onClick={() => removeMod(name)}>
-                        Togli dal pack
+                        {t('Remove from the pack')}
                       </button>
                     </div>
                   )
@@ -651,13 +664,13 @@ function AddEnabledButton(props: { pack: Modpack; byName: Map<string, Mod>; savi
       type="button"
       className={props.primary ? 'btn btn-primary' : 'btn'}
       disabled={props.saving || names.length === 0}
-      title={names.length ? 'Aggiunge al pack tutte le mod abilitate ora sul server' : 'Tutte le mod abilitate sono già nel pack'}
+      title={names.length ? t('Adds to the pack all the mods enabled now on the server') : t('All the enabled mods are already in the pack')}
       onClick={() => props.onAdd(names)}
     >
       <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M5 12l5 5 9-10" />
       </svg>
-      Aggiungi le mod abilitate{names.length ? ` (${names.length})` : ''}
+      {names.length ? t('Add the enabled mods ({count})', { count: names.length }) : t('Add the enabled mods')}
     </button>
   )
 }
@@ -685,14 +698,14 @@ function PackModCard(props: {
           <h3 className="mod-title">
             <span className="mod-title-text">{props.title}</span>
           </h3>
-          {mod?.author && <div className="mod-author">di {mod.author}</div>}
+          {mod?.author && <div className="mod-author">{t('by {author}', { author: mod.author })}</div>}
           <div className="pill-row">{props.pills}</div>
         </div>
       </div>
       {mod?.description ? (
         <p className="mod-description-short">{mod.description}</p>
       ) : (
-        <p className="mod-description-short muted">{props.missing ? 'Non installata su questo server.' : ''}</p>
+        <p className="mod-description-short muted">{props.missing ? t('Not installed on this server.') : ''}</p>
       )}
       {props.extra && <p className="muted small pack-mod-extra">{props.extra}</p>}
       {props.note && <p className="error-text small">{props.note}</p>}
@@ -731,7 +744,7 @@ function AddModsTab(props: {
       .filter((n) => !inPack.has(n) || added[n])
       .filter((n) => !byName.get(n)?.error)
       .filter((n) => !q || n.toLowerCase().includes(q) || nameOf(n).toLowerCase().includes(q) || (byName.get(n)?.author ?? '').toLowerCase().includes(q))
-      .sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'it', { sensitivity: 'base' }))
+      .sort((a, b) => nameOf(a).localeCompare(nameOf(b), intlLocale(), { sensitivity: 'base' }))
   }, [byName, archiveOf, query, inPack, added, nameOf])
 
   /** Ultima aggiunta in blocco delle mod abilitate (per poterla annullare). */
@@ -779,7 +792,7 @@ function AddModsTab(props: {
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" />
           </svg>
-          <input type="search" placeholder="Cerca tra le mod del server…" aria-label="Cerca tra le mod del server" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input type="search" placeholder={t('Search the server mods…')} aria-label={t('Search the server mods')} value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
         <Link className="btn" to={`../../workshop?pack=${pack.id}`} relative="path">
           <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
@@ -787,31 +800,32 @@ function AddModsTab(props: {
             <path d="M7.5 9.5L12 14l4.5-4.5" />
             <path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" />
           </svg>
-          Cerca nel Workshop
+          {t('Search the Workshop')}
         </Link>
         <AddEnabledButton pack={pack} byName={byName} saving={props.saving} onAdd={addEnabled} />
         <label className="checkbox pack-deps-toggle">
           <input type="checkbox" checked={withDeps} onChange={(e) => setWithDeps(e.target.checked)} />
-          Aggiungi anche le dipendenze
+          {t('Add the dependencies too')}
         </label>
       </div>
       {bulk && (
         <div className="alert alert-success pack-alert">
           <span>
-            {bulk.length === 1 ? 'Aggiunta 1 mod abilitata' : `Aggiunte ${bulk.length} mod abilitate`}: {bulk.map(nameOf).join(', ')}.
+            {bulk.length === 1
+              ? t('Added 1 enabled mod: {mods}.', { mods: bulk.map(nameOf).join(', ') })
+              : t('Added {count} enabled mods: {mods}.', { count: bulk.length, mods: bulk.map(nameOf).join(', ') })}
           </span>
           <button type="button" className="btn btn-sm btn-ghost" disabled={props.saving} onClick={undoBulk}>
-            Annulla
+            {t('Cancel')}
           </button>
         </div>
       )}
       <p className="muted small">
-        Mod del server che non sono ancora nel pack. Non trovi quella che cerchi? «Cerca nel Workshop» la installa e la aggiunge a
-        questo pack.
+        {t('Server mods that are not in the pack yet. Cannot find the one you are looking for? «Search the Workshop» installs it and adds it to this pack.')}
       </p>
 
       {candidates.length === 0 ? (
-        <div className="empty">{query ? 'Nessuna mod corrisponde alla ricerca.' : 'Tutte le mod del server sono già nel pack.'}</div>
+        <div className="empty">{query ? t('No mod matches the search.') : t('All the server mods are already in the pack.')}</div>
       ) : (
         <div className="mod-grid">
           {candidates.map((name) => {
@@ -830,17 +844,20 @@ function AddModsTab(props: {
                 highlight={isAdded}
                 pills={
                   <>
-                    {mod?.version ? <span className="pill pill-plain">v{mod.version}</span> : <span className="pill pill-plain">solo nell'archivio</span>}
-                    {others.length > 0 && <span className="pill pill-off">In «{others[0]}»{others.length > 1 ? ` +${others.length - 1}` : ''}</span>}
+                    {mod?.version ? <span className="pill pill-plain">v{mod.version}</span> : <span className="pill pill-plain">{t('only in the archive')}</span>}
+                    {others.length > 0 && <span className="pill pill-off">
+                        {t('In «{pack}»', { pack: others[0] })}
+                        {others.length > 1 ? ` +${others.length - 1}` : ''}
+                      </span>}
                   </>
                 }
-                extra={withDeps && deps.length ? `Porta con sé: ${deps.map(nameOf).join(', ')}` : null}
+                extra={withDeps && deps.length ? t('Brings along: {mods}', { mods: deps.map(nameOf).join(', ') }) : null}
                 version={
                   isAdded ? null : (
                     <div className="pack-version">
-                      <span className="pack-version-label">Versione da aggiungere</span>
+                      <span className="pack-version-label">{t('Version to add')}</span>
                       <VersionSelect
-                        label={`Versione di ${nameOf(name)} da aggiungere`}
+                        label={t('Version of {mod} to add', { mod: nameOf(name) })}
                         installed={mod?.version ?? null}
                         archived={archiveOf.get(name)}
                         value={name in chosen ? chosen[name] : mod ? null : (archiveOf.get(name)?.versions[0]?.version ?? null)}
@@ -857,11 +874,12 @@ function AddModsTab(props: {
                           <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M5 12l5 5 9-10" />
                           </svg>
-                          Aggiunta{added[name].length > 1 ? ` (+${added[name].length - 1})` : ''}
+                          {t('Added')}
+                          {added[name].length > 1 ? ` (+${added[name].length - 1})` : ''}
                         </span>
                         <span className="spacer" />
                         <button type="button" className="btn btn-sm btn-ghost" disabled={props.saving} onClick={() => undo(name)}>
-                          Annulla
+                          {t('Cancel')}
                         </button>
                       </>
                     ) : (
@@ -875,7 +893,7 @@ function AddModsTab(props: {
                           <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M12 5v14M5 12h14" />
                           </svg>
-                          Aggiungi
+                          {t('Add')}
                         </button>
                         <span className="spacer" />
                       </>

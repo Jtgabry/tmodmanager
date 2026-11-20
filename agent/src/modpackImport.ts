@@ -10,6 +10,7 @@ import { createModpack, listModpacks } from './modpacks.js'
 import { installModFile, listMods, MOD_NAME, ModError, modsDir, tmpDir, withServerLock } from './mods.js'
 import type { ServerDefinition } from './registry.js'
 import { readModInfo } from './tmod.js'
+import { tr } from './i18n.js'
 
 /**
  * Importazione dei modpack di tModLoader nei modpack del pannello.
@@ -35,9 +36,9 @@ export function parseModList(text: string): string[] {
   try {
     parsed = JSON.parse(text.replace(/^﻿/, ''))
   } catch {
-    throw new ModError('Il file .json del modpack non è valido')
+    throw new ModError(tr('The modpack .json file is not valid'))
   }
-  if (!Array.isArray(parsed)) throw new ModError('Il .json del modpack deve contenere un elenco di mod')
+  if (!Array.isArray(parsed)) throw new ModError(tr('The modpack .json must contain a list of mods'))
   const names = parsed.filter((n): n is string => typeof n === 'string' && MOD_NAME.test(n))
   return [...new Set(names)]
 }
@@ -114,16 +115,16 @@ async function importPack(
         try {
           info = await readModInfo(file)
         } catch (err) {
-          skipped.push({ name: label, reason: `file non valido: ${(err as Error).message}` })
+          skipped.push({ name: label, reason: tr('invalid file: {error}', { error: (err as Error).message }) })
           continue
         }
         const current = (await listMods(server)).mods.find((m) => m.name === info.name)
         if (current && current.version === info.version) {
-          skipped.push({ name: info.name, reason: `già installata (stessa versione ${info.version})` })
+          skipped.push({ name: info.name, reason: tr('already installed (same version {version})', { version: info.version ?? '?' }) })
           continue
         }
         if (current && !replaceExisting) {
-          skipped.push({ name: info.name, reason: `già installata la versione ${current.version ?? '?'} (nel pack: ${info.version})` })
+          skipped.push({ name: info.name, reason: tr('version {installed} already installed (in the pack: {version})', { installed: current.version ?? '?', version: info.version ?? '?' }) })
           continue
         }
         const copy = join(work, `${info.name}.tmod`)
@@ -134,9 +135,9 @@ async function importPack(
 
       const present = new Set((await listMods(server)).mods.map((m) => m.name))
       const taken = new Set((await listModpacks(server)).map((p) => p.name.toLowerCase()))
-      let packName = name.trim().slice(0, 60) || 'Modpack importato'
+      let packName = name.trim().slice(0, 60) || tr('Imported modpack')
       for (let i = 2; taken.has(packName.toLowerCase()); i++) packName = `${name.trim().slice(0, 55)} (${i})`
-      const pack = await createModpack(server, { name: packName, description: 'Importato da tModLoader', mods: modList, versions: {} })
+      const pack = await createModpack(server, { name: packName, description: tr('Imported from tModLoader'), mods: modList, versions: {} })
       return { pack, installed, updated, skipped, missing: modList.filter((m) => !present.has(m)) }
     } finally {
       await rm(work, { recursive: true, force: true })
@@ -147,7 +148,7 @@ async function importPack(
 /** Importa un pack dalla cartella Mods/ModPacks/ del server. */
 export async function importFromFolder(server: ServerDefinition, name: unknown, replaceExisting: boolean) {
   const pack = (await listImportable(server)).find((p) => p.name === name)
-  if (!pack) throw new ModError('Modpack non trovato in Mods/ModPacks', 404)
+  if (!pack) throw new ModError(tr('Modpack not found in Mods/ModPacks'), 404)
   const base = join(packsFolder(server), pack.name)
   if (pack.format === 'json') {
     const mods = parseModList(await readFile(`${base}.json`, 'utf8'))
@@ -161,7 +162,7 @@ export async function importFromFolder(server: ServerDefinition, name: unknown, 
 export async function importUpload(server: ServerDefinition, filename: unknown, body: Readable, replaceExisting: boolean) {
   const original = typeof filename === 'string' ? basename(filename) : ''
   const ext = extname(original).toLowerCase()
-  if (ext !== '.json' && ext !== '.zip') throw new ModError('Carica il .json del modpack oppure la sua cartella compressa in .zip')
+  if (ext !== '.json' && ext !== '.zip') throw new ModError(tr('Upload the modpack .json or its folder zipped as .zip'))
 
   await mkdir(tmpDir(), { recursive: true })
   const work = join(tmpDir(), `import-upload-${randomBytes(6).toString('hex')}`)
@@ -171,7 +172,7 @@ export async function importUpload(server: ServerDefinition, filename: unknown, 
     let received = 0
     body.on('data', (chunk: Buffer) => {
       received += chunk.length
-      if (received > MAX_IMPORT_BYTES) body.destroy(new ModError('File troppo grande (max 2 GB)', 413))
+      if (received > MAX_IMPORT_BYTES) body.destroy(new ModError(tr('File too large (max {size})', { size: '2 GB' }), 413))
     })
     await pipeline(body, createWriteStream(archive))
     const fallbackName = basename(original, ext)
@@ -185,7 +186,7 @@ export async function importUpload(server: ServerDefinition, filename: unknown, 
     try {
       listing = (await run('unzip', ['-Z', '-l', archive], { maxBuffer: 32 * 1024 * 1024 })).stdout
     } catch {
-      throw new ModError('Il file .zip non è valido')
+      throw new ModError(tr('The .zip file is not valid'))
     }
     const entries = listing
       .split('\n')
@@ -193,11 +194,11 @@ export async function importUpload(server: ServerDefinition, filename: unknown, 
       .filter((m): m is RegExpMatchArray => m !== null)
       .map((m) => ({ size: Number(m[1]), path: m[2] }))
     const relevant = entries.filter((e) => /(^|\/)enabled\.json$/i.test(e.path) || /\.tmod$/i.test(e.path))
-    if (relevant.reduce((a, e) => a + e.size, 0) > MAX_EXTRACTED_BYTES) throw new ModError('Lo zip è troppo grande una volta estratto')
+    if (relevant.reduce((a, e) => a + e.size, 0) > MAX_EXTRACTED_BYTES) throw new ModError(tr('The zip is too large once extracted'))
     const enabledEntry = relevant
       .filter((e) => /(^|\/)enabled\.json$/i.test(e.path))
       .sort((a, b) => a.path.split('/').length - b.path.split('/').length)[0]
-    if (!enabledEntry) throw new ModError('Nello zip non c\'è Mods/enabled.json: è la cartella di un modpack di tModLoader?')
+    if (!enabledEntry) throw new ModError(tr('There is no Mods/enabled.json in the zip: is it the folder of a tModLoader modpack?'))
 
     // Nome del pack: la cartella che contiene Mods/ (es. "MioPack/Mods/enabled.json"), altrimenti il nome dello zip
     const parts = enabledEntry.path.split('/')
@@ -212,7 +213,7 @@ export async function importUpload(server: ServerDefinition, filename: unknown, 
       await run('unzip', ['-q', '-j', '-o', archive, enabledEntry.path, '-d', out])
     })
     const enabledFile = join(out, 'enabled.json')
-    if (!(await lstat(enabledFile)).isFile()) throw new ModError('enabled.json non valido')
+    if (!(await lstat(enabledFile)).isFile()) throw new ModError(tr('Invalid enabled.json'))
     const mods = parseModList(await readFile(enabledFile, 'utf8'))
     return await importPack(server, packName, mods, await tmodFilesIn(out), replaceExisting)
   } finally {

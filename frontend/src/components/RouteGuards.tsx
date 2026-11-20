@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { t } from '../i18n'
 
 export function FullPageSpinner() {
   return (
     <div className="center-page">
-      <div className="spinner" aria-label="Caricamento" />
+      <div className="spinner" aria-label={t('Loading')} />
     </div>
   )
 }

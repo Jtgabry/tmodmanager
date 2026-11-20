@@ -23,6 +23,7 @@ import {
   WorkshopError,
   workshopItemDetails,
 } from '../workshop.js'
+import { tr } from '../i18n.js'
 
 type Params = { Params: { id: string; name?: string; workshopId?: string } }
 type BrowseQuery = { Querystring: { q?: string; sort?: string; tag?: string; cursor?: string } }
@@ -46,12 +47,12 @@ export async function workshopRoutes(app: FastifyInstance) {
 
   const server = async (id: string, reply: FastifyReply): Promise<ServerDefinition | null> => {
     const found = await findServer(id)
-    if (!found) reply.code(404).send({ error: 'not_found', message: `Server "${id}" non trovato` })
+    if (!found) reply.code(404).send({ error: 'not_found', message: tr('Server "{id}" not found', { id }) })
     return found ?? null
   }
 
   const modName = (name: string | undefined) => {
-    if (!name || !MOD_NAME.test(name)) throw new WorkshopError('Nome mod non valido', 422)
+    if (!name || !MOD_NAME.test(name)) throw new WorkshopError(tr('Invalid mod name'), 422)
     return name
   }
 
@@ -65,7 +66,7 @@ export async function workshopRoutes(app: FastifyInstance) {
     if (!s) return
     const mods = req.body?.mods
     if (!Array.isArray(mods) || mods.length > 200 || !mods.every((m) => typeof m === 'string' && MOD_NAME.test(m))) {
-      throw new WorkshopError('Campo "mods" non valido', 422)
+      throw new WorkshopError(tr('Invalid "{field}" field', { field: 'mods' }), 422)
     }
     return reply.code(202).send({ data: await startUpdate(s, mods as string[]) })
   })
@@ -84,7 +85,7 @@ export async function workshopRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const input = req.body?.workshop
-    if (input !== null && (typeof input !== 'string' || input.length > 300)) throw new WorkshopError('Campo "workshop" non valido', 422)
+    if (input !== null && (typeof input !== 'string' || input.length > 300)) throw new WorkshopError(tr('Invalid "{field}" field', { field: 'workshop' }), 422)
     return { data: await setLink(s, modName(req.params.name), input) }
   })
 
@@ -99,7 +100,7 @@ export async function workshopRoutes(app: FastifyInstance) {
   app.post<{ Body: { ids?: unknown } }>('/workshop/details', async (req) => {
     const ids = req.body?.ids
     if (!Array.isArray(ids) || ids.length > 500 || !ids.every((id) => typeof id === 'string' && /^\d{1,20}$/.test(id))) {
-      throw new WorkshopError('Campo "ids" non valido', 422)
+      throw new WorkshopError(tr('Invalid "{field}" field', { field: 'ids' }), 422)
     }
     return { data: [...(await fetchDetails(ids as string[])).values()] }
   })
@@ -110,16 +111,16 @@ export async function workshopRoutes(app: FastifyInstance) {
     const s = await server(req.params.id, reply)
     if (!s) return
     const { q, sort, tag, cursor } = req.query
-    if (sort !== undefined && !(sort in BROWSE_SORTS)) throw new WorkshopError('Ordinamento non valido', 422)
-    if (tag !== undefined && (tag.length > 64 || !/^[\w .&'-]+$/.test(tag))) throw new WorkshopError('Tag non valido', 422)
-    if (cursor !== undefined && cursor.length > 200) throw new WorkshopError('Cursore non valido', 422)
+    if (sort !== undefined && !(sort in BROWSE_SORTS)) throw new WorkshopError(tr('Invalid sort'), 422)
+    if (tag !== undefined && (tag.length > 64 || !/^[\w .&'-]+$/.test(tag))) throw new WorkshopError(tr('Invalid tag'), 422)
+    if (cursor !== undefined && cursor.length > 200) throw new WorkshopError(tr('Invalid cursor'), 422)
     return { data: await browseWorkshop(s, { q, sort: sort as BrowseSort | undefined, tag: tag || undefined, cursor: cursor || undefined }) }
   })
 
   app.get<Params>('/servers/:id/workshop/items/:workshopId', async (req, reply) => {
     const s = await server(req.params.id, reply)
     if (!s) return
-    if (!ITEM_ID(req.params.workshopId ?? '')) throw new WorkshopError('ID del Workshop non valido', 422)
+    if (!ITEM_ID(req.params.workshopId ?? '')) throw new WorkshopError(tr('Invalid Workshop ID'), 422)
     return { data: await workshopItemDetails(s, req.params.workshopId!) }
   })
 
@@ -128,7 +129,7 @@ export async function workshopRoutes(app: FastifyInstance) {
     if (!s) return
     const ids = req.body?.ids
     if (!Array.isArray(ids) || !ids.length || ids.length > 50 || !ids.every((id) => typeof id === 'string' && ITEM_ID(id))) {
-      throw new WorkshopError('Campo "ids" non valido', 422)
+      throw new WorkshopError(tr('Invalid "{field}" field', { field: 'ids' }), 422)
     }
     return reply.code(202).send({ data: await startInstall(s, ids as string[]) })
   })
@@ -138,7 +139,7 @@ export async function workshopRoutes(app: FastifyInstance) {
     if (!s) return
     const names = req.body?.names
     if (!Array.isArray(names) || !names.length || names.length > 50 || !names.every((n) => typeof n === 'string' && MOD_NAME.test(n))) {
-      throw new WorkshopError('Campo "names" non valido', 422)
+      throw new WorkshopError(tr('Invalid "{field}" field', { field: 'names' }), 422)
     }
     return reply.code(202).send({ data: await startInstallByName(s, names as string[]) })
   })

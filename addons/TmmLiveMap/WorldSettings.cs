@@ -103,7 +103,7 @@ public static class WorldSettings
         {
             if (clock is < 0 or >= 1440)
             {
-                failures.Add(("clock", "ora non valida"));
+                failures.Add(("clock", "invalid time"));
             }
             else
             {
@@ -130,27 +130,27 @@ public static class WorldSettings
 
         if (changes.BloodMoon is { } bloodMoon)
         {
-            if (bloodMoon && Main.dayTime) failures.Add(("bloodMoon", "solo di notte"));
+            if (bloodMoon && Main.dayTime) failures.Add(("bloodMoon", "only at night"));
             else Main.bloodMoon = bloodMoon;
         }
 
         if (changes.Eclipse is { } eclipse)
         {
-            if (eclipse && !Main.dayTime) failures.Add(("eclipse", "solo di giorno"));
+            if (eclipse && !Main.dayTime) failures.Add(("eclipse", "only during the day"));
             else Main.eclipse = eclipse;
         }
 
         if (changes.MoonPhase is { } phase)
         {
-            if (phase is < 0 or > 7) failures.Add(("moonPhase", "fase non valida"));
+            if (phase is < 0 or > 7) failures.Add(("moonPhase", "invalid phase"));
             else Main.moonPhase = phase;
         }
 
         if (changes.GameMode is { } mode && mode != Main.GameMode)
         {
             // Viaggio: i personaggi devono essere di quel tipo, e i suoi poteri hanno uno stato a parte
-            if (mode is < 0 or > 2) failures.Add(("gameMode", "difficoltà non valida"));
-            else if (Main.GameMode == GameModeID.Creative) failures.Add(("gameMode", "un mondo Viaggio non si cambia"));
+            if (mode is < 0 or > 2) failures.Add(("gameMode", "invalid difficulty"));
+            else if (Main.GameMode == GameModeID.Creative) failures.Add(("gameMode", "a Journey world cannot be changed"));
             else
             {
                 Main.GameMode = mode;
@@ -167,7 +167,7 @@ public static class WorldSettings
 
         if (changes.SpawnX is { } x && changes.SpawnY is { } y)
         {
-            if (x < 10 || y < 10 || x >= Main.maxTilesX - 10 || y >= Main.maxTilesY - 10) failures.Add(("spawn", "fuori dal mondo"));
+            if (x < 10 || y < 10 || x >= Main.maxTilesX - 10 || y >= Main.maxTilesY - 10) failures.Add(("spawn", "outside the world"));
             else (Main.spawnTileX, Main.spawnTileY) = (x, y);
         }
 
@@ -176,8 +176,8 @@ public static class WorldSettings
             foreach (var (key, value) in bosses)
             {
                 var boss = Bosses.FirstOrDefault(b => b.Key == key);
-                if (boss.Key == null) failures.Add(($"bosses.{key}", "boss sconosciuto"));
-                else if (key == "wallOfFlesh") failures.Add(($"bosses.{key}", "si cambia con l'hardmode"));
+                if (boss.Key == null) failures.Add(($"bosses.{key}", "unknown boss"));
+                else if (key == "wallOfFlesh") failures.Add(($"bosses.{key}", "it changes with hardmode"));
                 else boss.Set(value);
             }
             NPC.downedMechBossAny = NPC.downedMechBoss1 || NPC.downedMechBoss2 || NPC.downedMechBoss3;

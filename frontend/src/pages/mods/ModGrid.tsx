@@ -12,7 +12,10 @@ import ModIcon from './ModIcon'
 import VersionArchive from './VersionArchive'
 import WorkshopLinkEditor from './WorkshopLinkEditor'
 
-const SIDE_LABEL: Record<string, string> = { both: 'Client e server', client: 'Solo client', server: 'Solo server', noSync: 'No sync' }
+import { intlLocale, t, tn } from '../../i18n'
+
+const sideLabel = (side: string): string | undefined =>
+  ({ both: t('Client and server'), client: t('Client only'), server: t('Server only'), noSync: 'No sync' })[side]
 
 type Show = 'all' | 'on' | 'off' | 'updates'
 type Pending = { kind: 'disable'; mod: Mod; dependents: string[] } | { kind: 'delete'; mod: Mod; dependents: string[] | null }
@@ -66,7 +69,7 @@ export default function ModGrid({
   /** Tag presenti, dal più usato. */
   const tagCounts = useMemo(() => {
     const count = new Map<string, number>()
-    for (const tags of categoriesOf.values()) for (const t of tags) count.set(t, (count.get(t) ?? 0) + 1)
+    for (const tags of categoriesOf.values()) for (const tg of tags) count.set(tg, (count.get(tg) ?? 0) + 1)
     return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   }, [categoriesOf])
 
@@ -98,8 +101,8 @@ export default function ModGrid({
           setPending(null)
           const extraOn = r.enabled.filter((n) => n !== mod.name)
           const extraOff = r.disabled.filter((n) => n !== mod.name)
-          if (extraOn.length) setNotice(`Abilitate anche le dipendenze: ${list(extraOn)}`)
-          if (extraOff.length) setNotice(`Disabilitate anche: ${list(extraOff)}`)
+          if (extraOn.length) setNotice(t('Dependencies enabled too: {mods}', { mods: list(extraOn) }))
+          if (extraOff.length) setNotice(t('Also disabled: {mods}', { mods: list(extraOff) }))
         },
         onError: (err) => {
           const conflict = conflictDetails(err)
@@ -120,7 +123,11 @@ export default function ModGrid({
         onSuccess: (r) => {
           setPending(null)
           const extra = r.disabled.filter((n) => n !== mod.name)
-          setNotice(`${titleOf(mod)} spostata nel cestino${extra.length ? `; disabilitate anche: ${list(extra)}` : ''}.`)
+          setNotice(
+            extra.length
+              ? t('{mod} moved to the trash; also disabled: {mods}.', { mod: titleOf(mod), mods: list(extra) })
+              : t('{mod} moved to the trash.', { mod: titleOf(mod) }),
+          )
         },
         onError: (err) => {
           const conflict = conflictDetails(err)
@@ -136,10 +143,10 @@ export default function ModGrid({
 
   const detailsMod = details ? mods.find((m) => m.name === details) : undefined
   const filters: { value: Show; label: string }[] = [
-    { value: 'all', label: 'Tutte' },
-    { value: 'on', label: 'Abilitate' },
-    { value: 'off', label: 'Disabilitate' },
-    ...(counts.updates > 0 || show === 'updates' ? [{ value: 'updates' as const, label: 'Da aggiornare' }] : []),
+    { value: 'all', label: t('All') },
+    { value: 'on', label: t('Enabled|mods') },
+    { value: 'off', label: t('Disabled|mods') },
+    ...(counts.updates > 0 || show === 'updates' ? [{ value: 'updates' as const, label: t('To update') }] : []),
   ]
 
   return (
@@ -152,13 +159,13 @@ export default function ModGrid({
           </svg>
           <input
             type="search"
-            placeholder="Cerca per nome, autore o tag…"
-            aria-label="Cerca mod"
+            placeholder={t('Search by name, author or tag…')}
+            aria-label={t('Search mods')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
-        <div className="segmented" role="group" aria-label="Stato delle mod">
+        <div className="segmented" role="group" aria-label={t('Mod status')}>
           {filters.map((f) => (
             <button key={f.value} type="button" className={show === f.value ? 'active' : ''} aria-pressed={show === f.value} onClick={() => setShow(f.value)}>
               {f.label} {counts[f.value]}
@@ -168,10 +175,10 @@ export default function ModGrid({
       </div>
 
       {tagCounts.length > 0 && (
-        <div className="tag-filters" role="group" aria-label="Filtra per tag">
-          {tagCounts.map(([t, n]) => (
-            <button key={t} type="button" className={tag === t ? 'tag-filter active' : 'tag-filter'} aria-pressed={tag === t} onClick={() => setTag(tag === t ? null : t)}>
-              {t} · {n}
+        <div className="tag-filters" role="group" aria-label={t('Filter by tag')}>
+          {tagCounts.map(([tg, n]) => (
+            <button key={tg} type="button" className={tag === tg ? 'tag-filter active' : 'tag-filter'} aria-pressed={tag === tg} onClick={() => setTag(tag === tg ? null : tg)}>
+              {tg} · {n}
             </button>
           ))}
         </div>
@@ -181,7 +188,7 @@ export default function ModGrid({
       {error && <div className="alert alert-error">{error}</div>}
 
       {visible.length === 0 ? (
-        <div className="empty">{mods.length === 0 ? 'Nessuna mod installata.' : 'Nessuna mod corrisponde ai filtri.'}</div>
+        <div className="empty">{mods.length === 0 ? t('No mods installed.') : t('No mod matches the filters.')}</div>
       ) : (
         <div className="mod-grid">
           {visible.map((mod) => (
@@ -209,19 +216,22 @@ export default function ModGrid({
 
       <Sheet
         open={pending !== null}
-        title={pending?.kind === 'disable' ? 'Disabilitare anche le mod dipendenti?' : 'Eliminare la mod?'}
+        title={pending?.kind === 'disable' ? t('Disable the dependent mods too?') : t('Delete the mod?')}
         onClose={() => setPending(null)}
       >
         {pending && (
           <div className="stack">
             {pending.kind === 'disable' ? (
               <p>
-                Queste mod abilitate dipendono da <strong>{titleOf(pending.mod)}</strong>: {list(pending.dependents)}. Disabilitare anche loro?
+                {tn('These enabled mods depend on {mod}: {mods}. Disable them too?', {
+                  mod: <strong>{titleOf(pending.mod)}</strong>,
+                  mods: list(pending.dependents),
+                })}
               </p>
             ) : (
               <p>
-                <strong>{titleOf(pending.mod)}</strong> verrà spostata nel cestino.
-                {pending.dependents?.length ? ` Verranno disabilitate anche: ${list(pending.dependents)}.` : ''}
+                {tn('{mod} will be moved to the trash.', { mod: <strong>{titleOf(pending.mod)}</strong> })}
+                {pending.dependents?.length ? ` ${t('These will be disabled too: {mods}.', { mods: list(pending.dependents) })}` : ''}
               </p>
             )}
             <div className="btn-row">
@@ -231,10 +241,10 @@ export default function ModGrid({
                 disabled={busy}
                 onClick={() => (pending.kind === 'disable' ? onToggle(pending.mod, true) : onDelete(pending.mod, pending.dependents !== null))}
               >
-                {pending.kind === 'disable' ? 'Disabilita tutte' : 'Elimina'}
+                {pending.kind === 'disable' ? t('Disable all') : t('Delete')}
               </button>
               <button type="button" className="btn btn-ghost" onClick={() => setPending(null)}>
-                Annulla
+                {t('Cancel')}
               </button>
             </div>
           </div>
@@ -281,7 +291,7 @@ function ModCard(props: {
   return (
     <article className={mod.enabled ? 'mod-card' : 'mod-card mod-card-off'}>
       <div className="mod-card-head">
-        <button type="button" className="mod-icon-button dim" onClick={props.onDetails} aria-label={`Dettagli di ${title}`}>
+        <button type="button" className="mod-icon-button dim" onClick={props.onDetails} aria-label={t('Details of {name}', { name: title })}>
           <ModIcon serverId={props.serverId} mod={mod} />
         </button>
         <div className="mod-card-heading">
@@ -290,25 +300,25 @@ function ModCard(props: {
               {title}
             </button>
           </h3>
-          {mod.author && <div className="mod-author">di {mod.author}</div>}
+          {mod.author && <div className="mod-author">{t('by {author}', { author: mod.author })}</div>}
           <div className="pill-row">
-            <span className={mod.enabled ? 'pill pill-on' : 'pill pill-off'}>{mod.enabled ? 'Abilitata' : 'Disabilitata'}</span>
+            <span className={mod.enabled ? 'pill pill-on' : 'pill pill-off'}>{mod.enabled ? t('Enabled|mod') : t('Disabled|mod')}</span>
             {hasUpdate ? (
-              <span className="pill pill-update" title={update?.status === 'maybe' ? "Aggiornata nel Workshop dopo l'installazione" : undefined}>
+              <span className="pill pill-update" title={update?.status === 'maybe' ? t('Updated on the Workshop after the installation') : undefined}>
                 {mod.version ? `v${mod.version} → ` : ''}
-                {update?.latestVersion ? `v${update.latestVersion}` : 'aggiornamento'}
+                {update?.latestVersion ? `v${update.latestVersion}` : t('update')}
               </span>
             ) : (
               mod.version && <span className="pill pill-plain">v{mod.version}</span>
             )}
             {update?.status === 'incompatible' && (
-              <span className="pill pill-warning" title="Nel Workshop non c'è una versione per la tModLoader di questo server">
-                incompatibile
+              <span className="pill pill-warning" title={t('There is no version on the Workshop for the tModLoader of this server')}>
+                {t('incompatible')}
               </span>
             )}
             {update?.status === 'unavailable' && (
-              <span className="pill pill-plain" title="L'elemento del Workshop è stato rimosso o reso privato">
-                non più nel Workshop
+              <span className="pill pill-plain" title={t('The Workshop item was removed or made private')}>
+                {t('no longer on the Workshop')}
               </span>
             )}
           </div>
@@ -319,9 +329,9 @@ function ModCard(props: {
       {mod.description && <p className="mod-description-short dim">{mod.description}</p>}
 
       <div className="mod-tags dim">
-        {tags.slice(0, 4).map((t) => (
-          <span key={t} className="mod-tag">
-            {t}
+        {tags.slice(0, 4).map((tg) => (
+          <span key={tg} className="mod-tag">
+            {tg}
           </span>
         ))}
         {tags.length > 4 && (
@@ -332,17 +342,17 @@ function ModCard(props: {
       </div>
 
       {mod.missingDependencies.length > 0 && (
-        <p className="error-text small">Dipendenze mancanti: {mod.missingDependencies.map(props.nameOf).join(', ')}</p>
+        <p className="error-text small">{t('Missing dependencies: {mods}', { mods: mod.missingDependencies.map(props.nameOf).join(', ') })}</p>
       )}
 
       <div className="mod-meta">
-        {mod.side ? SIDE_LABEL[mod.side] : 'Lato sconosciuto'} · {formatBytes(mod.size)}
+        {mod.side ? sideLabel(mod.side) : t('Unknown side')} · {formatBytes(mod.size)}
       </div>
 
       {props.jobItem ? (
         <CardJobProgress item={props.jobItem} cancelling={props.cancelling} onCancel={props.onCancel} />
       ) : (
-        <OverflowActions actions={modActions(props, title)} menuLabel={`Altre azioni per ${title}`} />
+        <OverflowActions actions={modActions(props, title)} menuLabel={t('More actions for {name}', { name: title })} />
       )}
     </article>
   )
@@ -372,7 +382,7 @@ function modActions(
 ): OverflowAction[] {
   const { mod } = props
   const url = modDownloadUrl(props.serverId, mod.name)
-  const toggleLabel = mod.enabled ? 'Disabilita' : 'Abilita'
+  const toggleLabel = mod.enabled ? t('Disable') : t('Enable')
   const toggleDisabled = props.busy || mod.error !== null
   const download = () => {
     const a = document.createElement('a')
@@ -398,12 +408,12 @@ function modActions(
           {
             key: 'update',
             priority: 3,
-            label: 'Aggiorna',
+            label: t('Update'),
             disabled: props.updating,
             onSelect: props.onUpdate,
             inline: (
               <button type="button" className="btn btn-sm btn-primary" disabled={props.updating} onClick={props.onUpdate}>
-                Aggiorna
+                {t('Update')}
               </button>
             ),
           },
@@ -413,11 +423,11 @@ function modActions(
       key: 'download',
       priority: 1,
       end: true,
-      label: 'Scarica il .tmod',
+      label: t('Download the .tmod'),
       icon: downloadIcon,
       onSelect: download,
       inline: (
-        <a className="btn btn-sm btn-icon" href={url} download aria-label={`Scarica ${title}`} title="Scarica">
+        <a className="btn btn-sm btn-icon" href={url} download aria-label={t('Download {name}', { name: title })} title={t('Download')}>
           {downloadIcon}
         </a>
       ),
@@ -427,12 +437,12 @@ function modActions(
       priority: 2,
       end: true,
       danger: true,
-      label: 'Elimina',
+      label: t('Delete'),
       icon: deleteIcon,
       disabled: props.busy,
       onSelect: props.onDelete,
       inline: (
-        <button type="button" className="btn btn-sm btn-icon btn-danger-outline" disabled={props.busy} onClick={props.onDelete} aria-label={`Elimina ${title}`} title="Elimina">
+        <button type="button" className="btn btn-sm btn-icon btn-danger-outline" disabled={props.busy} onClick={props.onDelete} aria-label={t('Delete {name}', { name: title })} title={t('Delete')}>
           {deleteIcon}
         </button>
       ),
@@ -455,16 +465,16 @@ function ModDetails(props: {
         <ModIcon serverId={props.serverId} mod={mod} />
         <div>
           {mod.displayName && <div className="mono small muted">{mod.name}</div>}
-          {mod.author && <div>di {mod.author}</div>}
-          {mod.version && <div className="muted small">Versione {mod.version}</div>}
+          {mod.author && <div>{t('by {author}', { author: mod.author })}</div>}
+          {mod.version && <div className="muted small">{t('Version {version}', { version: mod.version })}</div>}
         </div>
       </div>
 
       <dl className="details">
         {mod.addon ? (
           <>
-            <dt>Aggiornamenti</dt>
-            <dd>Si aggiorna insieme al pannello</dd>
+            <dt>{t('Updates')}</dt>
+            <dd>{t('It is updated together with the panel')}</dd>
           </>
         ) : (
           <>
@@ -476,49 +486,49 @@ function ModDetails(props: {
         )}
         {mod.workshop?.subscriptions != null && (
           <>
-            <dt>Iscritti</dt>
-            <dd>{mod.workshop.subscriptions.toLocaleString('it')}</dd>
+            <dt>{t('Subscribers')}</dt>
+            <dd>{mod.workshop.subscriptions.toLocaleString(intlLocale())}</dd>
           </>
         )}
         {props.tags.length > 0 && (
           <>
             <dt>Tag</dt>
             <dd className="mod-tags">
-              {props.tags.map((t) => (
-                <span key={t} className="mod-tag">
-                  {t}
+              {props.tags.map((tg) => (
+                <span key={tg} className="mod-tag">
+                  {tg}
                 </span>
               ))}
             </dd>
           </>
         )}
-        <dt>Lato</dt>
-        <dd>{mod.side ? SIDE_LABEL[mod.side] : '—'}</dd>
-        <dt>Dipendenze</dt>
+        <dt>{t('Side')}</dt>
+        <dd>{mod.side ? sideLabel(mod.side) : '—'}</dd>
+        <dt>{t('Dependencies')}</dt>
         <dd>
           {mod.dependencies.length === 0
             ? '—'
             : mod.dependencies.map((d) => (
-                <span key={d} className={mod.missingDependencies.includes(d) ? 'tag tag-danger' : 'tag'} title={mod.missingDependencies.includes(d) ? 'Dipendenza mancante' : undefined}>
+                <span key={d} className={mod.missingDependencies.includes(d) ? 'tag tag-danger' : 'tag'} title={mod.missingDependencies.includes(d) ? t('Missing dependency') : undefined}>
                   {props.nameOf(d)}
                 </span>
               ))}
         </dd>
         {mod.optionalDependencies.length > 0 && (
           <>
-            <dt>Dipendenze opzionali</dt>
+            <dt>{t('Optional dependencies')}</dt>
             <dd>{mod.optionalDependencies.map(props.nameOf).join(', ')}</dd>
           </>
         )}
-        <dt>Compilata per</dt>
+        <dt>{t('Built for')}</dt>
         <dd>tModLoader {mod.tmlVersion ?? '—'}</dd>
-        <dt>File</dt>
+        <dt>{t('File')}</dt>
         <dd className="mono">
-          {mod.file} · {formatBytes(mod.size)} · modificato {formatDate(mod.modifiedAt)}
+          {mod.file} · {formatBytes(mod.size)} · {t('modified {date}', { date: formatDate(mod.modifiedAt) })}
         </dd>
         {mod.homepage && (
           <>
-            <dt>Sito</dt>
+            <dt>{t('Website')}</dt>
             <dd>
               <a href={mod.homepage} target="_blank" rel="noreferrer noopener">
                 {mod.homepage}
@@ -531,7 +541,7 @@ function ModDetails(props: {
       {mod.description && <p className="mod-description">{mod.description}</p>}
 
       <section className="stack-sm">
-        <h3 className="section-title">Versioni</h3>
+        <h3 className="section-title">{t('Versions')}</h3>
         <VersionArchive serverId={props.serverId} focus={mod.name} />
       </section>
     </div>

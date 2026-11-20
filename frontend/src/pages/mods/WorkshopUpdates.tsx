@@ -4,16 +4,18 @@ import { formatBytes, formatDate } from '../../lib/format'
 import type { ModUpdate, UpdateJob, UpdateJobItem, UpdateReport } from '../../lib/types'
 import { itemFraction } from '../../lib/jobs'
 import { isUpdatable, useRecheckUpdates } from '../../lib/workshop'
+import { t } from '../../i18n'
 
-const ITEM_STATE: Record<UpdateJobItem['state'], { text: string; className: string }> = {
-  queued: { text: 'in coda', className: 'tag' },
-  downloading: { text: 'download…', className: 'tag tag-accent' },
-  installing: { text: 'installazione…', className: 'tag tag-accent' },
-  done: { text: 'fatto', className: 'tag tag-used' },
-  skipped: { text: 'già aggiornata', className: 'tag' },
-  error: { text: 'errore', className: 'tag tag-danger' },
-  cancelled: { text: 'annullato', className: 'tag' },
-}
+const itemState = (state: UpdateJobItem['state']): { text: string; className: string } =>
+  ({
+    queued: { text: t('queued'), className: 'tag' },
+    downloading: { text: t('downloading…'), className: 'tag tag-accent' },
+    installing: { text: t('installing…'), className: 'tag tag-accent' },
+    done: { text: t('done'), className: 'tag tag-used' },
+    skipped: { text: t('already up to date'), className: 'tag' },
+    error: { text: t('error'), className: 'tag tag-danger' },
+    cancelled: { text: t('cancelled'), className: 'tag' },
+  })[state]
 
 const label = (u: ModUpdate) => u.displayName ?? u.name
 
@@ -43,7 +45,7 @@ export default function WorkshopUpdates(props: {
   return (
     <div className="stack">
       <div className="section-header">
-        <span className="muted small">{report?.tmlVersion ? `tModLoader del server: ${report.tmlVersion}` : ''}</span>
+        <span className="muted small">{report?.tmlVersion ? t('Server tModLoader: {version}', { version: report.tmlVersion }) : ''}</span>
         <div className="btn-row">
           {report?.steamcmd && updatable.length > 0 && (
             <button
@@ -52,16 +54,16 @@ export default function WorkshopUpdates(props: {
               disabled={props.starting}
               onClick={() => props.onUpdate(updatable.map((u) => u.name))}
             >
-              Aggiorna tutte ({updatable.length})
+              {t('Update all ({count})', { count: updatable.length })}
             </button>
           )}
           <button type="button" className="btn btn-sm" disabled={recheck.isPending || props.loading} onClick={() => recheck.mutate()}>
-            {recheck.isPending ? 'Controllo…' : 'Ricontrolla'}
+            {recheck.isPending ? t('Checking…|updates') : t('Check again')}
           </button>
         </div>
       </div>
 
-      {props.loading && <p className="muted">Controllo degli aggiornamenti nel Workshop…</p>}
+      {props.loading && <p className="muted">{t('Checking for updates on the Workshop…')}</p>}
       {(props.error || recheck.error) && <div className="alert alert-error">{errorMessage(recheck.error ?? props.error)}</div>}
       {props.startError ? <div className="alert alert-error">{errorMessage(props.startError)}</div> : null}
 
@@ -69,20 +71,22 @@ export default function WorkshopUpdates(props: {
         <>
           {!report.steamcmd && (
             <div className="alert alert-warning">
-              Puoi vedere gli aggiornamenti ma non scaricarli dal pannello: {report.steamcmdProblem}.
+              {t('You can see the updates but not download them from the panel: {problem}.', { problem: report.steamcmdProblem ?? '' })}
             </div>
           )}
           {!report.apiKey && (
             <p className="hint">
-              Senza chiave Steam Web API si vede solo se una mod è stata aggiornata nel Workshop dopo che l'hai installata
-              (non il numero di versione), e le mod vanno collegate a mano.
+              {t(
+                'Without a Steam Web API key you can only see whether a mod was updated on the Workshop after you installed it (not the version number), and mods must be linked by hand.',
+              )}
             </p>
           )}
 
           {updatable.length === 0 ? (
             <p className="muted">
-              Tutte le mod collegate al Workshop sono aggiornate
-              {report.tmlVersion ? ` (per tModLoader ${report.tmlVersion})` : ''}.
+              {report.tmlVersion
+                ? t('All the mods linked to the Workshop are up to date (for tModLoader {version}).', { version: report.tmlVersion })
+                : t('All the mods linked to the Workshop are up to date.')}
             </p>
           ) : (
             <ul className="update-list">
@@ -90,9 +94,9 @@ export default function WorkshopUpdates(props: {
                 <li key={u.name}>
                   <strong>{label(u)}</strong>{' '}
                   <span className="mono small">
-                    v{u.installedVersion ?? '?'} → {u.latestVersion ? `v${u.latestVersion}` : 'versione più recente'}
+                    v{u.installedVersion ?? '?'} → {u.latestVersion ? `v${u.latestVersion}` : t('newer version')}
                   </span>
-                  {u.status === 'maybe' && <span className="muted small"> (aggiornata nel Workshop il {formatDate(u.timeUpdated)})</span>}
+                  {u.status === 'maybe' && <span className="muted small"> ({t('updated on the Workshop on {date}', { date: formatDate(u.timeUpdated) })})</span>}
                   {u.url && (
                     <>
                       {' · '}
@@ -108,21 +112,21 @@ export default function WorkshopUpdates(props: {
 
           {needsTml.length > 0 && (
             <p className="hint">
-              Versioni più recenti che richiedono di aggiornare tModLoader (da Gestione server):{' '}
+              {t('Newer versions that require updating tModLoader (from Server management):')}{' '}
               {needsTml.map((u) => `${label(u)} v${u.newerVersion} (tModLoader ${u.newerRequiresTml})`).join(', ')}.
             </p>
           )}
           {incompatible.length > 0 && (
             <p className="hint">
-              Nel Workshop non c'è una versione per tModLoader {report.tmlVersion ?? '?'}: {incompatible.map(label).join(', ')}.
+              {t('There is no version for tModLoader {version} on the Workshop: {mods}.', { version: report.tmlVersion ?? '?', mods: incompatible.map(label).join(', ') })}
             </p>
           )}
           {unlinked.length > 0 && (
             <p className="hint">
-              Non collegate al Workshop: {unlinked.map(label).join(', ')}. Puoi collegarle a mano dai dettagli della mod.
+              {t('Not linked to the Workshop: {mods}. You can link them by hand from the mod details.', { mods: unlinked.map(label).join(', ') })}
             </p>
           )}
-          <p className="muted small">Controllato {formatDate(report.checkedAt)}.</p>
+          <p className="muted small">{t('Checked {date}.', { date: formatDate(report.checkedAt) })}</p>
         </>
       )}
       {showJob && <JobView job={job} onHide={() => setHiddenJob(job.startedAt)} />}
@@ -137,14 +141,14 @@ export function JobView({ job, onHide }: { job: UpdateJob; onHide?: () => void }
   return (
     <div className="update-job">
       <div className="section-header">
-        <h3>{running ? 'Download in corso…' : job.state === 'error' ? 'Download conclusi con errori' : 'Download completati'}</h3>
+        <h3>{running ? t('Downloading…') : job.state === 'error' ? t('Downloads finished with errors') : t('Downloads completed')}</h3>
         {!running && onHide && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={onHide}>
-            Nascondi
+            {t('Hide')}
           </button>
         )}
       </div>
-      {running && job.items.every((i) => i.state === 'queued') && <p className="muted small">Collegamento a Steam…</p>}
+      {running && job.items.every((i) => i.state === 'queued') && <p className="muted small">{t('Connecting to Steam…')}</p>}
       <ul className="update-items">
         {job.items.map((item) => (
           <ItemRow key={item.name} item={item} />
@@ -156,10 +160,10 @@ export function JobView({ job, onHide }: { job: UpdateJob; onHide?: () => void }
         </p>
       ))}
       {!running && done.some((i) => !i.install && i.from) && (
-        <p className="small">Le versioni precedenti restano nell'archivio delle versioni. Riavvia il server per usare le mod aggiornate.</p>
+        <p className="small">{t('The previous versions stay in the version archive. Restart the server to use the updated mods.')}</p>
       )}
       {!running && done.some((i) => i.install) && (
-        <p className="small">Le mod nuove sono installate ma non ancora abilitate: abilitale tutte insieme con «Abilita e riavvia».</p>
+        <p className="small">{t('The new mods are installed but not enabled yet: enable them all together with «Enable and restart».')}</p>
       )}
     </div>
   )
@@ -182,8 +186,8 @@ function ItemRow({ item }: { item: UpdateJobItem }) {
     <li className="update-item">
       <div className="update-item-name">
         <strong>{item.name}</strong>
-        {item.dependency && <span className="muted small"> (dipendenza nuova)</span>}
-        {item.install && <span className="muted small"> (nuova)</span>}
+        {item.dependency && <span className="muted small"> ({t('new dependency')})</span>}
+        {item.install && <span className="muted small"> ({t('new')})</span>}
         <div className="mono small muted">
           {item.state === 'done' && item.to ? `${item.from ? `v${item.from} → ` : ''}v${item.to}` : item.from ? `v${item.from}` : ''}
         </div>
@@ -191,7 +195,7 @@ function ItemRow({ item }: { item: UpdateJobItem }) {
       <div
         className="progress"
         role="progressbar"
-        aria-label={`Avanzamento di ${item.name}`}
+        aria-label={t('Progress of {mod}', { mod: item.name })}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
@@ -199,12 +203,12 @@ function ItemRow({ item }: { item: UpdateJobItem }) {
         <div style={{ width: fraction === null ? '100%' : percent(fraction) }} className={barClass} />
       </div>
       <div className="update-item-status small">
-        <span className={ITEM_STATE[item.state].className}>{ITEM_STATE[item.state].text}</span>
+        <span className={itemState(item.state).className}>{itemState(item.state).text}</span>
         {item.state === 'downloading' && (
           <span className="muted mono">
             {' '}
             {item.bytes == null
-              ? 'in attesa dei dati…'
+              ? t('waiting for data…')
               : `${formatBytes(item.bytes)}${item.totalBytes ? ` / ${formatBytes(item.totalBytes)} · ${percent(fraction ?? 0)}` : ''}`}
           </span>
         )}

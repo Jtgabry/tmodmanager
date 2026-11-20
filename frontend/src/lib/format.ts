@@ -1,3 +1,5 @@
+import { intlLocale, t } from '../i18n'
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) return '—'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -15,12 +17,12 @@ export function formatDuration(seconds: number | null): string {
   const d = Math.floor(seconds / 86400)
   const h = Math.floor((seconds % 86400) / 3600)
   const m = Math.floor((seconds % 3600) / 60)
-  if (d > 0) return `${d}g ${h}h`
+  if (d > 0) return `${d}${t('d')} ${h}h`
   if (h > 0) return `${h}h ${m}m`
   return `${m}m ${Math.floor(seconds % 60)}s`
 }
 
 export function formatDate(iso: string | null): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
+  return new Date(iso).toLocaleString(intlLocale(), { dateStyle: 'short', timeStyle: 'short' })
 }

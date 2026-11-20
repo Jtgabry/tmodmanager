@@ -5,6 +5,7 @@ import { olderThanWorld, useAdminServerActions, useServerDefaults, useServerSett
 import { errorMessage, fieldErrors } from '../../lib/api'
 import { useCurrentServer } from '../../lib/currentServer'
 import { GAME_LABEL, type Server, type ServerSettings } from '../../lib/types'
+import { t, tn } from '../../i18n'
 
 /**
  * Impostazioni di un server (solo admin). Nella Panoramica: nome, giocatori, motd e gioco/versione.
@@ -23,7 +24,7 @@ function useSettingsOf(server: Server) {
   return { settings, running, fallback }
 }
 
-const restartNote = (running: boolean) => (running ? ' Valgono dal prossimo riavvio del server.' : '')
+const restartNote = (running: boolean) => (running ? ` ${t('They apply from the next server restart.')}` : '')
 
 // --- Panoramica ---------------------------------------------------------------------------------
 
@@ -33,11 +34,11 @@ export function OverviewSettings({ server }: { server: Server }) {
   return (
     <>
       <div className="card">
-        <h2>Server</h2>
+        <h2>{t('Server')}</h2>
         <GeneralForm key={settings.dataUpdatedAt} data={settings.data} running={running} />
       </div>
       <div className="card">
-        <h2>Gioco e versione</h2>
+        <h2>{t('Game and version')}</h2>
         <VersionSwitch key={settings.data.id} data={settings.data} running={running} />
       </div>
     </>
@@ -63,26 +64,26 @@ function GeneralForm({ data, running }: { data: ServerSettings; running: boolean
     <form className="stack" onSubmit={submit}>
       <div className="form-inline">
         <label className="field">
-          <span>Nome</span>
+          <span>{t('Name')}</span>
           <input required maxLength={64} value={name} onChange={(e) => setName(e.target.value)} />
           {errors.name && <span className="error-text">{errors.name}</span>}
         </label>
         <label className="field field-narrow">
-          <span>Giocatori max</span>
+          <span>{t('Max players')}</span>
           <input type="number" required min={1} max={255} value={maxPlayers} onChange={(e) => setMaxPlayers(Number(e.target.value))} />
           {errors.maxPlayers && <span className="error-text">{errors.maxPlayers}</span>}
         </label>
       </div>
       <label className="field">
-        <span>Messaggio di benvenuto (motd)</span>
-        <input maxLength={200} value={motd} onChange={(e) => setMotd(e.target.value)} placeholder="Nessuno" />
+        <span>{t('Welcome message (motd)')}</span>
+        <input maxLength={200} value={motd} onChange={(e) => setMotd(e.target.value)} placeholder={t('None')} />
         {errors.motd && <span className="error-text">{errors.motd}</span>}
       </label>
       {update.isError && !Object.keys(errors).length && <div className="alert alert-error">{errorMessage(update.error)}</div>}
-      {saved && !dirty && <div className="alert alert-success">Salvato.{running && ' Giocatori e motd valgono dal prossimo riavvio del server.'}</div>}
+      {saved && !dirty && <div className="alert alert-success">{t('Saved.')}{running && ` ${t('Players and motd apply from the next server restart.')}`}</div>}
       <div className="btn-row">
         <button type="submit" className="btn btn-primary btn-sm" disabled={!dirty || update.isPending}>
-          Salva
+          {t('Save')}
         </button>
       </div>
     </form>
@@ -124,35 +125,41 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
           disabled={!changed || switchGame.isPending || !defaults.data}
           onClick={apply}
         >
-          {warn ? 'Cambia comunque' : picked?.toInstall ? 'Installa e cambia' : 'Cambia versione'}
+          {warn ? t('Switch anyway') : picked?.toInstall ? t('Install and switch') : t('Switch version')}
         </button>
       </div>
       <p className="muted small">
-        <PickedHint picked={changed ? picked : null} /> Il mondo resta lo stesso. Con tModLoader compaiono le sezioni Mod,
-        Workshop e Modpack; con TShock i giocatori entrano con Terraria normale. Mod, configurazione e plugin di TShock
-        restano nella cartella del server anche passando a un altro gioco.
-        {changed && running && <strong> Il server è acceso: viene spento (salvando il mondo) e riacceso con {target}.</strong>}
+        <PickedHint picked={changed ? picked : null} />{' '}
+        {t(
+          'The world stays the same. With tModLoader the Mods, Workshop and Modpack sections appear; with TShock players join with regular Terraria. Mods, configuration and TShock plugins stay in the server folder even when switching to another game.',
+        )}
+        {changed && running && (
+          <strong> {t('The server is running: it is stopped (saving the world) and started again with {target}.', { target })}</strong>
+        )}
       </p>
 
       {warn && data.worldRelease !== null && (
         <div className="alert alert-warning">
           {tooOld ? (
             <p>
-              Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}, più
-              recente di {target}
-              {picked?.worldRelease ? ` (${worldVersionLabel(picked.worldRelease)})` : ''}. Il server potrebbe non riuscire ad
-              aprirlo o andare in crash.
+              {tn('The world {world} was saved with {saved}, newer than {target}. The server might fail to open it or crash.', {
+                world: <strong>{data.worldName ?? ''}</strong>,
+                saved: worldVersionLabel(data.worldRelease),
+                target: picked?.worldRelease ? `${target} (${worldVersionLabel(picked.worldRelease)})` : target,
+              })}
             </p>
           ) : (
             <p>
-              Il mondo <strong>{data.worldName ?? ''}</strong> è stato salvato con {worldVersionLabel(data.worldRelease)}.
-              Finché {target} non è installato non si sa quale versione dei mondi sappia aprire: se è più vecchia, il server
-              potrebbe non riuscire ad aprirlo o andare in crash.
+              {tn(
+                'The world {world} was saved with {saved}. Until {target} is installed it is not known which world version it can open: if it is older, the server might fail to open it or crash.',
+                { world: <strong>{data.worldName ?? ''}</strong>, saved: worldVersionLabel(data.worldRelease), target },
+              )}
             </p>
           )}
           <p className="small">
-            Puoi ricreare il mondo da capo (quello attuale va nel cestino del server e resta recuperabile) oppure provare
-            comunque ad aprirlo con questa versione.
+            {t(
+              'You can recreate the world from scratch (the current one goes to the server trash and stays recoverable) or try to open it with this version anyway.',
+            )}
           </p>
           <div className="btn-row">
             {confirmRecreate ? (
@@ -163,10 +170,10 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
                   disabled={recreateWorld.isPending || running}
                   onClick={() => recreateWorld.mutate(data.id, { onSettled: () => setConfirmRecreate(false) })}
                 >
-                  Conferma: ricrea il mondo
+                  {t('Confirm: recreate the world')}
                 </button>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmRecreate(false)}>
-                  Annulla
+                  {t('Cancel')}
                 </button>
               </>
             ) : (
@@ -174,10 +181,10 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
                 type="button"
                 className="btn btn-danger-outline btn-sm"
                 disabled={running}
-                title={running ? 'Spegni il server prima di ricreare il mondo' : undefined}
+                title={running ? t('Stop the server before recreating the world') : undefined}
                 onClick={() => setConfirmRecreate(true)}
               >
-                Ricrea il mondo da capo
+                {t('Recreate the world from scratch')}
               </button>
             )}
           </div>
@@ -185,21 +192,24 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
       )}
       {recreateWorld.isSuccess && (
         <div className="alert alert-success">
-          Mondo spostato nel cestino ({recreateWorld.data.trashed.join(', ') || 'nessun file'}). Al prossimo avvio ne
-          verrà generato uno nuovo con nome, dimensione, difficoltà e seed della configurazione.
+          {t(
+            'World moved to the trash ({files}). On the next start a new one will be generated with the name, size, difficulty and seed of the configuration.',
+            { files: recreateWorld.data.trashed.join(', ') || t('no files') },
+          )}
         </div>
       )}
       {recreateWorld.isError && <div className="alert alert-error">{errorMessage(recreateWorld.error)}</div>}
       {switchGame.isError && <div className="alert alert-error">{errorMessage(switchGame.error)}</div>}
       {started && (
         <div className="alert alert-info">
-          Passaggio avviato: l'avanzamento è in cima alla pagina.
+          {t('Switch started: the progress is at the top of the page.')}
         </div>
       )}
       {data.awaitingTshock && !changed && (
         <p className="small">
-          Questo server era su TShock: quando esce una versione di TShock per la sua versione di Terraria, in cima alla
-          pagina compare il pulsante per riportarlo su TShock.
+          {t(
+            'This server was on TShock: when a TShock version for its Terraria version comes out, a button to move it back to TShock appears at the top of the page.',
+          )}
         </p>
       )}
     </div>
@@ -211,22 +221,22 @@ function VersionSwitch({ data, running }: { data: ServerSettings; running: boole
 type Option = [value: string, label: string]
 type ConfigField = { key: string; label: string; hint?: string; options?: Option[]; placeholder?: string; pattern?: string; maxLength?: number }
 
-const YES_NO: Option[] = [
-  ['1', 'Sì'],
-  ['0', 'No'],
+const yesNo = (): Option[] => [
+  ['1', t('Yes')],
+  ['0', t('No')],
 ]
 
-const BASIC_FIELDS: ConfigField[] = [
+const basicFields = (): ConfigField[] => [
   {
     key: 'secure',
-    label: 'Protezione anti-cheat',
-    hint: 'Controlli aggiuntivi contro i client modificati (chiave secure).',
-    options: YES_NO,
+    label: t('Anti-cheat protection'),
+    hint: t('Extra checks against modified clients (secure key).'),
+    options: yesNo(),
   },
   {
     key: 'language',
-    label: 'Lingua del server',
-    hint: 'Lingua dei messaggi del server, ad esempio quelli in chat (chiave language).',
+    label: t('Server language'),
+    hint: t('Language of the server messages, for example the chat ones (language key).'),
     options: [
       ['en-US', 'English'],
       ['it-IT', 'Italiano'],
@@ -241,70 +251,71 @@ const BASIC_FIELDS: ConfigField[] = [
   },
 ]
 
-const WORLD_FIELDS: ConfigField[] = [
-  { key: 'worldname', label: 'Nome del mondo', pattern: "[A-Za-z0-9 _'\\-]{1,40}", maxLength: 40 },
+const worldFields = (): ConfigField[] => [
+  { key: 'worldname', label: t('World name'), pattern: "[A-Za-z0-9 _'\\-]{1,40}", maxLength: 40 },
   {
     key: 'autocreate',
-    label: 'Dimensione',
+    label: t('Size'),
     options: [
-      ['1', 'Piccolo'],
-      ['2', 'Medio'],
-      ['3', 'Grande'],
+      ['1', t('Small')],
+      ['2', t('Medium')],
+      ['3', t('Large')],
     ],
   },
   {
     key: 'difficulty',
-    label: 'Difficoltà',
+    label: t('Difficulty'),
     options: [
-      ['0', 'Classica'],
-      ['1', 'Esperto'],
-      ['2', 'Maestro'],
-      ['3', 'Viaggio'],
+      ['0', t('Classic')],
+      ['1', t('Expert')],
+      ['2', t('Master')],
+      ['3', t('Journey')],
     ],
   },
-  { key: 'seed', label: 'Seed', placeholder: 'Casuale', maxLength: 64 },
+  { key: 'seed', label: 'Seed', placeholder: t('Random'), maxLength: 64 },
 ]
 
-const NETWORK_FIELDS: ConfigField[] = [
+const networkFields = (): ConfigField[] => [
   {
     key: 'npcstream',
     label: 'NPC stream',
-    hint: 'Valori più bassi riducono i "salti" dei nemici ma aumentano il traffico; 0 lo disattiva. Predefinito: 60.',
+    hint: t('Lower values reduce enemy "skipping" but increase traffic; 0 turns it off. Default: 60.'),
     placeholder: '60',
     pattern: '\\d{1,4}',
     maxLength: 4,
   },
 ]
 
-const JOURNEY_FIELDS: ConfigField[] = (
-  [
-    ['time_setfrozen', 'Fermare il tempo'],
-    ['time_setdawn', "Portare all'alba"],
-    ['time_setnoon', 'Portare a mezzogiorno'],
-    ['time_setdusk', 'Portare al tramonto'],
-    ['time_setmidnight', 'Portare a mezzanotte'],
-    ['time_setspeed', 'Velocità del tempo'],
-    ['godmode', 'Modalità divina'],
-    ['wind_setstrength', 'Forza del vento'],
-    ['wind_setfrozen', 'Fermare il vento'],
-    ['rain_setstrength', 'Intensità della pioggia'],
-    ['rain_setfrozen', 'Fermare la pioggia'],
-    ['increaseplacementrange', 'Raggio di piazzamento'],
-    ['setdifficulty', 'Difficoltà dei nemici'],
-    ['biomespread_setfrozen', 'Fermare la diffusione dei biomi'],
-    ['setspawnrate', 'Frequenza di comparsa dei nemici'],
-  ] as const
-).map(([key, label]) => ({
-  key: `journeypermission_${key}`,
-  label,
-  options: [
-    ['2', 'Tutti'],
-    ['1', "Solo l'host"],
-    ['0', 'Nessuno'],
-  ],
-}))
+const journeyFields = (): ConfigField[] =>
+  (
+    [
+      ['time_setfrozen', t('Freeze time')],
+      ['time_setdawn', t('Set to dawn')],
+      ['time_setnoon', t('Set to noon')],
+      ['time_setdusk', t('Set to dusk')],
+      ['time_setmidnight', t('Set to midnight')],
+      ['time_setspeed', t('Time speed')],
+      ['godmode', t('Godmode')],
+      ['wind_setstrength', t('Wind strength')],
+      ['wind_setfrozen', t('Freeze wind')],
+      ['rain_setstrength', t('Rain strength')],
+      ['rain_setfrozen', t('Freeze rain')],
+      ['increaseplacementrange', t('Placement range')],
+      ['setdifficulty', t('Enemy difficulty')],
+      ['biomespread_setfrozen', t('Freeze biome spread')],
+      ['setspawnrate', t('Enemy spawn rate')],
+    ] as const
+  ).map(([key, label]) => ({
+    key: `journeypermission_${key}`,
+    label,
+    options: [
+      ['2', t('Everyone')],
+      ['1', t('Host only')],
+      ['0', t('Nobody')],
+    ],
+  }))
 
-const ALL_FIELDS = [...BASIC_FIELDS, ...WORLD_FIELDS, ...NETWORK_FIELDS, ...JOURNEY_FIELDS]
+const allFields = () => [...basicFields(), ...worldFields(), ...networkFields(), ...journeyFields()]
 
 const ADVANCED_KEY = 'tmm:settings-advanced'
 const readAdvanced = () => {
@@ -330,7 +341,7 @@ function SettingsForm({ data, running }: { data: ServerSettings; running: boolea
   const [passwordMode, setPasswordMode] = useState<'keep' | 'set' | 'remove'>(data.hasPassword ? 'keep' : 'remove')
   const [password, setPassword] = useState('')
   // '' = chiave assente, cioè il default di Terraria
-  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(ALL_FIELDS.map((f) => [f.key, data.config[f.key] ?? ''])))
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(allFields().map((f) => [f.key, data.config[f.key] ?? ''])))
   const [launchArgs, setLaunchArgs] = useState(data.launchArgs.join(' '))
   const [saved, setSaved] = useState(false)
   const errors = fieldErrors(update.error)
@@ -347,7 +358,7 @@ function SettingsForm({ data, running }: { data: ServerSettings; running: boolea
   }
 
   const configChanges = Object.fromEntries(
-    ALL_FIELDS.filter((f) => values[f.key].trim() !== (data.config[f.key] ?? '')).map((f) => [f.key, values[f.key].trim() || null]),
+    allFields().filter((f) => values[f.key].trim() !== (data.config[f.key] ?? '')).map((f) => [f.key, values[f.key].trim() || null]),
   )
   const args = launchArgs.split(/\s+/).filter(Boolean)
   const argsChanged = args.join(' ') !== data.launchArgs.join(' ')
@@ -376,77 +387,80 @@ function SettingsForm({ data, running }: { data: ServerSettings; running: boolea
   return (
     <form className="stack" onSubmit={submit}>
       <div className="card">
-        <h2>Connessione</h2>
+        <h2>{t('Connection')}</h2>
         <div className="form-inline">
           <label className="field field-narrow">
-            <span>Porta</span>
+            <span>{t('Port')}</span>
             <input type="number" required min={1024} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} />
           </label>
           <label className="field">
             <span>Password</span>
             <select value={passwordMode} onChange={(e) => setPasswordMode(e.target.value as typeof passwordMode)}>
-              {data.hasPassword && <option value="keep">Lascia quella attuale</option>}
-              <option value="set">{data.hasPassword ? 'Cambia password' : 'Imposta una password'}</option>
-              <option value="remove">{data.hasPassword ? 'Togli la password' : 'Nessuna password'}</option>
+              {data.hasPassword && <option value="keep">{t('Keep the current one')}</option>}
+              <option value="set">{data.hasPassword ? t('Change password') : t('Set a password')}</option>
+              <option value="remove">{data.hasPassword ? t('Remove the password') : t('No password')}</option>
             </select>
           </label>
           {passwordMode === 'set' && (
             <label className="field">
-              <span>Nuova password</span>
+              <span>{t('New password')}</span>
               <input required maxLength={64} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
             </label>
           )}
         </div>
         {errors.port && <span className="error-text">{errors.port}</span>}
         {errors.password && <span className="error-text">{errors.password}</span>}
-        {!data.hasPassword && passwordMode !== 'set' && <p className="muted small">Senza password chiunque conosca indirizzo e porta può entrare.</p>}
+        {!data.hasPassword && passwordMode !== 'set' && <p className="muted small">{t('Without a password anyone who knows the address and port can join.')}</p>}
       </div>
 
       <div className="card">
-        <h2>Generale</h2>
-        <div className="stack">{BASIC_FIELDS.map(field)}</div>
+        <h2>{t('General')}</h2>
+        <div className="stack">{basicFields().map(field)}</div>
       </div>
 
       <div className="btn-row">
         <button type="button" className="btn btn-sm" aria-expanded={advanced} onClick={toggleAdvanced}>
-          {advanced ? 'Nascondi avanzate' : 'Avanzate'}
+          {advanced ? t('Hide advanced') : t('Advanced')}
         </button>
       </div>
 
       {advanced && (
         <>
-          <Section title="Generazione del mondo" hint="Si usano solo quando il mondo viene creato: al primo avvio o dopo averlo ricreato da capo. Non cambiano il mondo attuale.">
-            <div className="form-inline">{WORLD_FIELDS.map(field)}</div>
-          </Section>
-          <Section title="Rete">{NETWORK_FIELDS.map(field)}</Section>
           <Section
-            title="Permessi della modalità Viaggio"
-            hint="Chi può usare i poteri della modalità Viaggio (solo nei mondi creati in Viaggio). L'host è il primo giocatore entrato."
+            title={t('World generation')}
+            hint={t('Used only when the world is created: on the first start or after recreating it from scratch. They do not change the current world.')}
           >
-            <div className="settings-grid">{JOURNEY_FIELDS.map(field)}</div>
+            <div className="form-inline">{worldFields().map(field)}</div>
           </Section>
-          <Section title="Avvio" hint="Argomenti passati all'eseguibile del server, separati da spazi.">
+          <Section title={t('Network')}>{networkFields().map(field)}</Section>
+          <Section
+            title={t('Journey mode permissions')}
+            hint={t('Who can use the Journey mode powers (only in worlds created in Journey). The host is the first player who joined.')}
+          >
+            <div className="settings-grid">{journeyFields().map(field)}</div>
+          </Section>
+          <Section title={t('Startup')} hint={t('Arguments passed to the server executable, separated by spaces.')}>
             <label className="field">
-              <span>Argomenti di avvio</span>
+              <span>{t('Launch arguments')}</span>
               <input className="mono" value={launchArgs} onChange={(e) => setLaunchArgs(e.target.value)} placeholder="-nosteam" />
               {errors.launchArgs && <span className="error-text">{errors.launchArgs}</span>}
             </label>
             <p className="muted small">
-              Configurazione: <span className="mono">{data.configPath}</span>
+              {t('Configuration:')} <span className="mono">{data.configPath}</span>
               <br />
-              Mondo: <span className="mono">{data.world ?? '—'}</span>
+              {t('World:')} <span className="mono">{data.world ?? '—'}</span>
             </p>
           </Section>
         </>
       )}
 
       {update.isError && !Object.keys(errors).length && <div className="alert alert-error">{errorMessage(update.error)}</div>}
-      {saved && !dirty && <div className="alert alert-success">Impostazioni salvate.{restartNote(running)}</div>}
+      {saved && !dirty && <div className="alert alert-success">{t('Settings saved.')}{restartNote(running)}</div>}
       <div className="btn-row">
         <button type="submit" className="btn btn-primary" disabled={!dirty || update.isPending}>
-          Salva
+          {t('Save')}
         </button>
-        {dirty && <span className="muted small">Modifiche non salvate</span>}
+        {dirty && <span className="muted small">{t('Unsaved changes')}</span>}
       </div>
     </form>
   )
@@ -470,7 +484,7 @@ function ConfigInput({ field, value, error, onChange }: { field: ConfigField; va
       <span>{field.label}</span>
       {field.options ? (
         <select value={value} onChange={(e) => onChange(e.target.value)}>
-          <option value="">Predefinito</option>
+          <option value="">{t('Default')}</option>
           {/* Un valore nel file che il pannello non conosce resta selezionabile */}
           {value && !field.options.some(([v]) => v === value) && <option value={value}>{value}</option>}
           {field.options.map(([v, label]) => (
@@ -480,7 +494,7 @@ function ConfigInput({ field, value, error, onChange }: { field: ConfigField; va
           ))}
         </select>
       ) : (
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder ?? 'Predefinito'} pattern={field.pattern} maxLength={field.maxLength} />
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder ?? t('Default')} pattern={field.pattern} maxLength={field.maxLength} />
       )}
       {field.hint && <span className="small">{field.hint}</span>}
       {error && <span className="error-text">{error}</span>}

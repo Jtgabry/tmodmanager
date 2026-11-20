@@ -97,7 +97,7 @@ function buildTable(lengths: Uint8Array, count: number): Int32Array {
     const code = next[len]++
     const from = code << (MAX_BITS - len)
     const to = (code + 1) << (MAX_BITS - len)
-    if (to > table.length) throw new XnbError('Albero di Huffman non valido')
+    if (to > table.length) throw new XnbError('Invalid Huffman tree')
     table.fill((s << 5) | len, from, to)
   }
   return table
@@ -105,7 +105,7 @@ function buildTable(lengths: Uint8Array, count: number): Int32Array {
 
 function decode(bits: Bits, table: Int32Array): number {
   const entry = table[bits.peek16()]
-  if (entry < 0) throw new XnbError('Codice di Huffman non valido')
+  if (entry < 0) throw new XnbError('Invalid Huffman code')
   bits.remove(entry & 31)
   return entry >> 5
 }
@@ -157,12 +157,12 @@ class Lzx {
     const bits = new Bits(data, pos, end)
     if (!this.started) {
       // Traduzione E8 (eseguibili x86): nelle texture non c'è
-      if (bits.read(1)) throw new XnbError('LZX con traduzione E8: non supportato')
+      if (bits.read(1)) throw new XnbError('LZX with E8 translation: not supported')
       this.started = true
     }
     let o = at
     const target = at + size
-    if (target > out.length) throw new XnbError('Dati decompressi oltre la dimensione dichiarata')
+    if (target > out.length) throw new XnbError('Decompressed data beyond the declared size')
 
     while (o < target) {
       if (this.blockRemaining === 0) {
@@ -187,21 +187,21 @@ class Lzx {
           this.lengthTable = buildTable(this.lengthLengths, LENGTH_ELEMENTS)
         } else if (this.blockType === 3) {
           bits.align()
-          if (bits.pos + 12 > end) throw new XnbError('Blocco LZX troncato')
+          if (bits.pos + 12 > end) throw new XnbError('Truncated LZX block')
           const view = new DataView(data.buffer, data.byteOffset + bits.pos, 12)
           this.r0 = view.getUint32(0, true)
           this.r1 = view.getUint32(4, true)
           this.r2 = view.getUint32(8, true)
           bits.pos += 12
         } else {
-          throw new XnbError(`Tipo di blocco LZX non valido (${this.blockType})`)
+          throw new XnbError(`Invalid LZX block type (${this.blockType})`)
         }
       }
 
       let run = Math.min(this.blockRemaining, target - o)
       this.blockRemaining -= run
       if (this.blockType === 3) {
-        if (bits.pos + run > end) throw new XnbError('Blocco LZX troncato')
+        if (bits.pos + run > end) throw new XnbError('Truncated LZX block')
         out.set(data.subarray(bits.pos, bits.pos + run), o)
         bits.pos += run
         o += run
@@ -247,14 +247,14 @@ class Lzx {
           this.r2 = this.r0
           this.r0 = offset
         }
-        if (offset > o || offset > 1 << WINDOW_BITS) throw new XnbError('Distanza LZX oltre l\'inizio dei dati')
-        if (o + length > out.length) throw new XnbError('Dati decompressi oltre la dimensione dichiarata')
+        if (offset > o || offset > 1 << WINDOW_BITS) throw new XnbError('LZX distance before the start of the data')
+        if (o + length > out.length) throw new XnbError('Decompressed data beyond the declared size')
         for (let k = 0; k < length; k++, o++) out[o] = out[o - offset]
         run -= length
       }
       // Una copia può superare la fine del pezzo: quei byte li toglie al blocco
       if (run < 0) {
-        if (-run > this.blockRemaining) throw new XnbError('Copia LZX oltre la fine del blocco')
+        if (-run > this.blockRemaining) throw new XnbError('LZX copy beyond the end of the block')
         this.blockRemaining += run
       }
     }
@@ -282,11 +282,11 @@ function inflateXnb(file: Uint8Array, size: number): Uint8Array {
       block = (hi << 8) | lo
     }
     if (block === 0 || frame === 0) break
-    if (pos + block > file.length) throw new XnbError('File .xnb troncato')
+    if (pos + block > file.length) throw new XnbError('Truncated .xnb file')
     o = lzx.chunk(file, pos, pos + block, o, Math.min(frame, size - o))
     pos += block
   }
-  if (o !== size) throw new XnbError('Dati del .xnb incompleti')
+  if (o !== size) throw new XnbError('Incomplete .xnb data')
   return out
 }
 
@@ -301,11 +301,11 @@ class Reader {
     this.view = new DataView(data.buffer, data.byteOffset, data.byteLength)
   }
   u8() {
-    if (this.pos >= this.data.length) throw new XnbError('Dati del .xnb troncati')
+    if (this.pos >= this.data.length) throw new XnbError('Truncated .xnb data')
     return this.data[this.pos++]
   }
   i32() {
-    if (this.pos + 4 > this.data.length) throw new XnbError('Dati del .xnb troncati')
+    if (this.pos + 4 > this.data.length) throw new XnbError('Truncated .xnb data')
     const v = this.view.getInt32(this.pos, true)
     this.pos += 4
     return v
@@ -317,17 +317,17 @@ class Reader {
       v |= (b & 0x7f) << shift
       if (!(b & 0x80)) return v
     }
-    throw new XnbError('Intero non valido nel .xnb')
+    throw new XnbError('Invalid integer in the .xnb')
   }
   string() {
     const length = this.varint()
-    if (this.pos + length > this.data.length) throw new XnbError('Dati del .xnb troncati')
+    if (this.pos + length > this.data.length) throw new XnbError('Truncated .xnb data')
     const s = new TextDecoder().decode(this.data.subarray(this.pos, this.pos + length))
     this.pos += length
     return s
   }
   bytes(n: number) {
-    if (n < 0 || this.pos + n > this.data.length) throw new XnbError('Dati del .xnb troncati')
+    if (n < 0 || this.pos + n > this.data.length) throw new XnbError('Truncated .xnb data')
     const v = this.data.subarray(this.pos, this.pos + n)
     this.pos += n
     return v
@@ -338,12 +338,12 @@ export type Texture = { width: number; height: number; rgba: Buffer }
 
 /** Texture2D di un .xnb (formato Color), con l'alfa non premoltiplicato (come nei PNG). */
 export function readXnbTexture(file: Uint8Array): Texture {
-  if (file.length < 10 || file[0] !== 0x58 || file[1] !== 0x4e || file[2] !== 0x42) throw new XnbError('Non è un file .xnb')
+  if (file.length < 10 || file[0] !== 0x58 || file[1] !== 0x4e || file[2] !== 0x42) throw new XnbError('Not a .xnb file')
   const flags = file[5]
   const view = new DataView(file.buffer, file.byteOffset, file.byteLength)
   let data: Uint8Array
   if (flags & 0x80) data = inflateXnb(file, view.getUint32(10, true))
-  else if (flags & 0x40) throw new XnbError('.xnb compresso LZ4: non supportato')
+  else if (flags & 0x40) throw new XnbError('LZ4-compressed .xnb: not supported')
   else data = file.subarray(10)
 
   const r = new Reader(data)
@@ -354,15 +354,15 @@ export function readXnbTexture(file: Uint8Array): Texture {
   }
   r.varint() // risorse condivise
   const index = r.varint()
-  if (!readers[index - 1]?.startsWith('Microsoft.Xna.Framework.Content.Texture2DReader')) throw new XnbError('Il .xnb non contiene una texture')
+  if (!readers[index - 1]?.startsWith('Microsoft.Xna.Framework.Content.Texture2DReader')) throw new XnbError('The .xnb does not contain a texture')
   const format = r.i32()
-  if (format !== 0) throw new XnbError(`Formato della texture non supportato (${format})`)
+  if (format !== 0) throw new XnbError(`Unsupported texture format (${format})`)
   const width = r.i32()
   const height = r.i32()
-  if (width <= 0 || height <= 0 || width > 16384 || height > 16384) throw new XnbError('Dimensioni della texture non valide')
+  if (width <= 0 || height <= 0 || width > 16384 || height > 16384) throw new XnbError('Invalid texture dimensions')
   r.i32() // mipmap: serve solo la prima
   const size = r.i32()
-  if (size !== width * height * 4) throw new XnbError('Dimensione dei pixel della texture non valida')
+  if (size !== width * height * 4) throw new XnbError('Invalid texture pixel size')
   const rgba = Buffer.from(r.bytes(size))
   // XNA salva i colori moltiplicati per l'alfa: si riportano come nei PNG
   for (let i = 0; i < rgba.length; i += 4) {

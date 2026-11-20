@@ -7,6 +7,7 @@ import { hasArchivedVersion, MOD_VERSION, useArchivedVersion } from './archive.j
 import { paths } from './paths.js'
 import { dependencyClosure, disableMods, enableMods, listMods, MOD_NAME, ModError, readEnabled } from './mods.js'
 import type { ServerDefinition } from './registry.js'
+import { tr } from './i18n.js'
 
 /**
  * Modpack = insieme di mod con un nome, attivabile o disattivabile.
@@ -108,14 +109,14 @@ export async function packsPinning(server: ServerDefinition, name: string, versi
 
 export async function findModpack(server: ServerDefinition, id: string): Promise<Modpack> {
   const pack = (await load(server)).find((p) => p.id === id)
-  if (!pack) throw new ModError('Modpack non trovato', 404)
+  if (!pack) throw new ModError(tr('Modpack not found'), 404)
   return pack
 }
 
 export async function createModpack(server: ServerDefinition, input: ModpackInput) {
   const packs = await load(server)
   if (packs.some((p) => p.name.toLowerCase() === input.name.toLowerCase())) {
-    throw new ModError(`Esiste già un modpack chiamato "${input.name}"`, 422)
+    throw new ModError(tr('A modpack named "{name}" already exists', { name: input.name }), 422)
   }
   const mods = [...new Set(input.mods)]
   // Un pack creato con mod già tutte abilitate nasce attivo: altrimenti la prossima
@@ -137,9 +138,9 @@ export async function createModpack(server: ServerDefinition, input: ModpackInpu
 export async function updateModpack(server: ServerDefinition, id: string, input: ModpackInput) {
   const packs = await load(server)
   const index = packs.findIndex((p) => p.id === id)
-  if (index < 0) throw new ModError('Modpack non trovato', 404)
+  if (index < 0) throw new ModError(tr('Modpack not found'), 404)
   if (packs.some((p) => p.id !== id && p.name.toLowerCase() === input.name.toLowerCase())) {
-    throw new ModError(`Esiste già un modpack chiamato "${input.name}"`, 422)
+    throw new ModError(tr('A modpack named "{name}" already exists', { name: input.name }), 422)
   }
   const mods = [...new Set(input.mods)]
   packs[index] = { ...packs[index], ...input, mods, versions: cleanVersions(mods, input.versions) }
@@ -149,14 +150,14 @@ export async function updateModpack(server: ServerDefinition, id: string, input:
 
 export async function deleteModpack(server: ServerDefinition, id: string) {
   const packs = await load(server)
-  if (!packs.some((p) => p.id === id)) throw new ModError('Modpack non trovato', 404)
+  if (!packs.some((p) => p.id === id)) throw new ModError(tr('Modpack not found'), 404)
   await save(server, packs.filter((p) => p.id !== id))
 }
 
 async function setActive(server: ServerDefinition, id: string, active: boolean): Promise<Modpack[]> {
   const packs = await load(server)
   const pack = packs.find((p) => p.id === id)
-  if (!pack) throw new ModError('Modpack non trovato', 404)
+  if (!pack) throw new ModError(tr('Modpack not found'), 404)
   pack.active = active
   await save(server, packs)
   return packs
@@ -174,14 +175,14 @@ export async function enableModpack(server: ServerDefinition, id: string, { excl
   const { mods } = await listMods(server)
   const { missing, unavailable, toSwitch } = await resolvePack(server, pack, new Map(mods.map((m) => [m.name, m.version])))
   // Prima i controlli: se manca qualcosa il pack e le mod restano come sono
-  if (missing.length) throw new ModError(`Mod del pack non installate: ${missing.join(', ')}`, 422, { missing })
+  if (missing.length) throw new ModError(tr('Pack mods not installed: {mods}', { mods: missing.join(', ') }), 422, { missing })
   if (unavailable.length) {
     const list = unavailable.map((n) => `${n} v${pack.versions[n]}`).join(', ')
-    throw new ModError(`Versioni bloccate non più disponibili nell'archivio: ${list}. Sceglile di nuovo nel pack.`, 422, { unavailable })
+    throw new ModError(tr('Locked versions no longer available in the archive: {mods}. Choose them again in the pack.', { mods: list }), 422, { unavailable })
   }
   const graph = new Map(mods.map((m) => [m.name, m.dependencies]))
   const absent = [...dependencyClosure(graph, pack.mods)].filter((n) => !graph.has(n) && !toSwitch.some((s) => s.name === n))
-  if (absent.length) throw new ModError(`Dipendenze mancanti: ${absent.join(', ')}. Installale prima di attivare il pack.`, 422, { missing: absent })
+  if (absent.length) throw new ModError(tr('Missing dependencies: {mods}. Install them before activating the pack.', { mods: absent.join(', ') }), 422, { missing: absent })
 
   for (const change of toSwitch) await useArchivedVersion(server, change.name, change.to)
   const enabled = await enableMods(server, pack.mods)

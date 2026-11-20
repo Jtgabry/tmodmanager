@@ -24,14 +24,14 @@ class SetupController extends Controller
 
     public function store(SetupRequest $request): JsonResponse
     {
-        abort_unless($request->hasSession(), 400, 'Il login funziona solo dalla SPA (sessione assente).');
+        abort_unless($request->hasSession(), 400, __('Login only works from the web app (no session).'));
 
         // Un solo tentativo alla volta: due richieste insieme non devono creare due amministratori
         $user = Cache::lock('initial-setup', 10)->block(5, function () use ($request): User {
-            abort_unless(InitialSetup::required(), 409, 'La configurazione iniziale è già stata completata.');
+            abort_unless(InitialSetup::required(), 409, __('The initial setup has already been completed.'));
 
             if (! InitialSetup::verify($request->validated('code'))) {
-                throw ValidationException::withMessages(['code' => 'Codice non valido. Lo mostra il comando "php artisan setup:code".']);
+                throw ValidationException::withMessages(['code' => __('Invalid code. The "php artisan setup:code" command shows it.')]);
             }
 
             $user = new User($request->safe()->only(['name', 'email', 'password']));

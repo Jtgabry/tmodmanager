@@ -1,6 +1,7 @@
 import { formatBytes } from '../../lib/format'
 import { itemFraction } from '../../lib/jobs'
 import type { UpdateJobItem } from '../../lib/types'
+import { t } from '../../i18n'
 
 function label(item: UpdateJobItem, fraction: number | null) {
   if (item.state === 'queued') return 'In coda'
@@ -24,7 +25,7 @@ export default function CardJobProgress({ item, cancelling, onCancel }: { item: 
         <div
           className="progress"
           role="progressbar"
-          aria-label={`Avanzamento di ${item.name}`}
+          aria-label={t('Progress of {mod}', { mod: item.name })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={indeterminate ? undefined : Math.round(fraction * 100)}
@@ -37,8 +38,8 @@ export default function CardJobProgress({ item, cancelling, onCancel }: { item: 
         className="btn btn-sm btn-icon btn-danger-outline"
         disabled={cancelling || item.state === 'installing'}
         onClick={onCancel}
-        aria-label={`Annulla ${item.name}`}
-        title={item.state === 'installing' ? "L'installazione non si può più annullare" : 'Annulla'}
+        aria-label={t('Cancel {name}', { name: item.name })}
+        title={item.state === 'installing' ? t('The installation can no longer be cancelled') : t('Cancel')}
       >
         <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 6l12 12M18 6L6 18" />

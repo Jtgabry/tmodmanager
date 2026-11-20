@@ -125,6 +125,16 @@ h1 {
   gap: 0.5rem;
 }
 
+.lang-select {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  background: transparent;
+}
+
+.auth-lang {
+  align-self: flex-end;
+}
+
 .icon-btn {
   width: 44px;
   height: 44px;
@@ -438,6 +448,7 @@ h1 {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.5rem;
     margin-top: auto;
     padding: 0.75rem 0.5rem 0;
     border-top: 2px solid var(--border);

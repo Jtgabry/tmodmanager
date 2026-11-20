@@ -23,9 +23,9 @@ export const ServerDefinition = z
      */
     awaitingTshock: z.boolean().optional(),
     /** Cartella di installazione (TerrariaServer.bin.x86_64, TShock.Server oppure start-tModLoaderServer.sh). */
-    installDir: z.string().refine(isAbsolute, 'deve essere un percorso assoluto'),
+    installDir: z.string().refine(isAbsolute, 'must be an absolute path'),
     /** tModLoader: passato come -tmlsavedirectory (Mods/, ModConfigs/, Worlds/…). I mondi stanno in Worlds/ per entrambi i giochi. */
-    saveDir: z.string().refine(isAbsolute, 'deve essere un percorso assoluto'),
+    saveDir: z.string().refine(isAbsolute, 'must be an absolute path'),
     /** serverconfig.txt, relativo a installDir oppure assoluto. */
     configFile: z.string().min(1).default('serverconfig.txt'),
     /** Nome della sessione screen; default "tml-<id>". */
@@ -43,7 +43,7 @@ export type ServerDefinition = z.output<typeof ServerDefinition>
 
 const RegistryFile = z.object({ servers: z.array(ServerDefinition) }).refine(
   (r) => new Set(r.servers.map((s) => s.id)).size === r.servers.length,
-  'id dei server duplicati',
+  'duplicate server ids',
 )
 
 export const registryPath = paths.registry

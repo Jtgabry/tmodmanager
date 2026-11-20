@@ -22,13 +22,13 @@ class TagReader {
   constructor(private readonly buf: Buffer) {}
 
   private need(n: number) {
-    if (this.pos + n > this.buf.length) throw new WorldFileError('File .twld troncato')
+    if (this.pos + n > this.buf.length) throw new WorldFileError('Truncated .twld file')
   }
   private string() {
     this.need(2)
     const length = this.buf.readInt16BE(this.pos)
     this.pos += 2
-    if (length < 0) throw new WorldFileError('Stringa non valida nel .twld')
+    if (length < 0) throw new WorldFileError('Invalid string in the .twld')
     this.need(length)
     const s = this.buf.toString('utf8', this.pos, this.pos + length)
     this.pos += length
@@ -63,7 +63,7 @@ class TagReader {
         return b.readDoubleBE(this.pos - 8)
       case 7: {
         const length = this.payload(3) as number
-        if (length < 0) throw new WorldFileError('Dati non validi nel .twld')
+        if (length < 0) throw new WorldFileError('Invalid data in the .twld')
         this.need(length)
         this.pos += length
         return b.subarray(this.pos - length, this.pos)
@@ -74,7 +74,7 @@ class TagReader {
         this.need(5)
         const elementType = b[this.pos++]
         const count = this.payload(3) as number
-        if (elementType === 0 && count > 0) throw new WorldFileError('Lista non valida nel .twld')
+        if (elementType === 0 && count > 0) throw new WorldFileError('Invalid list in the .twld')
         const list: Tag[] = []
         for (let i = 0; i < count; i++) list.push(this.payload(elementType))
         return list
@@ -96,13 +96,13 @@ class TagReader {
         return ints
       }
       default:
-        throw new WorldFileError(`Tipo di tag sconosciuto nel .twld (${type})`)
+        throw new WorldFileError(`Unknown tag type in the .twld (${type})`)
     }
   }
 
   root() {
     this.need(1)
-    if (this.buf[this.pos++] !== 10) throw new WorldFileError('Il .twld non inizia con un TagCompound')
+    if (this.buf[this.pos++] !== 10) throw new WorldFileError('The .twld does not start with a TagCompound')
     this.string()
     return this.payload(10) as { [key: string]: Tag }
   }
@@ -127,7 +127,7 @@ export function readModBlocks(gzipped: Buffer): ModBlocks | null {
   try {
     data = gunzipSync(gzipped)
   } catch {
-    throw new WorldFileError('Il .twld non è un file gzip valido')
+    throw new WorldFileError('The .twld is not a valid gzip file')
   }
   const tiles = new TagReader(data).root().tiles
   if (!tiles || typeof tiles !== 'object' || Buffer.isBuffer(tiles) || Array.isArray(tiles)) return null
@@ -154,7 +154,7 @@ export function overlayModBlocks(pixels: Uint32Array, layers: Uint8Array, width:
     const total = width * height
     let p = 0
     for (let i = 0; i < total; i++) {
-      if (p + 2 > data.length) throw new WorldFileError('Dati delle mod nel .twld troncati')
+      if (p + 2 > data.length) throw new WorldFileError('Truncated mod data in the .twld')
       const value = data[p] | (data[p + 1] << 8)
       p += 2
       if (!value) continue

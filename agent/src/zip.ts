@@ -38,7 +38,7 @@ export async function writeZip(target: string, entries: ZipEntry[], comment = ''
     let offset = 0
     for (const entry of entries) {
       const data = await readFile(entry.path)
-      if (data.length > MAX_SIZE) throw new Error(`${entry.name} è troppo grande per uno zip (oltre 4 GB)`)
+      if (data.length > MAX_SIZE) throw new Error(`${entry.name} is too large for a zip (over 4 GB)`)
       const method = entry.store ? STORE : DEFLATE
       const compressed = entry.store ? data : await deflate(data, { level: 6 })
       const crc = crc32(data)
@@ -77,7 +77,7 @@ export async function writeZip(target: string, entries: ZipEntry[], comment = ''
       central.push(header, name)
 
       offset += local.length + name.length + compressed.length
-      if (offset > MAX_SIZE) throw new Error('Archivio troppo grande (oltre 4 GB)')
+      if (offset > MAX_SIZE) throw new Error('Archive too large (over 4 GB)')
     }
 
     const directory = Buffer.concat(central)

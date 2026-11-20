@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios'
+import { getLocale, t } from '../i18n'
 
 // Stesso dominio del backend: Sanctum usa i cookie di sessione (auth SPA).
 export const api = axios.create({
@@ -6,6 +7,12 @@ export const api = axios.create({
   withCredentials: true,
   withXSRFToken: true,
   headers: { Accept: 'application/json' },
+})
+
+// Messaggi di backend e agent nella lingua scelta
+api.interceptors.request.use((config) => {
+  config.headers.set('Accept-Language', getLocale())
+  return config
 })
 
 /** Ottiene il cookie XSRF-TOKEN: va chiamato prima di login e registrazione. */
@@ -31,10 +38,10 @@ export function errorMessage(error: unknown): string {
     const firstFieldError = body?.errors ? Object.values(body.errors)[0]?.[0] : undefined
     if (firstFieldError) return firstFieldError
     if (body?.message) return body.message
-    if (!error.response) return 'Impossibile contattare il server.'
-    return `Errore ${error.response.status}`
+    if (!error.response) return t('Unable to reach the server.')
+    return t('Error {status}', { status: error.response.status })
   }
-  return error instanceof Error ? error.message : 'Errore sconosciuto'
+  return error instanceof Error ? error.message : t('Unknown error')
 }
 
 export function fieldErrors(error: unknown): Record<string, string> {

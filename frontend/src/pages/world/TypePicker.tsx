@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { WorldEditorCatalogEntry } from '../../lib/types'
+import { t } from '../../i18n'
 
 /** "StoneSlab" → "Stone Slab", con la mod se è di una mod. */
 const label = (e: WorldEditorCatalogEntry) => `${e.name.replace(/([a-z])([A-Z])/g, '$1 $2')}${e.mod ? ` · ${e.mod}` : ''}${e.object ? ' (oggetto)' : ''} #${e.type}`
@@ -26,7 +27,7 @@ export default function TypePicker({
         className="world-editor-type"
         list={listId}
         value={text ?? (current ? label(current) : '')}
-        placeholder={`${kind}: cerca per nome`}
+        placeholder={t('{kind}: search by name', { kind })}
         aria-label={kind}
         onChange={(e) => {
           setText(e.target.value)

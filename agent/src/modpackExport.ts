@@ -7,6 +7,7 @@ import { findModpack } from './modpacks.js'
 import { dependencyClosure, listMods, ModError, modsDir, tmpDir } from './mods.js'
 import type { ServerDefinition } from './registry.js'
 import { writeZip, type ZipEntry } from './zip.js'
+import { tr } from './i18n.js'
 
 /**
  * Esportazione di un modpack come cartella di tModLoader compressa in .zip:
@@ -32,8 +33,8 @@ export type PackExport = { path: string; filename: string; size: number; cleanup
 
 export async function exportModpackZip(server: ServerDefinition, id: string): Promise<PackExport> {
   const pack = await findModpack(server, id)
-  if (!pack.mods.length) throw new ModError('Il modpack è vuoto: non c\'è niente da esportare', 422)
-  if (pack.mods.every(isModAddon)) throw new ModError('Il modpack contiene solo add-on di tModManager, che restano sul server: non c\'è niente da esportare', 422)
+  if (!pack.mods.length) throw new ModError(tr('The modpack is empty: there is nothing to export'), 422)
+  if (pack.mods.every(isModAddon)) throw new ModError(tr('The modpack only contains tModManager add-ons, which stay on the server: there is nothing to export'), 422)
   const { mods } = await listMods(server)
   const installed = new Map(mods.map((m) => [m.name, m]))
   const graph = new Map(mods.map((m) => [m.name, m.dependencies]))
@@ -56,7 +57,7 @@ export async function exportModpackZip(server: ServerDefinition, id: string): Pr
     entries.push({ name: `${folder}/Mods/${name}.tmod`, path: file, store: true })
     included.push(name)
   }
-  if (!included.length) throw new ModError(`Nessuna mod del pack è disponibile sul server: ${missing.join(', ')}`, 422)
+  if (!included.length) throw new ModError(tr('No mod of the pack is available on the server: {mods}', { mods: missing.join(', ') }), 422)
 
   // Configurazioni: in ModConfigs/ ogni file è <NomeMod>_<NomeConfig>.json
   const configsDir = join(server.saveDir, 'ModConfigs')
