@@ -24,7 +24,7 @@ import { refreshInstalledModAddons } from './modAddons.js'
 import { pluginsFingerprint, refreshActiveAddons } from './plugins.js'
 import { paths } from './paths.js'
 import type { ServerDefinition } from './registry.js'
-import { listSessions, quitSession, type ScreenSession, sendLine, startSession } from './screen.js'
+import { listSessions, quitSession, type ScreenSession, sendLine, startSession, wipeDeadSessions } from './screen.js'
 import { readConfigPassword, readServerConfig } from './serverConfig.js'
 import { type Game, gameLabel, TERRARIA_ASSEMBLY, TERRARIA_BINARY, TSHOCK_BINARY, tshockDataDir, tshockPluginsDir } from './games.js'
 import { gameVersion, installedVersion, isInstalled, recordWorldRelease } from './tml.js'
@@ -326,10 +326,13 @@ export class ServerManager {
 
   private async doStart(server: ServerDefinition) {
     this.phases.set(server.id, 'starting')
+    // Socket morti (es. dopo un riavvio forzato della macchina): vanno tolti, "quit" su di loro fallisce
+    await wipeDeadSessions()
     const sessions = await listSessions()
     const leftover = sessions.find((s) => s.name === server.screenSession)
-    // Sessione rimasta aperta senza server (es. shell interattiva dopo "exit"): la chiudiamo per ripartire puliti
-    if (leftover) await quitSession(leftover)
+    // Sessione rimasta aperta senza server (es. shell interattiva dopo "exit"): la chiudiamo per ripartire puliti.
+    // Se non si lascia chiudere non è un motivo per non avviare: la nuova sessione ha un altro pid.
+    if (leftover) await quitSession(leftover).catch(() => undefined)
 
     const logFile = await rotateConsoleLog(server)
     const settings = await readServerConfig(server.configPath)

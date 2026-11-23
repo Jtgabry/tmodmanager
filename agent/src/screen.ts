@@ -7,10 +7,14 @@ const run = promisify(execFile)
 
 export type ScreenSession = { pid: number; name: string }
 
-/** Estrae le sessioni dall'output di `screen -ls` (righe tipo "\t44886.server\t(data)\t(Detached)"). */
+/**
+ * Estrae le sessioni dall'output di `screen -ls` (righe tipo "\t44886.server\t(data)\t(Detached)").
+ * Salta i socket morti ("(Dead ???)", es. rimasti dopo un riavvio forzato): non c'è nessuna sessione dietro.
+ */
 export function parseScreenList(output: string): ScreenSession[] {
   const sessions: ScreenSession[] = []
   for (const line of output.split('\n')) {
+    if (/\(Dead\b/i.test(line)) continue
     const match = line.match(/^\s+(\d+)\.(\S+)\s+\(/)
     if (match) sessions.push({ pid: Number(match[1]), name: match[2] })
   }
@@ -24,6 +28,11 @@ export async function listSessions(): Promise<ScreenSession[]> {
     // screen -ls esce con codice 1 quando non ci sono sessioni (e su alcune versioni anche quando ci sono)
     return parseScreenList((err as { stdout?: string }).stdout ?? '')
   }
+}
+
+/** Rimuove i socket di sessioni morte (screen -wipe esce con codice != 0 anche quando va bene). */
+export async function wipeDeadSessions() {
+  await run('screen', ['-wipe']).catch(() => undefined)
 }
 
 const target = (s: ScreenSession) => `${s.pid}.${s.name}`

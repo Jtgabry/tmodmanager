@@ -10,6 +10,8 @@ test('parseScreenList estrae pid e nome delle sessioni', () => {
     { pid: 44886, name: 'server' },
     { pid: 123, name: 'tml-test' },
   ])
+  // Socket rimasti dopo un riavvio forzato: nessuna sessione dietro
+  assert.deepEqual(parseScreenList('There is a screen on:\n\t39.tml-terraminchia\t(Dead ???)\nRemove dead screens with \'screen -wipe\'.\n'), [])
   assert.deepEqual(parseScreenList('No Sockets found in /run/screen/S-utente.\n'), [])
 })
 
