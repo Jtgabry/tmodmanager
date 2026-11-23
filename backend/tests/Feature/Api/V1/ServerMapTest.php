@@ -144,6 +144,22 @@ class ServerMapTest extends TestCase
             ->assertJsonPath('message', 'Editor non disponibile');
     }
 
+    public function test_world_edits_are_undone_through_the_agent(): void
+    {
+        $id = '1763650000000-0123abcd-4567-89ab-cdef-0123456789ab';
+        $this->actingAsMember([]);
+        $this->postJson(route('api.v1.servers.map.editor.undo', 'alfa'), ['id' => $id])->assertForbidden();
+
+        $this->actingAsMember([ServerAbility::Console]);
+        Http::fake([self::AGENT_URL.'/servers/alfa/map/editor/undo' => Http::response(['data' => ['applied' => 9, 'failed' => 0, 'failures' => []]])]);
+
+        $this->postJson(route('api.v1.servers.map.editor.undo', 'alfa'), ['id' => '../x'])->assertUnprocessable();
+        $this->postJson(route('api.v1.servers.map.editor.undo', 'alfa'), ['id' => $id])->assertOk()->assertJsonPath('data.applied', 9);
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === self::AGENT_URL.'/servers/alfa/map/editor/undo' && $request->data() === ['id' => $id]);
+        Http::assertSentCount(1);
+    }
+
     public function test_world_settings_require_the_console_ability(): void
     {
         $this->actingAsMember([]);

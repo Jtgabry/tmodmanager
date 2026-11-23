@@ -32,6 +32,10 @@ export default {
   'Moving the spawn…': 'Sposto lo spawn…',
   'Spawn not moved: {reason}': 'Spawn non spostato: {reason}',
   '{count} tiles changed': '{count} tile modificate',
+  '{count} tiles restored': '{count} tile ripristinate',
+  Undo: 'Annulla',
+  'Undo the last stroke (Ctrl+Z): tiles changed since by someone else stay as they are':
+    "Annulla l'ultimo tratto (Ctrl+Z): le tile cambiate nel frattempo da altri restano come sono",
   '{count} not': '{count} no',
   'Left button to draw, right button to move the map.': 'Tasto sinistro per disegnare, destro per spostare la mappa.',
   'No players in the world.': 'Nessun giocatore nel mondo.',

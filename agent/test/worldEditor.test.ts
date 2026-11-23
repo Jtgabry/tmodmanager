@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { config } from '../src/config.ts'
 import { ServerDefinition } from '../src/registry.ts'
-import { changeWorldSettings, editWorld, WorldEditorError, worldEditorAvailable, worldEditorCatalog, worldSettings } from '../src/worldEditor.ts'
+import { changeWorldSettings, editWorld, undoWorldEdit, WorldEditorError, worldEditorAvailable, worldEditorCatalog, worldSettings } from '../src/worldEditor.ts'
 
 async function setup(game: 'tmodloader' | 'tshock' = 'tmodloader') {
   config.dataDir = await mkdtemp(join(tmpdir(), 'tmm-editor-'))
@@ -104,4 +104,29 @@ test('settaggi del mondo: stato letto dalla mod, cambiamenti validati e mandati 
   for (const invalid of [{}, { clock: 1440 }, { gameMode: 3 }, { bosses: { wallOfFlesh: true } }, { bosses: { foo: true } }, { weather: 'storm' }]) {
     await assert.rejects(changeWorldSettings(server, invalid), (e: WorldEditorError) => e.code === 'invalid', JSON.stringify(invalid))
   }
+})
+
+test("annulla: l'id del comando torna nell'esito e si rimanda alla mod; id non validi rifiutati", async () => {
+  const { server, dir } = await setup()
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, 'alive'), '1\n')
+  const id = '1763650000000-0123abcd-4567-89ab-cdef-0123456789ab'
+  const result = { applied: 9, failed: 1, failures: [{ index: -1, x: 4, y: 5, reason: 'changed since' }] }
+  const [undone, command] = await Promise.all([undoWorldEdit(server, { id }), respond(dir, result)])
+  assert.deepEqual(undone, result)
+  assert.equal(command.undo, id)
+
+  for (const invalid of [{}, { id: '../../etc' }, { id: 'abc' }, { id: 12 }]) {
+    await assert.rejects(undoWorldEdit(server, invalid), (e: WorldEditorError) => e.code === 'invalid', JSON.stringify(invalid))
+  }
+})
+
+test("annulla: errore della mod (modifica troppo vecchia) come errore dell'editor", async () => {
+  const { server, dir } = await setup()
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, 'alive'), '1\n')
+  const id = '1763650000000-0123abcd-4567-89ab-cdef-0123456789ab'
+  const [outcome] = await Promise.allSettled([undoWorldEdit(server, { id }), respond(dir, { applied: 0, failed: 0, failures: [], error: 'this change can no longer be undone' })])
+  assert.equal(outcome.status, 'rejected')
+  assert.equal((outcome as PromiseRejectedResult).reason.code, 'invalid')
 })

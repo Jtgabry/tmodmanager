@@ -110,8 +110,8 @@ Canale con il pannello, in `LiveMap/editor/`:
 
 | File | Chi lo scrive | Contenuto |
 | --- | --- | --- |
-| `inbox/{id}.json` | agent (`.tmp`, poi rinominato) | `{ createdAt, ops: [{ op, x, y, type?, style? }] }`, op = `place-tile`, `kill-tile`, `place-wall`, `kill-wall`, al massimo 4096; oppure `{ createdAt, settings: {…} }` (sotto) |
-| `outbox/{id}.json` | mod | esito: `{ applied, failed, failures: [{ index, x, y, reason, setting? }], error? }`; l'agent lo legge e lo cancella |
+| `inbox/{id}.json` | agent (`.tmp`, poi rinominato) | `{ createdAt, ops: [{ op, x, y, type?, style? }] }`, op = `place-tile`, `kill-tile`, `place-wall`, `kill-wall`, al massimo 4096; oppure `{ createdAt, settings: {…} }` (sotto), oppure `{ createdAt, undo: id }` |
+| `outbox/{id}.json` | mod | esito: `{ applied, failed, failures: [{ index, x, y, reason, setting? }], error?, undoId? }`; l'agent lo legge e lo cancella |
 | `world.json` | mod, ogni 2 s | settaggi del mondo adesso (`WorldSettings.State`) |
 | `catalog.json` | mod, a ogni caricamento del mondo | blocchi e muri: tipo, nome (`TileID`/`WallID` o della mod), mod, oggetto di più tile |
 | `alive` | mod, ogni 2 s | l'editor risponde (il pannello mostra gli strumenti solo così) |
@@ -126,4 +126,13 @@ di sangue e al tramonto l'eclissi), `rain`, `sandstorm`, `bloodMoon` (solo di no
 `moonPhase` (0–7), `gameMode` (0–2; un mondo Viaggio non si cambia), `hardMode` (attivarlo è `WorldGen.StartHardmode`,
 come sconfiggere il Muro di carne: genera consacrato e corruzione/cremisi; disattivarlo toglie solo lo stato),
 `spawnX`/`spawnY`, `bosses` (boss di Terraria sconfitti, per nome: `slimeKing`, `eyeOfCthulhu`, … `moonLord`).
+
+Annulla (`TmmLiveMap/EditHistory.cs`): prima di ogni comando `ops` la mod salva i dati grezzi delle tile che può
+toccare (quelle indicate e un bordo di 1 tile, 6 dove ci sono o si piazzano oggetti di più tile) e le casse con
+l'angolo nell'area; dopo, le stesse tile come le ha lasciate il comando. L'esito ha `undoId` (l'id del comando).
+`{ undo: id }` rimette le tile di prima solo dove il mondo è ancora come l'aveva lasciato il comando (le altre sono
+non riuscite, `changed since`), toglie le casse nate col comando (se una nel frattempo è stata riempita, l'annullamento
+non si fa) e ricrea quelle tolte, poi ricalcola i bordi e manda le tile ai client. In memoria gli ultimi 50 comandi
+(al massimo 2 milioni di tile): un riavvio del server li perde. Cartelli e tile entity (cornici, manichini, …) non si
+salvano. Le tile vanno ai client a quadrati di 32 tile su una griglia fissa, solo quelli toccati.
 

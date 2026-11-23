@@ -19,13 +19,36 @@ export function useWorldEditorCatalog(serverId: string, enabled: boolean) {
   })
 }
 
+/** Esito di un tratto: somma dei pezzi, con gli id per annullarli (uno per pezzo che ha cambiato qualcosa). */
+export type WorldEditOutcome = WorldEditResult & { undoIds: string[] }
+
 /** Applica modifiche al mondo a server acceso; l'esito somma quello dei pezzi. */
 export function useWorldEdit(serverId: string) {
   return useMutation({
-    mutationFn: async (ops: WorldEditOp[]): Promise<WorldEditResult> => {
-      const total: WorldEditResult = { applied: 0, failed: 0, failures: [] }
+    mutationFn: async (ops: WorldEditOp[]): Promise<WorldEditOutcome> => {
+      const total: WorldEditOutcome = { applied: 0, failed: 0, failures: [], undoIds: [] }
       for (let i = 0; i < ops.length; i += MAX_OPS) {
         const { data } = await api.post<{ data: WorldEditResult }>(`/servers/${serverId}/map/editor`, { ops: ops.slice(i, i + MAX_OPS) })
+        total.applied += data.data.applied
+        total.failed += data.data.failed
+        total.failures.push(...data.data.failures)
+        if (data.data.undoId) total.undoIds.push(data.data.undoId)
+      }
+      return total
+    },
+  })
+}
+
+/**
+ * Annulla un tratto: i suoi pezzi dall'ultimo al primo. La mod rimette il mondo com'era, tranne le tile cambiate nel
+ * frattempo (contate tra le non riuscite).
+ */
+export function useWorldUndo(serverId: string) {
+  return useMutation({
+    mutationFn: async (undoIds: string[]): Promise<WorldEditResult> => {
+      const total: WorldEditResult = { applied: 0, failed: 0, failures: [] }
+      for (const id of [...undoIds].reverse()) {
+        const { data } = await api.post<{ data: WorldEditResult }>(`/servers/${serverId}/map/editor/undo`, { id })
         total.applied += data.data.applied
         total.failed += data.data.failed
         total.failures.push(...data.data.failures)

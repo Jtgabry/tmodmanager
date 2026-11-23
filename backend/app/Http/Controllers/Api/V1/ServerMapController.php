@@ -116,6 +116,21 @@ class ServerMapController extends Controller
     }
 
     /**
+     * Annulla una modifica di blocchi e muri (l'undoId del suo esito): la mod rimette il mondo com'era, tranne dove
+     * nel frattempo è cambiato.
+     */
+    public function undo(Request $request, string $server): JsonResponse
+    {
+        Gate::authorize('server', [$server, ServerAbility::Console]);
+
+        $validated = $request->validate([
+            'id' => ['required', 'string', 'regex:/^\d{13}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/'],
+        ]);
+
+        return response()->json(['data' => $this->agent->json('post', "/servers/{$server}/map/editor/undo", $validated)]);
+    }
+
+    /**
      * Settaggi del mondo come li vede la mod LiveMap adesso (ora, meteo, eventi, difficoltà, spawn, boss sconfitti).
      */
     public function worldSettings(string $server): JsonResponse

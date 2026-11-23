@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { findServer, type ServerDefinition } from '../registry.js'
 import { readTileTypes, SPRITE_KINDS, type SpriteKind, spritePng } from '../mapSprites.js'
-import { changeWorldSettings, editWorld, WorldEditorError, worldEditorCatalog, worldSettings } from '../worldEditor.js'
+import { changeWorldSettings, editWorld, undoWorldEdit, WorldEditorError, worldEditorCatalog, worldSettings } from '../worldEditor.js'
 import { mapChunkPath, mapOverviewPath, mapTilesPath, mapTypesPath, worldMap } from '../worldMap.js'
 import { tr } from '../i18n.js'
 
@@ -93,6 +93,7 @@ export async function mapRoutes(app: FastifyInstance) {
   for (const [path, run] of [
     ['/servers/:id/map/editor', editWorld],
     ['/servers/:id/map/editor/settings', changeWorldSettings],
+    ['/servers/:id/map/editor/undo', undoWorldEdit],
   ] as const) {
     app.post<Params & { Body: unknown }>(path, async (req, reply) => {
       const s = await server(req.params.id, reply)

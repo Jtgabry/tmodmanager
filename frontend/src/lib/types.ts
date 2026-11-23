@@ -242,7 +242,13 @@ export type WorldEditOp =
   | { op: 'kill-wall'; x: number; y: number }
 
 /** Esito dell'editor; per i settaggi, `setting` dice quale non è cambiato (index = -1). */
-export type WorldEditResult = { applied: number; failed: number; failures: { index: number; x: number; y: number; reason: string; setting?: string }[] }
+export type WorldEditResult = {
+  applied: number
+  failed: number
+  failures: { index: number; x: number; y: number; reason: string; setting?: string }[]
+  /** Modifica di blocchi e muri che ha cambiato qualcosa: id per annullarla. */
+  undoId?: string
+}
 
 /** Boss di Terraria che l'editor può segnare come sconfitti (wallOfFlesh segue l'hardmode). */
 export type WorldBoss =

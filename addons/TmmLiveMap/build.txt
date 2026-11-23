@@ -1,5 +1,5 @@
 displayName = LiveMap
 author = tModManager
-version = 1.9
+version = 1.11
 # Solo sul server: i giocatori non la scaricano e non la vedono
 side = Server

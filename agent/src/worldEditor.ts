@@ -53,6 +53,8 @@ const EditResult = z.object({
   /** setting: settaggio del mondo non cambiato (allora index = -1). */
   failures: z.array(z.object({ index: z.number(), x: z.number(), y: z.number(), reason: z.string(), setting: z.string().optional() })),
   error: z.string().optional(),
+  /** Modifica di blocchi e muri che ha cambiato qualcosa: id per annullarla (undoWorldEdit). */
+  undoId: z.string().optional(),
 })
 export type EditResult = z.infer<typeof EditResult>
 
@@ -61,6 +63,19 @@ export async function editWorld(server: ServerDefinition, body: unknown): Promis
   const parsed = EditRequest.safeParse(body)
   if (!parsed.success) throw new WorldEditorError(tr('Invalid changes: {error}', { error: parsed.error.issues[0]?.message ?? 'format' }), 'invalid')
   return sendCommand(server, { ops: parsed.data.ops })
+}
+
+/** Id dei comandi scritti da sendCommand (anche nel nome del file: niente altro che questo formato). */
+const UndoRequest = z.object({ id: z.string().regex(/^\d{13}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/) })
+
+/**
+ * Annulla una modifica di blocchi e muri (l'undoId del suo esito). La mod rimette le tile di prima solo dove il mondo
+ * è ancora come l'aveva lasciato la modifica; le altre le conta come non riuscite ("changed since").
+ */
+export async function undoWorldEdit(server: ServerDefinition, body: unknown): Promise<EditResult> {
+  const parsed = UndoRequest.safeParse(body)
+  if (!parsed.success) throw new WorldEditorError(tr('Invalid undo request'), 'invalid')
+  return sendCommand(server, { undo: parsed.data.id })
 }
 
 /** Boss di Terraria che si possono segnare come sconfitti (wallOfFlesh si legge soltanto: è l'hardmode). */
@@ -126,7 +141,7 @@ export async function changeWorldSettings(server: ServerDefinition, body: unknow
 }
 
 /** Scrive un comando per la mod e ne aspetta l'esito. */
-async function sendCommand(server: ServerDefinition, payload: { ops: EditOp[] } | { settings: object }): Promise<EditResult> {
+async function sendCommand(server: ServerDefinition, payload: { ops: EditOp[] } | { settings: object } | { undo: string }): Promise<EditResult> {
   const dir = editorDir(server)
   if (!dir || !(await worldEditorAvailable(server))) {
     throw new WorldEditorError(tr('The editor is not available: the server must be running with the LiveMap mod active'), 'unavailable')
@@ -148,7 +163,7 @@ async function sendCommand(server: ServerDefinition, payload: { ops: EditOp[] } 
     await rm(output, { force: true })
     const result = EditResult.safeParse(JSON.parse(raw))
     if (!result.success) throw new WorldEditorError(tr('Invalid response from the mod'), 'invalid')
-    if (result.data.error) throw new WorldEditorError(result.data.error, 'invalid')
+    if (result.data.error) throw new WorldEditorError(trText(result.data.error), 'invalid')
     return { ...result.data, failures: result.data.failures.map((f) => ({ ...f, reason: trText(f.reason) })) }
   }
   // Ritirato: se la mod lo prende comunque, l'esito resta in outbox finché non lo cancella al prossimo avvio

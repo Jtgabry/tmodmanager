@@ -16,7 +16,8 @@ namespace TmmLiveMap;
 ///   editor/catalog.json      blocchi e muri che si possono piazzare (nomi, mod), a ogni caricamento del mondo;
 ///   editor/world.json        settaggi del mondo (ora, meteo, eventi, boss…, vedi WorldSettings), ogni 2 secondi;
 ///   editor/alive             toccato ogni 2 secondi: il pannello sa che l'editor risponde.
-/// Un comando ha "ops" (blocchi e muri) oppure "settings" (WorldSettings.Changes).
+/// Un comando ha "ops" (blocchi e muri), "settings" (WorldSettings.Changes) oppure "undo" (l'id di un comando "ops"
+/// da annullare, vedi EditHistory). L'esito di un comando "ops" che ha cambiato qualcosa ha "undoId".
 ///
 /// Il mondo si tocca solo dal thread di gioco (PostUpdateEverything). A server vuoto Terraria non aggiorna il mondo
 /// e quel thread tace: allora i comandi li esegue il timer, come fa MapEngine per il disegno (nessun altro sta
@@ -31,6 +32,8 @@ public sealed class WorldEditor : IDisposable
     public const int MaxOps = 4096;
     /// <summary>Mobili e oggetti di più tile: quanto oltre le tile toccate può cambiare il mondo (e va mandato ai client).</summary>
     private const int Margin = 6;
+    /// <summary>Esito di <see cref="Apply"/> quando la tile era già così: né riuscita né fallita.</summary>
+    private const string Unchanged = "";
     /// <summary>Lato dei quadrati di tile mandati ai client (NetMessage.SendTileSquare: un pacchetto ciascuno).</summary>
     private const int SquareSize = 32;
 
@@ -43,6 +46,7 @@ public sealed class WorldEditor : IDisposable
     private readonly string _dir, _inbox, _outbox;
     private readonly Action<int, int, int, int>? _changed;
     private readonly object _lock = new();
+    private readonly EditHistory _history = new();
     private readonly Timer _timer;
     private long _lastGameUpdate, _nextPoll, _nextAlive;
     private volatile bool _disposed;
@@ -138,7 +142,7 @@ public sealed class WorldEditor : IDisposable
                 TryDelete(file);
                 var age = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - command.CreatedAt;
                 if (age > MaxAgeMs) continue; // l'agent non aspetta più: non si applica
-                result = Execute(command);
+                result = Execute(command, id);
             }
             catch (Exception ex)
             {
@@ -159,8 +163,9 @@ public sealed class WorldEditor : IDisposable
         }
     }
 
-    private Result Execute(Command command)
+    private Result Execute(Command command, string id)
     {
+        if (command.Undo is { } undo) return Undo(undo);
         if (command.Settings is { } settings)
         {
             var failures = WorldSettings.Apply(settings);
@@ -175,7 +180,8 @@ public sealed class WorldEditor : IDisposable
         if (ops.Count > MaxOps) throw new InvalidDataException($"too many operations ({ops.Count}, max {MaxOps})");
 
         var result = new Result();
-        int x0 = int.MaxValue, y0 = int.MaxValue, x1 = int.MinValue, y1 = int.MinValue;
+        var area = Area(ops);
+        var begun = _history.Begin(id, area);
         for (var i = 0; i < ops.Count; i++)
         {
             var op = ops[i];
@@ -188,13 +194,10 @@ public sealed class WorldEditor : IDisposable
             {
                 failure = $"error: {ex.Message}";
             }
+            if (failure == Unchanged) continue;
             if (failure == null)
             {
                 result.Applied++;
-                x0 = Math.Min(x0, op.X);
-                y0 = Math.Min(y0, op.Y);
-                x1 = Math.Max(x1, op.X);
-                y1 = Math.Max(y1, op.Y);
             }
             else
             {
@@ -202,11 +205,49 @@ public sealed class WorldEditor : IDisposable
                 if (result.Failures.Count < 20) result.Failures.Add(new Failure(i, op.X, op.Y, failure, null));
             }
         }
-        if (result.Applied > 0) Sync(x0 - Margin, y0 - Margin, x1 + Margin, y1 + Margin);
+        _history.Finish(begun, result.Applied > 0);
+        if (result.Applied > 0)
+        {
+            Sync(area);
+            result.UndoId = id;
+        }
         return result;
     }
 
-    /// <summary>Un'operazione. Restituisce null se riuscita, altrimenti il motivo.</summary>
+    /// <summary>
+    /// Tile che il comando può cambiare: quelle indicate e un bordo (i vicini cambiano frame). Dove c'è o si piazza un
+    /// oggetto di più tile (mobili, casse) il bordo è largo <see cref="Margin"/>: l'oggetto intero cambia con lui.
+    /// </summary>
+    private static HashSet<long> Area(List<EditOp> ops)
+    {
+        var area = new HashSet<long>();
+        foreach (var op in ops)
+        {
+            if (op.X < 0 || op.Y < 0 || op.X >= Main.maxTilesX || op.Y >= Main.maxTilesY) continue;
+            var tile = Main.tile[op.X, op.Y];
+            var big = (tile.HasTile && Main.tileFrameImportant[tile.TileType])
+                      || (op.Op == "place-tile" && op.Type is { } type && type >= 0 && type < TileLoader.TileCount && Main.tileFrameImportant[type]);
+            var r = big ? Margin : 1;
+            for (var y = Math.Max(op.Y - r, 0); y <= Math.Min(op.Y + r, Main.maxTilesY - 1); y++)
+                for (var x = Math.Max(op.X - r, 0); x <= Math.Min(op.X + r, Main.maxTilesX - 1); x++)
+                    area.Add(EditHistory.Key(x, y));
+        }
+        return area;
+    }
+
+    private Result Undo(string id)
+    {
+        var undone = _history.Undo(id) ?? throw new InvalidOperationException("this change can no longer be undone");
+        if (undone.Area.Count > 0) Sync(undone.Area);
+        return new Result
+        {
+            Applied = undone.Restored,
+            Failed = undone.Skipped,
+            Failures = undone.SkippedTiles.Take(20).Select(t => new Failure(-1, t.X, t.Y, "changed since", null)).ToList(),
+        };
+    }
+
+    /// <summary>Un'operazione. Restituisce null se riuscita, <see cref="Unchanged"/> se la tile era già così, altrimenti il motivo.</summary>
     private static string? Apply(EditOp op)
     {
         // Bordi: il gioco non lascia toccare le ultime tile del mondo
@@ -219,7 +260,7 @@ public sealed class WorldEditor : IDisposable
                 if (op.Type is not { } type || type < 0 || type >= TileLoader.TileCount) return "invalid block type";
                 if (tile.HasTile)
                 {
-                    if (tile.TileType == type) return null;
+                    if (tile.TileType == type) return Unchanged;
                     // Un blocco al posto di un altro (come il cambio di blocco col piccone): solo tra blocchi normali
                     if (Main.tileFrameImportant[tile.TileType] || Main.tileFrameImportant[type]) return "occupied";
                     return WorldGen.ReplaceTile(op.X, op.Y, (ushort)type, op.Style) ? null : "cannot be replaced";
@@ -231,7 +272,7 @@ public sealed class WorldEditor : IDisposable
             }
             case "kill-tile":
             {
-                if (!tile.HasTile) return null;
+                if (!tile.HasTile) return Unchanged;
                 WorldGen.KillTile(op.X, op.Y, fail: false, effectOnly: false, noItem: true);
                 // Le casse con degli oggetti dentro non si rompono (come nel gioco)
                 return Main.tile[op.X, op.Y].HasTile ? "cannot be removed (full chest?)" : null;
@@ -239,14 +280,14 @@ public sealed class WorldEditor : IDisposable
             case "place-wall":
             {
                 if (op.Type is not { } type || type <= 0 || type >= WallLoader.WallCount) return "invalid wall type";
-                if (tile.WallType == type) return null;
+                if (tile.WallType == type) return Unchanged;
                 if (tile.WallType != 0) return WorldGen.ReplaceWall(op.X, op.Y, (ushort)type) ? null : "cannot be replaced";
                 WorldGen.PlaceWall(op.X, op.Y, type, mute: true);
                 return Main.tile[op.X, op.Y].WallType == type ? null : "cannot be placed here";
             }
             case "kill-wall":
             {
-                if (tile.WallType == 0) return null;
+                if (tile.WallType == 0) return Unchanged;
                 // Non WorldGen.KillWall: lascerebbe cadere il muro come oggetto. Come lui, poi si ricalcolano i bordi
                 tile.WallType = 0;
                 tile.WallColor = 0;
@@ -260,20 +301,27 @@ public sealed class WorldEditor : IDisposable
         }
     }
 
-    /// <summary>Manda l'area cambiata ai client (a quadrati, un pacchetto ciascuno) e la segna da ridisegnare.</summary>
-    private void Sync(int x0, int y0, int x1, int y1)
+    /// <summary>
+    /// Manda le tile cambiate ai client e le segna da ridisegnare: a quadrati di <see cref="SquareSize"/> tile su una
+    /// griglia fissa, solo quelli toccati (un tratto lungo in diagonale non manda tutto il rettangolo che lo contiene).
+    /// </summary>
+    private void Sync(IEnumerable<long> tiles)
     {
-        x0 = Math.Max(x0, 0);
-        y0 = Math.Max(y0, 0);
-        x1 = Math.Min(x1, Main.maxTilesX - 1);
-        y1 = Math.Min(y1, Main.maxTilesY - 1);
-        if (Main.netMode == NetmodeID.Server)
+        var squares = new HashSet<long>();
+        foreach (var key in tiles)
         {
-            for (var y = y0; y <= y1; y += SquareSize)
-                for (var x = x0; x <= x1; x += SquareSize)
-                    NetMessage.SendTileSquare(-1, x, y, Math.Min(SquareSize, x1 - x + 1), Math.Min(SquareSize, y1 - y + 1));
+            var (x, y) = EditHistory.FromKey(key);
+            squares.Add(EditHistory.Key(x / SquareSize, y / SquareSize));
         }
-        _changed?.Invoke(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+        foreach (var square in squares)
+        {
+            var (sx, sy) = EditHistory.FromKey(square);
+            var (x, y) = (sx * SquareSize, sy * SquareSize);
+            var width = Math.Min(SquareSize, Main.maxTilesX - x);
+            var height = Math.Min(SquareSize, Main.maxTilesY - y);
+            if (Main.netMode == NetmodeID.Server) NetMessage.SendTileSquare(-1, x, y, width, height);
+            _changed?.Invoke(x, y, width, height);
+        }
     }
 
     /// <summary>Blocchi e muri che si possono scegliere nel pannello (nome, mod, se è un oggetto di più tile).</summary>
@@ -324,6 +372,8 @@ public sealed class WorldEditor : IDisposable
         public long CreatedAt { get; set; }
         public List<EditOp>? Ops { get; set; }
         public WorldSettings.Changes? Settings { get; set; }
+        /// <summary>Id del comando "ops" da annullare.</summary>
+        public string? Undo { get; set; }
     }
 
     private sealed class EditOp
@@ -342,6 +392,8 @@ public sealed class WorldEditor : IDisposable
         public int Failed { get; set; }
         public List<Failure> Failures { get; set; } = [];
         public string? Error { get; set; }
+        /// <summary>Comando "ops" che ha cambiato qualcosa: id da mandare in "undo" per annullarlo.</summary>
+        public string? UndoId { get; set; }
     }
 
     /// <param name="Setting">Settaggio non cambiato (comandi "settings"), allora Index = -1.</param>
